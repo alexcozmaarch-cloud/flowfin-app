@@ -203,6 +203,27 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
   .minibar{grid-template-columns:100px minmax(0,1fr) 76px}
   .trio .num{font-size:18px}
 }
+/* budgets page */
+.bcard{display:grid;gap:10px}
+.bhead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.bbar{position:relative;height:8px;background:var(--rule)}
+.bbar i{display:block;height:8px;background:var(--ink)}
+.bbar i.over{background:var(--signal)}
+.bbar em{position:absolute;top:-4px;width:2px;height:16px;background:var(--ink);margin-left:-1px}
+.bmeta{display:flex;flex-wrap:wrap;gap:4px 20px;font-size:13px;color:var(--muted)}
+.bmeta .neg{color:var(--signal)}
+.bedit{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px;padding-top:4px}
+.bedit .field{width:180px}
+.switch{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer;min-height:36px}
+.switch input{width:18px;height:18px;accent-color:var(--ink)}
+.switch input:disabled + span{color:var(--faint)}
+.ledger summary{cursor:pointer;font-size:13px;color:var(--muted);padding:6px 0}
+.ledger summary:hover{color:var(--ink)}
+.ltable{overflow-x:auto}
+.ltable div{display:grid;grid-template-columns:minmax(170px,1.6fr) repeat(3,minmax(90px,1fr));gap:12px;padding:7px 0;border-bottom:1px solid var(--rule);font-size:13px;min-width:460px}
+.ltable div span:not(:first-child){text-align:right}
+.ltable .lh{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom-color:var(--ink)}
+.ltable .cur{color:var(--muted)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -249,7 +270,7 @@ var NAV = [
   { label:'App',      items:[['settings','Settings']] }
 ];
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['add','+'],['budgets','Budgets'],['settings','More']];
-var BUILT = { dashboard:1, transactions:1, settings:1 };
+var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
 
 (function () {
   'use strict';
@@ -478,6 +499,7 @@ var BUILT = { dashboard:1, transactions:1, settings:1 };
     if (UI.page === 'dashboard') v.innerHTML = dashboardHTML();
     else if (UI.page === 'transactions') v.innerHTML = transactionsHTML();
     else if (UI.page === 'settings') v.innerHTML = settingsHTML();
+    else if (UI.page === 'budgets') v.innerHTML = budgetsHTML();
     else v.innerHTML = soonHTML();
     if (UI.page === 'dashboard') { dashboardCharts(); netSavingsChart(); }
   }
@@ -556,16 +578,13 @@ var BUILT = { dashboard:1, transactions:1, settings:1 };
     return out;
   }
   function budgetGaugesHTML(m) {
-    var spend = categorySpend(m);
-    var buds = (DATA.Budget || []).filter(function (b) { return +b.monthly_limit > 0; })
-      .sort(function (a, b) { return +b.monthly_limit - +a.monthly_limit; });
-    var h = '<section class="card"><h3>Budgets</h3>';
-    if (!buds.length) h += '<div class="empty">No budgets set</div>';
-    buds.forEach(function (b) {
-      var spent = spend[b.category] ? spend[b.category].total : 0, lim = +b.monthly_limit;
-      var pct = lim ? spent / lim : 0;
-      h += '<div class="budget"><span>' + esc(b.category) + '</span><span class="num ' + (pct > 1.0001 ? 'neg' : '') + '">' + sw0(spent) + ' / ' + sw0(lim) + '</span>' +
-        '<div class="bar"><i class="' + (pct > 1.0001 ? 'over' : '') + '" style="width:' + Math.min(100, Math.max(0, pct * 100)) + '%"></i></div></div>';
+    var rows = budgetRows(UI.periodOffset).filter(function (r) { return r.limit > 0; }).sort(function (a, b) { return b.limit - a.limit; });
+    var h = '<section class="card"><h3>Budgets<span class="r"><button class="navlink" data-nav="budgets">Edit</button></span></h3>';
+    if (!rows.length) h += '<div class="empty">No budgets set</div>';
+    rows.forEach(function (r) {
+      var over = r.pct > 1.0001;
+      h += '<div class="budget"><span>' + esc(r.cat) + (r.carry ? ' <span class="soon">+' + sw0(r.carry) + ' rolled over</span>' : '') + '</span><span class="num ' + (over ? 'neg' : '') + '">' + sw0(r.spent) + ' / ' + sw0(r.limit) + '</span>' +
+        '<div class="bar"><i class="' + (over ? 'over' : '') + '" style="width:' + Math.min(100, Math.max(0, r.pct * 100)) + '%"></i></div></div>';
     });
     return h + '</section>';
   }
@@ -869,6 +888,97 @@ var BUILT = { dashboard:1, transactions:1, settings:1 };
     });
   }
 
+  // ─── Budgets (shared by the Budgets page and the dashboard gauges) ────────
+  // Spend = expense + investment rows in the category minus refunds in it, whole period (scheduled included).
+  // Rollover: effective limit = base + last period's unspent amount (never a deficit).
+  function catSpend(cat, p) {
+    var spent = 0, sched = 0, t = today();
+    txs().forEach(function (tx) {
+      if (tx.category !== cat || !inPeriod(tx, p)) return;
+      var a = +tx.amount || 0;
+      if (tx.type === 'expense' || tx.type === 'investment') { spent += a; if (pd(tx.date) > t) sched += a; }
+      else if (tx.type === 'refund') spent -= a;
+    });
+    return { spent:spent, sched:sched };
+  }
+  function budgetRows(offset) {
+    var p = periodAt(offset), prev = periodAt(offset - 1), map = {};
+    (DATA.Budget || []).forEach(function (b) { map[b.category] = b; });
+    var cats = Object.keys(CATEGORIES);
+    Object.keys(map).forEach(function (c) { if (cats.indexOf(c) < 0) cats.push(c); });
+    return cats.map(function (c) {
+      var b = map[c] || null, base = b ? +b.monthly_limit || 0 : 0, roll = b && truthy(b.rollover_enabled);
+      var carry = 0;
+      if (roll && base > 0) carry = Math.max(0, base - catSpend(c, prev).spent);
+      var s = catSpend(c, p), limit = base + carry;
+      return { cat:c, b:b, base:base, roll:roll, carry:carry, limit:limit, spent:s.spent, sched:s.sched,
+        pct: limit > 0 ? s.spent / limit : 0, left: limit - s.spent };
+    });
+  }
+  function truthy(v) { return v === true || String(v).toLowerCase() === 'true'; }
+  function ledger(row, offset) {
+    var out = [], run = 0;
+    for (var i = 6; i >= 0; i--) {
+      var p = periodAt(offset - i), sp = catSpend(row.cat, p).spent, sur = Math.max(0, row.base - sp);
+      run += sur;
+      out.push({ label:periodLabel(p), spent:sp, surplus:sur, run:run, current:i === 0 });
+    }
+    return out;
+  }
+
+  function budgetsHTML() {
+    var rows = budgetRows(UI.periodOffset), isCur = UI.periodOffset === 0;
+    var withLimit = rows.filter(function (r) { return r.limit > 0; });
+    var totLimit = sumBy(withLimit, function (r) { return r.limit; }), totSpent = sumBy(withLimit, function (r) { return r.spent; });
+    var totCarry = sumBy(rows, function (r) { return r.carry; });
+    var over = withLimit.filter(function (r) { return r.pct > 1.0001; }).length;
+    var h = topbar('Budgets', true);
+    h += '<section class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))">' +
+      kpi('Budgeted', sw(totLimit), totCarry ? 'incl. ' + sw(totCarry) + ' rolled over' : '') +
+      kpi('Spent', sw(totSpent), '') +
+      kpi(isCur ? 'Left' : 'Result', '<span class="' + (totLimit - totSpent < 0 ? 'neg' : '') + '">' + sw(totLimit - totSpent) + '</span>', '') +
+      kpi('Over budget', '<span class="' + (over ? 'neg' : '') + '">' + over + ' of ' + withLimit.length + '</span>', 'categories') +
+      '</section>';
+    h += '<p class="soon" style="margin:-16px 0 0;font-size:13px">Spending counts expenses and investments minus refunds in the same category, scheduled entries included. ' +
+      'With rollover on, last period’s unspent amount is added to this period’s limit; overspending never carries forward.</p>';
+
+    rows.forEach(function (r, i) {
+      var status = !r.limit ? 'No limit set' : r.pct > 1.0001 ? sw(-r.left) + ' over' : r.pct >= 0.8 ? 'Near the limit · ' + sw(r.left) + ' left' : sw(r.left) + ' left';
+      h += '<section class="card bcard">' +
+        '<div class="bhead"><h3 style="margin:0">' + esc(r.cat) + '</h3><span class="num ' + (r.pct > 1.0001 ? 'neg' : '') + '" style="font-size:22px">' + sw(r.spent) +
+        (r.limit ? ' <span class="soon">/ ' + sw0(r.limit) + '</span>' : '') + '</span></div>';
+      if (r.limit) {
+        h += '<div class="bar bbar"><i class="' + (r.pct > 1.0001 ? 'over' : '') + '" style="width:' + Math.min(100, Math.max(0, r.pct * 100)) + '%"></i>' +
+          (r.carry ? '<em style="left:' + (r.base / r.limit * 100) + '%" title="Base limit"></em>' : '') + '</div>';
+      }
+      h += '<div class="bmeta"><span class="' + (r.pct > 1.0001 ? 'neg' : '') + '">' + status + '</span>' +
+        (r.sched ? '<span>incl. ' + sw(r.sched) + ' scheduled</span>' : '') +
+        (r.carry ? '<span>' + sw0(r.base) + ' base + ' + sw(r.carry) + ' rolled over</span>' : '') + '</div>';
+      h += '<div class="bedit">' +
+        '<div class="field"><label for="blim' + i + '">Monthly limit (CHF)</label><input id="blim' + i + '" type="number" inputmode="decimal" min="0" step="10" value="' + (r.base || '') + '" placeholder="0"></div>' +
+        '<button class="btn" data-act="bsave" data-i="' + i + '" data-cat="' + esc(r.cat) + '">Save limit</button>' +
+        '<label class="switch"><input type="checkbox" data-act="broll" data-cat="' + esc(r.cat) + '"' + (r.roll ? ' checked' : '') + (r.b && r.base > 0 ? '' : ' disabled') + '><span>Roll over unspent budget</span></label>' +
+        '</div>';
+      if (r.roll && r.base > 0) {
+        var L = ledger(r, UI.periodOffset);
+        h += '<details class="ledger"><summary>Rollover history · ' + sw(L[L.length - 1].run) + ' unspent over 7 periods</summary><div class="ltable">' +
+          '<div class="lh"><span>Period</span><span>Spent</span><span>Unspent</span><span>Running</span></div>' +
+          L.map(function (e) {
+            return '<div class="' + (e.current ? 'cur' : '') + '"><span>' + e.label + (e.current ? ' · so far' : '') + '</span><span class="num">' + sw(e.spent) +
+              '</span><span class="num">' + sw(e.surplus) + '</span><span class="num">' + sw(e.run) + '</span></div>';
+          }).join('') + '</div></details>';
+      }
+      h += '</section>';
+    });
+    return h;
+  }
+
+  function saveBudget(cat, patch) {
+    var b = (DATA.Budget || []).filter(function (x) { return x.category === cat; })[0];
+    var row = b ? Object.assign({}, b, patch) : Object.assign({ category:cat, monthly_limit:0, period:'', is_default:true, rollover_enabled:false }, patch);
+    return saveRow('Budget', row);
+  }
+
   // ─── Transactions ─────────────────────────────────────────────────────────
   function filteredTx() {
     var f = UI.tx, p = periodAt(UI.periodOffset), q = f.q.trim().toLowerCase();
@@ -1035,6 +1145,12 @@ var BUILT = { dashboard:1, transactions:1, settings:1 };
       return;
     }
     if (act === 'reload') return loadAll();
+    if (act === 'bsave') {
+      var v = parseFloat(String($('blim' + a.getAttribute('data-i')).value).replace(',', '.'));
+      if (!(v >= 0)) { toast('Enter the limit as a positive number'); return; }
+      var cat = a.getAttribute('data-cat');
+      return saveBudget(cat, { monthly_limit: Math.round(v * 100) / 100 }).then(function () { toast(cat + ' limit saved'); });
+    }
     if (act === 'ping') {
       var out = $('pingOut'); out.textContent = 'Testing…';
       fetch(apiUrl() + '?action=ping').then(function (r) { return r.json(); })
@@ -1060,6 +1176,10 @@ var BUILT = { dashboard:1, transactions:1, settings:1 };
     if (id === 'ftype') { UI.tx.type = e.target.value; draw(); }
     if (id === 'fcat') { UI.tx.category = e.target.value; draw(); }
     if (id === 'facct') { UI.tx.account = e.target.value; draw(); }
+    if (e.target.matches && e.target.matches('[data-act=broll]')) {
+      var bc = e.target.getAttribute('data-cat'), on = e.target.checked;
+      saveBudget(bc, { rollover_enabled: on }).then(function () { toast('Rollover ' + (on ? 'on' : 'off') + ' for ' + bc); });
+    }
     if (id === 'mcat' && FORM) { readForm(); FORM.subcategory = (CATEGORIES[FORM.category] || [''])[0] || ''; drawModal(); }
     if (id === 'mdesc' && FORM) autofill();
   });

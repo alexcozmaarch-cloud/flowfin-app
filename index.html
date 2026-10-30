@@ -166,6 +166,43 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
   .bottomnav button.on{color:var(--ink);font-weight:700;border-top-color:var(--signal)}
   .bottomnav button.plus{font-size:26px;line-height:1;color:var(--ink);padding-top:8px}
 }
+/* checkpoint 2 widgets */
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin-bottom:14px}
+.trio div{min-width:0}
+.trio label{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.trio .num{display:block;font-size:22px;margin-top:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trio small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.minibar{display:grid;grid-template-columns:130px minmax(0,1fr) 90px;gap:12px;align-items:center;font-size:13px;padding:5px 0}
+.minibar span:first-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.minibar .bar{height:6px;background:var(--rule)}
+.minibar .bar i{display:block;height:6px;background:var(--ink)}
+.minibar .num{text-align:right}
+.week{display:grid;grid-template-columns:170px minmax(0,1fr) 260px;gap:18px;align-items:center;padding:11px 0;border-bottom:1px solid var(--rule)}
+.week:last-child{border-bottom:0}
+.week.future{color:var(--faint)}
+.wk b{display:block;font-size:14px}
+.wk span{font-size:12px;color:var(--muted);font-family:var(--f-mono)}
+.week .bar{position:relative;height:8px;background:var(--rule)}
+.week .bar i{display:block;height:8px;background:var(--ink)}
+.week .bar i.over{background:var(--signal)}
+.week .bar em{position:absolute;top:-4px;width:1px;height:16px;background:var(--ink)}
+.wn{text-align:right;min-width:0}
+.wn small{display:block;font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wn small.neg{color:var(--signal)}
+.fcrow{padding:9px 0;border-bottom:1px solid var(--rule)}
+.fct{display:flex;justify-content:space-between;gap:12px;font-size:14px;margin-bottom:7px;flex-wrap:wrap}
+.fcbar{position:relative;height:8px}
+.fcbar b{position:absolute;left:0;top:0;height:8px;background:var(--rule)}
+.fcbar i{position:absolute;left:0;top:0;height:8px;background:var(--ink)}
+.fcbar i.over{background:var(--signal)}
+.fcbar em.budget{position:absolute;top:-4px;width:2px;height:16px;background:var(--ink);margin-left:-1px}
+@media (max-width:720px){
+  .week{grid-template-columns:minmax(0,1fr) auto;row-gap:8px}
+  .week .bar{grid-column:1/-1;grid-row:2}
+  .wn small{max-width:46vw}
+  .minibar{grid-template-columns:100px minmax(0,1fr) 76px}
+  .trio .num{font-size:18px}
+}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -442,7 +479,7 @@ var BUILT = { dashboard:1, transactions:1, settings:1 };
     else if (UI.page === 'transactions') v.innerHTML = transactionsHTML();
     else if (UI.page === 'settings') v.innerHTML = settingsHTML();
     else v.innerHTML = soonHTML();
-    if (UI.page === 'dashboard') dashboardCharts();
+    if (UI.page === 'dashboard') { dashboardCharts(); netSavingsChart(); }
   }
 
   function topbar(title, withPeriod, extra) {
@@ -497,9 +534,11 @@ var BUILT = { dashboard:1, transactions:1, settings:1 };
       '<span><i style="border-top:2px solid var(--signal)"></i>Below zero</span></span></h3>' +
       '<div class="chartbox"><canvas id="chDaily" role="img" aria-label="Cumulative net balance for the period against ' + sw(m.dailyBudget) + ' a day"></canvas></div></section>';
 
+    h += weeklyHTML(m);
+    if (m.isCurrent) h += forecastHTML(m);
     h += '<div class="grid2">' + budgetGaugesHTML(m) + categoryHTML(m) + '</div>';
-    h += accountHTML(m);
-    h += '<section class="card soon"><h3>Next checkpoint</h3>Weekly budget view, cash-flow forecast, credit card tracker, net savings chart and fund allocation.</section>';
+    h += '<div class="grid2">' + creditCardHTML(m) + (m.isCurrent ? fundHTML(m) : accountHTML(m)) + '</div>';
+    h += netSavingsHTML();
     return h;
   }
   function kpi(label, val, note) { return '<div class="kpi"><label>' + label + '</label><b>' + val + '</b><small>' + (note || '&nbsp;') + '</small></div>'; }
@@ -603,6 +642,233 @@ var BUILT = { dashboard:1, transactions:1, settings:1 };
         } }
     });
   }
+  // ─── Dashboard widgets: checkpoint 2 (logic ported from Base44) ───────────
+  function sumBy(list, fn) { return list.reduce(function (s, x) { return s + (fn(x) || 0); }, 0); }
+
+  // Credit card invoice for the viewed period (10th–9th), paid on the 25th after it closes
+  function creditCardModel(m) {
+    var t = today();
+    var cc = m.list.filter(function (tx) { return tx.account === 'credit_card'; });
+    var out = sumBy(cc, function (tx) { return (tx.type === 'expense' || tx.type === 'investment') ? +tx.amount : 0; });
+    var back = sumBy(cc, function (tx) { return tx.type === 'refund' ? +tx.amount : 0; });
+    var net = out - back;
+    var pay = new Date(m.p.end.getFullYear(), m.p.end.getMonth(), 25);
+    var daysToPay = daysBetween(t, pay);
+    var perDay = m.daysElapsed > 0 ? net / m.daysElapsed : 0;
+    var projected = m.isCurrent ? perDay * m.daysInPeriod : net;
+    var tot = 0, n = 0;
+    for (var i = 1; i <= 3; i++) {
+      var p = periodAt(UI.periodOffset - i);
+      var s = sumBy(txs(), function (tx) { return (tx.account === 'credit_card' && (tx.type === 'expense' || tx.type === 'investment') && inPeriod(tx, p)) ? +tx.amount : 0; });
+      if (s > 0) { tot += s; n++; }
+    }
+    var cats = {};
+    cc.forEach(function (tx) {
+      if (tx.type !== 'expense' && tx.type !== 'investment') return;
+      var k = tx.subcategory || tx.category || 'Other';
+      cats[k] = (cats[k] || 0) + (+tx.amount || 0);
+    });
+    var top = Object.keys(cats).map(function (k) { return { k:k, v:cats[k] }; }).sort(function (a, b) { return b.v - a.v; });
+    var sched = sumBy(cc, function (tx) { return (pd(tx.date) > t && tx.type !== 'refund' && tx.type !== 'income') ? +tx.amount : 0; });
+    return { sched:sched, net:net, back:back, projected:projected, avg3: n ? tot / n : 0, pay:pay, daysToPay:daysToPay, top:top };
+  }
+  function creditCardHTML(m) {
+    var c = creditCardModel(m);
+    var status = c.daysToPay < 0 ? 'Paid ' + periodDay(c.pay) : c.daysToPay === 0 ? 'Due today' : 'Due ' + periodDay(c.pay) + ' · in ' + c.daysToPay + ' day' + (c.daysToPay === 1 ? '' : 's');
+    var over = c.avg3 > 0 && c.projected > c.avg3 * 1.1;
+    var h = '<section class="card"><h3>Credit card invoice<span class="r">' + status + '</span></h3>' +
+      '<div class="trio">' +
+      '<div><label>On this invoice</label><span class="num">' + sw(c.net) + '</span><small>' + (c.sched ? 'incl. ' + sw(c.sched) + ' scheduled' : c.back ? sw(c.back) + ' refunded' : '&nbsp;') + '</small></div>' +
+      '<div><label>Projected</label><span class="num ' + (over ? 'neg' : '') + '">' + sw(c.projected) + '</span><small>' + (m.isCurrent ? 'at today’s pace' : 'final') + '</small></div>' +
+      '<div><label>3-period avg</label><span class="num">' + (c.avg3 ? sw(c.avg3) : '—') + '</span><small>&nbsp;</small></div></div>';
+    var max = c.top.length ? c.top[0].v : 1;
+    c.top.slice(0, 5).forEach(function (x) {
+      h += '<div class="minibar"><span>' + esc(x.k) + '</span><div class="bar"><i style="width:' + (x.v / max * 100) + '%"></i></div><span class="num">' + sw(x.v) + '</span></div>';
+    });
+    return h + '</section>';
+  }
+  function periodDay(d) { return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.'; }
+
+  // Weekly view: Mon–Sun weeks clipped to the period, budget = daily budget × days
+  function weeklyModel(m) {
+    var weeks = [], cur = new Date(m.p.start), idx = 0;
+    while (cur <= m.p.end) {
+      var dow = (cur.getDay() + 6) % 7;                 // 0 = Monday
+      var we = addDays(cur, 6 - dow); if (we > m.p.end) we = new Date(m.p.end);
+      var days = daysBetween(cur, we) + 1, spent = 0, cats = {};
+      for (var d = new Date(cur); d <= we; d = addDays(d, 1)) {
+        if (d > m.cutoff) continue;
+        spent += m.dailyMap[ymd(d)] || 0;
+      }
+      m.list.forEach(function (tx) {
+        var dd = pd(tx.date);
+        if (tx.type !== 'expense' || dd < cur || dd > we || dd > m.cutoff || isInfra(tx, roles())) return;
+        var k = tx.subcategory || tx.category; cats[k] = (cats[k] || 0) + (+tx.amount || 0);
+      });
+      var topK = Object.keys(cats).sort(function (a, b) { return cats[b] - cats[a]; })[0];
+      var future = cur > m.cutoff, partial = !future && we > m.cutoff;
+      var elapsed = future ? 0 : Math.min(days, daysBetween(cur, m.cutoff) + 1);
+      weeks.push({ n:++idx, start:new Date(cur), end:we, days:days, budget:m.dailyBudget * days, spent:spent,
+        surplus:m.dailyBudget * days - spent, future:future, partial:partial, elapsed:elapsed, top:topK, topV:topK ? cats[topK] : 0 });
+      cur = addDays(we, 1);
+    }
+    return weeks;
+  }
+  function weeklyHTML(m) {
+    var w = weeklyModel(m);
+    var done = w.filter(function (x) { return !x.future && !x.partial; });
+    var good = done.filter(function (x) { return x.surplus >= 0; }).length;
+    var h = '<section class="card"><h3>Week by week<span class="r">' + (done.length ? good + ' of ' + done.length + ' finished weeks under budget' : sw(m.dailyBudget * 7) + ' a full week') + '</span></h3>' +
+      '<div class="weeks">';
+    w.forEach(function (x) {
+      var pct = x.budget > 0 ? x.spent / x.budget : 0;
+      var state = x.future ? 'Not started' : (x.surplus >= 0 ? (x.partial ? sw(x.surplus) + ' left' : '+' + sw(x.surplus) + ' saved') : sw(-x.surplus) + ' over');
+      h += '<div class="week' + (x.future ? ' future' : '') + '">' +
+        '<div class="wk"><b>W' + x.n + '</b><span>' + periodDay(x.start) + '–' + periodDay(x.end) + (x.partial ? ' · day ' + x.elapsed + ' of ' + x.days : '') + '</span></div>' +
+        '<div class="bar"><i class="' + (pct > 1 ? 'over' : '') + '" style="width:' + Math.min(100, Math.max(0, pct * 100)) + '%"></i>' +
+        (x.partial ? '<em style="left:' + (x.elapsed / x.days * 100) + '%"></em>' : '') + '</div>' +
+        '<div class="wn"><span class="num">' + (x.future ? '—' : sw(x.spent)) + ' / ' + sw0(x.budget) + '</span><small class="' + (x.surplus < 0 && !x.future ? 'neg' : '') + '">' + state + (x.top && !x.future ? ' · top: ' + esc(x.top) : '') + '</small></div>' +
+        '</div>';
+    });
+    return h + '</div></section>';
+  }
+
+  // Period forecast: 6-period recency-weighted average per category, blended with this period's pace
+  var FC_WEIGHTS = [0.5, 1, 1.5, 2, 2.5, 3];
+  function weightedAvg(vals) { var w = FC_WEIGHTS.slice(-vals.length), t = 0, s = 0; vals.forEach(function (v, i) { s += v * w[i]; t += w[i]; }); return t ? s / t : 0; }
+  function blend(daysElapsed, daysInPeriod, actual, avg) {
+    var w = daysInPeriod > 0 ? Math.min(1, Math.max(0, daysElapsed / daysInPeriod)) : 1;
+    var ad = daysElapsed > 0 ? actual / daysElapsed : 0, vd = daysInPeriod > 0 ? avg / daysInPeriod : 0;
+    return (w * ad + (1 - w) * vd) * daysInPeriod;
+  }
+  function forecastModel(m) {
+    var r = roles(), hist = [];
+    function disc(tx) { return tx.type === 'expense' && !isInfra(tx, r) && tx.category !== 'Financial Investing' && tx.category !== 'Retirement 3a'; }
+    for (var i = 6; i >= 1; i--) {
+      var p = periodAt(UI.periodOffset - i), byCat = {};
+      txs().forEach(function (tx) { if (inPeriod(tx, p) && disc(tx)) byCat[tx.category || 'Other'] = (byCat[tx.category || 'Other'] || 0) + (+tx.amount || 0); });
+      hist.push(byCat);
+    }
+    var cur = {};
+    m.list.forEach(function (tx) { if (disc(tx)) cur[tx.category || 'Other'] = (cur[tx.category || 'Other'] || 0) + (+tx.amount || 0); });
+    var bud = {}; (DATA.Budget || []).forEach(function (b) { bud[b.category] = +b.monthly_limit || 0; });
+    var names = {}; hist.forEach(function (h) { Object.keys(h).forEach(function (k) { names[k] = 1; }); }); Object.keys(cur).forEach(function (k) { names[k] = 1; });
+    var cats = Object.keys(names).map(function (k) {
+      var vals = hist.map(function (h) { return h[k] || 0; }), avg = weightedAvg(vals), spent = cur[k] || 0;
+      var fc = blend(m.daysElapsed, m.daysInPeriod, spent, avg);
+      return { k:k, avg:avg, spent:spent, fc:fc, budget:bud[k] || 0, warn:(bud[k] || 0) > 0 && fc > bud[k] };
+    }).filter(function (c) { return c.avg > 5 || c.spent > 5; }).sort(function (a, b) { return b.fc - a.fc; });
+    var avgTotal = sumBy(cats, function (c) { return c.avg; }), spentTotal = sumBy(cats, function (c) { return c.spent; });
+    var schedTotal = sumBy(m.list, function (tx) { return (disc(tx) && pd(tx.date) > today()) ? +tx.amount : 0; });
+    var fcTotal = blend(m.daysElapsed, m.daysInPeriod, spentTotal, avgTotal);
+    var renewals = (DATA.Subscription || []).filter(function (s) {
+      if (s.status !== 'active' || !s.next_renewal || !(+s.amount > 0)) return false;
+      var d = pd(s.next_renewal); return d >= today() && d <= m.p.end;
+    }).sort(function (a, b) { return a.next_renewal < b.next_renewal ? -1 : 1; });
+    return { schedTotal:schedTotal, cats:cats, avgTotal:avgTotal, spentTotal:spentTotal, fcTotal:fcTotal, frac:m.daysElapsed / m.daysInPeriod, renewals:renewals };
+  }
+  function forecastHTML(m) {
+    var f = forecastModel(m);
+    if (!f.cats.length) return '<section class="card"><h3>This period forecast</h3><div class="empty">The forecast appears once a few periods of spending exist.</div></section>';
+    var vs = f.avgTotal > 0 ? (f.fcTotal - f.avgTotal) / f.avgTotal * 100 : 0;
+    var h = '<section class="card"><h3>This period forecast<span class="r">day-to-day spending, household excluded</span></h3>' +
+      '<div class="trio">' +
+      '<div><label>Spent so far</label><span class="num">' + sw(f.spentTotal) + '</span><small>' + (f.schedTotal ? 'incl. ' + sw(f.schedTotal) + ' scheduled' : Math.round(f.frac * 100) + '% of the period gone') + '</small></div>' +
+      '<div><label>Forecast</label><span class="num">' + sw(f.fcTotal) + '</span><small class="' + (vs > 10 ? 'neg' : '') + '">' + (vs >= 0 ? '+' : '') + vs.toFixed(0) + '% vs your 6-period average</small></div>' +
+      '<div><label>Still to come</label><span class="num">' + sw(Math.max(0, f.fcTotal - f.spentTotal)) + '</span><small>' + (m.daysInPeriod - m.daysElapsed) + ' days left</small></div></div>';
+    f.cats.forEach(function (c) {
+      var scale = Math.max(c.fc, c.budget, c.spent, 1);
+      h += '<div class="fcrow"><div class="fct"><span>' + esc(c.k) + (c.warn ? ' <span class="tag ex">over budget</span>' : '') + '</span>' +
+        '<span class="num">' + sw0(c.spent) + ' → ' + sw0(c.fc) + (c.budget ? ' <span class="soon">/ ' + sw0(c.budget) + '</span>' : '') + '</span></div>' +
+        '<div class="bar fcbar"><b style="width:' + (c.fc / scale * 100) + '%"></b><i class="' + (c.warn ? 'over' : '') + '" style="width:' + (c.spent / scale * 100) + '%"></i>' +
+        (c.budget ? '<em class="budget" style="left:' + Math.min(100, c.budget / scale * 100) + '%"></em>' : '') + '</div></div>';
+    });
+    h += '<p class="soon" style="font-size:12px;margin:10px 0 0">Dark bar: spent. Light bar: forecast for the full period. Tick: budget.</p>';
+    if (f.renewals.length) {
+      h += '<div style="margin-top:14px">' + f.renewals.map(function (s) {
+        return '<div class="rowline"><span>' + esc(s.name) + ' <span class="sub">· renews ' + periodDay(pd(s.next_renewal)) + '</span></span><span class="num">' + sw(+s.amount) + '</span></div>';
+      }).join('') + '</div>';
+    }
+    return h + '</section>';
+  }
+
+  // Free cash allocation: allocation % × accrued free cash, against what was actually paid
+  var FUNDS = [['emergency','Emergency fund'],['invest','Investments'],['savings','Savings'],['fun','Entertainment']];
+  function fundHTML(m) {
+    var pct = { emergency:20, invest:50, savings:20, fun:10 };
+    (DATA.FundAllocation || []).forEach(function (f) { if (f.key in pct) pct[f.key] = +f.pct || 0; });
+    var paidBy = { emergency:0, invest:0, savings:0, fun:0 }, collPaid = 0;
+    m.list.forEach(function (tx) {
+      if (pd(tx.date) > m.cutoff) return;
+      if (tx.category === 'Financial Investing') paidBy.invest += +tx.amount || 0;
+      else if (isEntertainment(tx)) paidBy.fun += +tx.amount || 0;
+      else if (tx.category === 'Collectibles') collPaid += +tx.amount || 0;
+    });
+    var h = '<section class="card"><h3>Free cash allocation<span class="r">' + sw(m.dailyBudget) + ' × ' + m.daysElapsed + ' days</span></h3>' +
+      '<div class="rowline"><span>Accrued</span><span class="num">' + sw(m.accrued) + '</span></div>' +
+      '<div class="rowline"><span>Paid <span class="sub">· investing, collectibles, entertainment</span></span><span class="num">− ' + sw(m.paid) + '</span></div>' +
+      (m.scheduledFree ? '<div class="rowline"><span>Scheduled <span class="sub">· future-dated</span></span><span class="num">− ' + sw(m.scheduledFree) + '</span></div>' : '') +
+      '<div class="rowline" style="border-bottom:1px solid var(--ink)"><b>Free to move</b><b class="num ' + (m.afterScheduled < 0 ? 'neg' : '') + '">' + sw(m.afterScheduled) + '</b></div>';
+    FUNDS.forEach(function (f) {
+      var target = m.accrued * pct[f[0]] / 100, paid = paidBy[f[0]];
+      h += '<div class="budget"><span>' + f[1] + ' <span class="soon">' + pct[f[0]] + '%</span></span><span class="num">' + (paid ? sw0(paid) + ' / ' : '') + sw0(target) + '</span>' +
+        '<div class="bar"><i class="' + (paid > target && target > 0 ? 'over' : '') + '" style="width:' + (target > 0 ? Math.min(100, paid / target * 100) : 0) + '%"></i></div></div>';
+    });
+    if (collPaid) h += '<p class="soon" style="font-size:12px;margin:10px 0 0">Collectibles took ' + sw(collPaid) + ' of the accrued free cash this period.</p>';
+    (DATA.FinancialGoal || []).forEach(function (g) {
+      var p = +g.target_amount ? (+g.current_amount || 0) / +g.target_amount : 0;
+      h += '<div class="budget" style="padding-top:16px"><span>Goal · ' + esc(g.name) + (g.deadline ? ' <span class="soon">by ' + pd(g.deadline).getFullYear() + '</span>' : '') + '</span><span class="num">' + sw0(+g.current_amount) + ' / ' + sw0(+g.target_amount) + '</span>' +
+        '<div class="bar"><i style="width:' + Math.min(100, p * 100) + '%"></i></div></div>';
+    });
+    return h + '</section>';
+  }
+
+  // Net saved per period, last 12 periods, against the free-cash target
+  function netSavingsData() {
+    var r = roles(), totalPct = sumBy(DATA.FundAllocation || [], function (f) { return +f.pct; }), out = [];
+    for (var i = 11; i >= 0; i--) {
+      var off = UI.periodOffset - i, p = periodAt(off), t = today();
+      var cutoff = p.end < t ? p.end : t;
+      var list = txs().filter(function (tx) { return inPeriod(tx, p); });
+      var T = calcTotals(list, cutoff, 0, 0);
+      if (!(T.income > 0 || T.expenses > 0)) continue;
+      var sal = sumBy(list, function (tx) { return isSalary(tx, r) && pd(tx.date) <= cutoff ? +tx.amount : 0; });
+      var inf = sumBy(list, function (tx) { return isInfra(tx, r) && pd(tx.date) <= cutoff ? +tx.amount : 0; });
+      var free = sal > 0 ? Math.max(0, sal - inf) : BENCHMARK_SALARY - BENCHMARK_INFRA;
+      out.push({ label:periodDay(p.start).slice(3) + String(p.start.getFullYear()).slice(2), net:T.netSaved, target:Math.round(free * (totalPct > 0 ? totalPct / 100 : 0.2)), current:off === 0 });
+    }
+    return out;
+  }
+  function netSavingsHTML() {
+    var d = netSavingsData();
+    var pos = d.filter(function (x) { return x.net >= 0; }).length;
+    return '<section class="card"><h3>Net saved per period<span class="r legend"><span>' + pos + ' of ' + d.length + ' periods positive</span>' +
+      '<span><i style="border-top:2px dashed var(--faint)"></i>Free-cash target</span></span></h3>' +
+      '<div class="chartbox" style="height:220px"><canvas id="chNet" role="img" aria-label="Net saved per period for the last ' + d.length + ' periods"></canvas></div></section>';
+  }
+  function netSavingsChart() {
+    var el = $('chNet'); if (!el || !window.Chart) return;
+    var d = netSavingsData();
+    var css = getComputedStyle(document.documentElement);
+    var ink = css.getPropertyValue('--ink').trim(), muted = css.getPropertyValue('--muted').trim(),
+        faint = css.getPropertyValue('--faint').trim(), rule = css.getPropertyValue('--rule').trim(), signal = css.getPropertyValue('--signal').trim();
+    CHARTS.net = new Chart(el, {
+      data:{ labels:d.map(function (x) { return x.label; }), datasets:[
+        { type:'bar', label:'Net saved', data:d.map(function (x) { return +x.net.toFixed(2); }),
+          backgroundColor:d.map(function (x) { return x.net < 0 ? signal : (x.current ? faint : ink); }), borderRadius:0, maxBarThickness:42 },
+        { type:'line', label:'Free-cash target', data:d.map(function (x) { return x.target; }), borderColor:faint, borderDash:[4,4], borderWidth:1.5, pointRadius:0, tension:0 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:ink, cornerRadius:0, titleFont:{ family:'IBM Plex Mono' }, bodyFont:{ family:'IBM Plex Mono' },
+          callbacks:{ label:function (c) { return c.dataset.label + ': ' + sw(c.raw) + (c.datasetIndex === 0 && d[c.dataIndex].current ? ' (so far)' : ''); } } } },
+        scales:{
+          x:{ ticks:{ color:muted, font:{ family:'IBM Plex Mono', size:11 } }, grid:{ display:false }, border:{ color:ink } },
+          y:{ ticks:{ color:muted, font:{ family:'IBM Plex Mono', size:11 }, callback:function (v) { return sw0(v); } },
+              grid:{ color:function (c) { return c.tick.value === 0 ? ink : rule; } }, border:{ display:false } }
+        } }
+    });
+  }
+
   // ─── Transactions ─────────────────────────────────────────────────────────
   function filteredTx() {
     var f = UI.tx, p = periodAt(UI.periodOffset), q = f.q.trim().toLowerCase();

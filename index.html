@@ -250,6 +250,13 @@ details.fold>summary:hover h3{color:var(--muted)}
 .chip{border:1px solid var(--ink);padding:2px 8px;font-size:12px}
 .wk span{white-space:nowrap}
 .wk b .tag{margin-left:6px}
+.projnote{font-size:12px;color:var(--muted);margin-top:4px;line-height:1.4}
+.goalproj{margin-top:18px}
+.collmode{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;font-size:13px;margin-bottom:16px}
+.seg2{display:flex;border:1px solid var(--ink)}
+.seg2 button{border:0;background:none;height:30px;padding:0 12px;cursor:pointer;font-size:13px}
+.seg2 button+button{border-left:1px solid var(--ink)}
+.seg2 button.on{background:var(--ink);color:var(--bg);font-weight:600}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -528,7 +535,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
     else if (UI.page === 'budgets') v.innerHTML = budgetsHTML();
     else v.innerHTML = soonHTML();
     if (UI.page === 'dashboard') {
-      var charts = function () { if (UI.page === 'dashboard') { dashboardCharts(); netSavingsChart(); } };
+      var charts = function () { if (UI.page === 'dashboard') { dashboardCharts(); savingsChart(); netSavingsChart(); } };
       if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(charts); else charts();
     }
   }
@@ -545,6 +552,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
   function sw0(n) { return fmt0.format(Math.round(n || 0)); }  // 1’235
   function sumBy(list, fn) { return list.reduce(function (s, x) { return s + (fn(x) || 0); }, 0); }
   function periodDay(d) { return String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.'; }
+  function signed(n) { return (n < 0 ? '−' : '+') + sw(Math.abs(n)); }
   function kpi(label, val, note) { return '<div class="kpi"><label>' + label + '</label><b>' + val + '</b><small>' + (note || '&nbsp;') + '</small></div>'; }
 
   // Collapsible sections: open/closed remembered in this browser only
@@ -568,7 +576,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
 
     h += '<section class="hero">';
     if (m.isCurrent) {
-      var left = m.daysInPeriod - m.daysElapsed;
+      var left = m.daysInPeriod - m.daysElapsed, pe = periodEndProjection(m);
       h += '<div class="main"><div class="eyebrow">Safe to spend today</div>' +
         '<div class="bignum"><span class="cur">CHF</span><span class="val">' + sw(m.safeToday) + '</span></div>' +
         '<p class="why">' + sw0(m.avg.freeCash) + ' free cash over ' + m.daysInPeriod + ' days gives ' + sw(m.dailyBudget) + ' a day. ' +
@@ -576,6 +584,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
         '<div class="side">' +
         '<div class="line"><span>Available now</span><span class="num ' + (m.availableNow < 0 ? 'neg' : '') + '">' + sw(m.availableNow) + '</span></div>' +
         (m.scheduledFree ? '<div class="line"><span>After scheduled</span><span class="num ' + (m.afterScheduled < 0 ? 'neg' : '') + '">' + sw(m.afterScheduled) + '</span></div>' : '') +
+        (pe ? '<div class="line" style="display:block"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span>Projected by ' + periodDay(m.p.end) + '</span><span class="num ' + (pe.end < 0 ? 'neg' : '') + '">' + signed(pe.end) + '</span></div>' +
+          '<div class="projnote">Balance now ' + signed(pe.now) + ', plus ' + sw0(pe.budgetLeft) + ' budget for ' + pe.daysLeft + ' days, minus ' + sw0(pe.still) + ' forecast spending. Last period ended ' + signed(pe.prevEnd) + '.</div></div>' : '') +
         '<div class="line" style="display:block"><div style="display:flex;justify-content:space-between;font-size:14px"><span>Day ' + m.daysElapsed + ' of ' + m.daysInPeriod + '</span><span class="num soon" style="font-size:13px">' + left + ' day' + (left === 1 ? '' : 's') + ' left</span></div>' +
         '<div class="progress"><i style="width:' + Math.round(m.daysElapsed / m.daysInPeriod * 100) + '%"></i></div></div>' +
         '</div>';
@@ -600,10 +610,14 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
     h += '<section class="card"><h3>Daily net balance<span class="r legend">' +
       '<span><i style="border-top:2px solid var(--ink)"></i>This period</span>' +
       '<span><i style="border-top:2px dashed var(--faint)"></i>Previous period</span>' +
+      (m.isCurrent ? '<span><i style="border-top:2px dotted var(--ink)"></i>Projected</span>' : '') +
       '<span><i style="border-top:2px solid var(--signal)"></i>Below zero</span></span></h3>' +
       '<div class="chartbox"><canvas id="chDaily" role="img" aria-label="Cumulative net balance for the period against ' + sw(m.dailyBudget) + ' a day"></canvas></div></section>';
 
     h += '<div class="grid2">' + budgetForecastHTML(m) + categoryHTML(m) + '</div>';
+
+    var sp = savingsProjection();
+    h += fold('savings', 'Savings projection', (sp.pace >= 0 ? '+' : '−') + sw0(Math.abs(sp.pace)) + ' a period at your pace', savingsProjectionBody(sp), true);
 
     var w = weeklyModel(m), done = w.filter(function (x) { return !x.future && !x.partial; });
     var good = done.filter(function (x) { return x.surplus >= 0; }).length;
@@ -859,9 +873,19 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
       }
       if (i < prev.daysInPeriod) { prun += prev.dailyBudget - (prev.dailyMap[ymd(addDays(prev.p.start, i))] || 0); prevPts.push({ x:i, y:+prun.toFixed(2) }); }
     }
+    var proj = [], pe = periodEndProjection(m);
+    if (pe && last && pe.daysLeft > 0) {
+      var endPt = { x:m.daysInPeriod - 1, y:+pe.end.toFixed(2) };
+      proj.push({ x:last.x, y:last.y });
+      if ((last.y < 0) !== (endPt.y < 0) && last.y !== 0 && endPt.y !== 0) proj.push({ x:last.x + (endPt.x - last.x) * last.y / (last.y - endPt.y), y:0 });
+      proj.push(endPt);
+    }
     CHARTS.daily = new Chart(el, {
       type:'line',
       data:{ datasets:[
+        { label:'Projected', data:proj, borderColor:C.ink, borderDash:[2,4], borderWidth:2, tension:0,
+          pointRadius:function (c) { return c.dataIndex === proj.length - 1 ? 4 : 0; }, pointBackgroundColor:'transparent', pointBorderColor:function (c) { return c.raw && c.raw.y < 0 ? C.signal : C.ink; }, pointBorderWidth:2,
+          segment:{ borderColor:function (c) { return (c.p0.parsed.y < 0 || c.p1.parsed.y < 0) ? C.signal : C.ink; } } },
         { label:'This period', data:cur, borderColor:C.ink, borderWidth:2.5, tension:0,
           pointRadius:function (c) { return c.dataIndex === cur.length - 1 ? 4.5 : 0; }, pointBackgroundColor:C.ink, pointBorderWidth:0,
           segment:{ borderColor:function (c) { return (c.p0.parsed.y < 0 || c.p1.parsed.y < 0) ? C.signal : C.ink; } } },
@@ -869,7 +893,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
       ]},
       options:{ responsive:true, maintainAspectRatio:false, layout:{ padding:{ left:4 } }, interaction:{ mode:'nearest', axis:'x', intersect:false },
         plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:C.ink, cornerRadius:0, titleFont:{ family:'IBM Plex Mono' }, bodyFont:{ family:'IBM Plex Mono' },
-          filter:function (c) { return Number.isInteger(c.parsed.x); },
+          filter:function (c) { return Number.isInteger(c.parsed.x) && (c.dataset.label !== 'Projected' || c.dataIndex === proj.length - 1); },
           callbacks:{ title:function (items) { return items.length ? labels[Math.round(items[0].parsed.x)] : ''; },
                       label:function (c) { return c.dataset.label + ': ' + sw(c.parsed.y); } } } },
         scales:{
@@ -912,6 +936,108 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
           callbacks:{ label:function (c) { return c.dataset.label + ': ' + sw(c.raw) + (c.datasetIndex === 0 && d[c.dataIndex].current ? ' (so far)' : ''); } } } },
         scales:{
           x:{ ticks:{ color:C.muted, font:{ family:'IBM Plex Mono', size:11 } }, grid:{ display:false }, border:{ color:C.ink } },
+          y:{ ticks:{ color:C.muted, font:{ family:'IBM Plex Mono', size:11 }, callback:function (v) { return sw0(v); } },
+              grid:{ color:function (c) { return c.tick.value === 0 ? C.ink : C.rule; } }, border:{ display:false } }
+        } }
+    });
+  }
+
+  // ─── Projections ──────────────────────────────────────────────────────────
+  // Period end: today's daily net balance + daily budget for the days left − forecast day-to-day spending still to come
+  // (the forecast already includes scheduled entries, so they are counted once, as spending still to come).
+  function periodEndProjection(m) {
+    if (!m.isCurrent) return null;
+    var d2d = budgetForecastRows(m).filter(function (r) { return r.dayToDay && r.fc !== null; });
+    var fc = sumBy(d2d, function (r) { return r.fc; });
+    var spentToDate = sumBy(d2d, function (r) { return r.spent - r.sched; });
+    var still = Math.max(0, fc - spentToDate);
+    var daysLeft = m.daysInPeriod - m.daysElapsed, now = 0;
+    for (var i = 0; i < m.daysElapsed; i++) now += m.dailyBudget - (m.dailyMap[ymd(addDays(m.p.start, i))] || 0);
+    var prev = periodModel(UI.periodOffset - 1), prevEnd = 0;
+    for (var j = 0; j < prev.daysInPeriod; j++) prevEnd += prev.dailyBudget - (prev.dailyMap[ymd(addDays(prev.p.start, j))] || 0);
+    return { now:now, end:now + m.dailyBudget * daysLeft - still, still:still, budgetLeft:m.dailyBudget * daysLeft, daysLeft:daysLeft, prevEnd:prevEnd };
+  }
+
+  // Savings: net saved in the last 6 finished periods, then 12 periods forward at your pace and at target
+  var COLL_KEY = 'ff_coll_v1';
+  function collAsSavings() { return lsGet(COLL_KEY) === 'savings'; }
+  function savingsProjection() {
+    var asSav = collAsSavings();
+    var hist = [], r = roles(), totalPct = sumBy(DATA.FundAllocation || [], function (f) { return +f.pct; }) || 20;
+    for (var i = 6; i >= 1; i--) {
+      var off = UI.periodOffset - i, p = periodAt(off), list = txs().filter(function (tx) { return inPeriod(tx, p); });
+      var T = calcTotals(list, p.end, 0, 0);
+      var sal = sumBy(list, function (tx) { return isSalary(tx, r) ? +tx.amount : 0; });
+      var inf = sumBy(list, function (tx) { return isInfra(tx, r) ? +tx.amount : 0; });
+      var free = sal > 0 ? Math.max(0, sal - inf) : BENCHMARK_SALARY - BENCHMARK_INFRA;
+      hist.push({ p:p, net:asSav ? T.netCashFlow : T.netSaved, coll:T.collectibles, target:free * totalPct / 100, has:T.income > 0 || T.expenses > 0 });
+    }
+    hist = hist.filter(function (h) { return h.has; });
+    var n = hist.length || 1;
+    var pace = sumBy(hist, function (h) { return h.net; }) / n, target = sumBy(hist, function (h) { return h.target; }) / n;
+    var labels = [], actual = [], atPace = [], atTarget = [], run = 0;
+    hist.forEach(function (h, k) {
+      run += h.net; labels.push(periodDay(h.p.start).slice(3) + String(h.p.start.getFullYear()).slice(2));
+      actual.push(+run.toFixed(0)); var last = k === hist.length - 1;
+      atPace.push(last ? +run.toFixed(0) : null); atTarget.push(last ? +run.toFixed(0) : null);
+    });
+    var rp = run, rt = run;
+    for (var f = 0; f < 12; f++) {
+      var fp = periodAt(UI.periodOffset + f);
+      rp += pace; rt += target;
+      labels.push(periodDay(fp.start).slice(3) + String(fp.start.getFullYear()).slice(2));
+      actual.push(null); atPace.push(+rp.toFixed(0)); atTarget.push(+rt.toFixed(0));
+    }
+    var goals = (DATA.FinancialGoal || []).map(function (g) {
+      var left = Math.max(0, (+g.target_amount || 0) - (+g.current_amount || 0));
+      function eta(per) { if (!(per > 0)) return null; var k = Math.ceil(left / per); return { periods:k, date:periodAt(UI.periodOffset + k).start }; }
+      var dl = g.deadline ? pd(g.deadline) : null, need = null;
+      if (dl) { var t = today(), months = (dl.getFullYear() - t.getFullYear()) * 12 + (dl.getMonth() - t.getMonth()); need = months > 0 ? left / months : null; }
+      return { name:g.name, target:+g.target_amount || 0, current:+g.current_amount || 0, left:left, deadline:dl, need:need, atPace:eta(pace), atTarget:eta(target) };
+    });
+    return { asSav:asSav, coll:sumBy(hist, function (h) { return h.coll; }), hist:hist, pace:pace, target:target, total:run, in12Pace:rp, in12Target:rt, labels:labels, actual:actual, atPace:atPace, atTarget:atTarget, goals:goals };
+  }
+  function monthYear(d) { return d.toLocaleDateString('en-GB', { month:'short', year:'numeric' }); }
+  function savingsProjectionBody(sp) {
+    var h = '<div class="collmode"><span class="soon">Collectibles bought count as</span><div class="seg2">' +
+      '<button class="' + (sp.asSav ? '' : 'on') + '" data-act="collmode" data-v="spending">Spending</button>' +
+      '<button class="' + (sp.asSav ? 'on' : '') + '" data-act="collmode" data-v="savings">Savings, at cost</button></div>' +
+      '<span class="soon">' + sw0(sp.coll) + ' on collectibles in these ' + sp.hist.length + ' periods</span></div>' +
+      '<div class="trio">' +
+      '<div><label>Saved, last ' + sp.hist.length + ' periods</label><span class="num ' + (sp.total < 0 ? 'neg' : '') + '">' + sw(sp.total) + '</span><small>' + sw(sp.pace) + ' a period on average</small></div>' +
+      '<div><label>In 12 periods at your pace</label><span class="num ' + (sp.in12Pace < 0 ? 'neg' : '') + '">' + sw(sp.in12Pace) + '</span><small>if the last ' + sp.hist.length + ' periods repeat</small></div>' +
+      '<div><label>In 12 periods at target</label><span class="num">' + sw(sp.in12Target) + '</span><small>' + sw0(sp.target) + ' a period, your full free-cash split</small></div></div>' +
+      '<div class="legend" style="justify-content:flex-end;margin-bottom:6px"><span><i style="border-top:2px solid var(--ink)"></i>Saved</span><span><i style="border-top:2px dotted var(--ink)"></i>At your pace</span><span><i style="border-top:2px dashed var(--faint)"></i>At target</span></div>' +
+      '<div class="chartbox" style="height:240px"><canvas id="chSave" role="img" aria-label="Cumulative net saved over the last ' + sp.hist.length + ' periods and projected 12 periods ahead"></canvas></div>';
+    sp.goals.forEach(function (g) {
+      var pace = g.atPace ? monthYear(g.atPace.date) + ' (' + Math.round(g.atPace.periods / 12 * 10) / 10 + ' years)' : 'not reached at this pace';
+      var tgt = g.atTarget ? monthYear(g.atTarget.date) + ' (' + Math.round(g.atTarget.periods / 12 * 10) / 10 + ' years)' : '—';
+      var late = g.deadline && g.atPace && g.atPace.date > g.deadline;
+      h += '<div class="goalproj"><div class="subhead"><b>Goal · ' + esc(g.name) + '</b><span>' + sw0(g.current) + ' of ' + sw0(g.target) + (g.deadline ? ' · deadline ' + monthYear(g.deadline) : '') + '</span></div>' +
+        '<div class="rowline"><span>If all net saved went to it, at your pace</span><span class="num ' + (!g.atPace || late ? 'neg' : '') + '">' + pace + '</span></div>' +
+        '<div class="rowline"><span>At your savings target</span><span class="num">' + tgt + '</span></div>' +
+        (g.need ? '<div class="rowline"><span>Needed to make the deadline</span><span class="num">' + sw(g.need) + ' a month</span></div>' : '') + '</div>';
+    });
+    return h;
+  }
+  function savingsChart() {
+    var el = $('chSave'); if (!el || !window.Chart || CHARTS.save) return;
+    if (!el.closest('details[open]')) return;
+    var sp = savingsProjection(), C = chartColors();
+    CHARTS.save = new Chart(el, {
+      type:'line',
+      data:{ labels:sp.labels, datasets:[
+        { label:'Saved', data:sp.actual, borderColor:C.ink, borderWidth:2.5, pointRadius:3, pointBackgroundColor:C.ink, tension:0, spanGaps:false,
+          segment:{ borderColor:function (c) { return (c.p0.parsed.y < 0 || c.p1.parsed.y < 0) ? C.signal : C.ink; } } },
+        { label:'At your pace', data:sp.atPace, borderColor:C.ink, borderDash:[2,4], borderWidth:2, pointRadius:0, tension:0 },
+        { label:'At target', data:sp.atTarget, borderColor:C.faint, borderDash:[6,4], borderWidth:1.5, pointRadius:0, tension:0 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, layout:{ padding:{ left:4 } }, interaction:{ mode:'index', intersect:false },
+        plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:C.ink, cornerRadius:0, titleFont:{ family:'IBM Plex Mono' }, bodyFont:{ family:'IBM Plex Mono' },
+          filter:function (c) { return c.raw != null; },
+          callbacks:{ label:function (c) { return c.dataset.label + ': ' + sw(c.raw); } } } },
+        scales:{
+          x:{ ticks:{ color:C.muted, maxRotation:0, autoSkip:true, maxTicksLimit:10, font:{ family:'IBM Plex Mono', size:11 } }, grid:{ display:false }, border:{ color:C.ink } },
           y:{ ticks:{ color:C.muted, font:{ family:'IBM Plex Mono', size:11 }, callback:function (v) { return sw0(v); } },
               grid:{ color:function (c) { return c.tick.value === 0 ? C.ink : C.rule; } }, border:{ display:false } }
         } }
@@ -1192,6 +1318,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
       return;
     }
     if (act === 'reload') return loadAll();
+    if (act === 'collmode') { lsSet(COLL_KEY, a.getAttribute('data-v')); return draw(); }
     if (act === 'clearf') { UI.tx = { scope:'period', q:'', type:'', category:'', account:'', sub:'', from:'', to:'', dayToDay:false }; return draw(); }
     if (act === 'bsave') {
       var v = parseFloat(String($('blim' + a.getAttribute('data-i')).value).replace(',', '.'));
@@ -1218,7 +1345,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
   document.addEventListener('toggle', function (e) {
     var d = e.target; if (!d.matches || !d.matches('details[data-fold]')) return;
     var st = foldState(); st[d.getAttribute('data-fold')] = d.open; lsSet(FOLD_KEY, JSON.stringify(st));
-    if (d.open) netSavingsChart();
+    if (d.open) { savingsChart(); netSavingsChart(); }
   }, true);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-drill]')) openDrill(e.target);

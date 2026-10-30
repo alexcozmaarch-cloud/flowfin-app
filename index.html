@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>FlowFin</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#F3F4F2">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="FlowFin">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -257,6 +265,19 @@ details.fold>summary:hover h3{color:var(--muted)}
 .seg2 button{border:0;background:none;height:30px;padding:0 12px;cursor:pointer;font-size:13px}
 .seg2 button+button{border-left:1px solid var(--ink)}
 .seg2 button.on{background:var(--ink);color:var(--bg);font-weight:600}
+/* rules, tags, foreign currency */
+.rulenote{font-size:12px;color:var(--muted);border-left:2px solid var(--ink);padding-left:8px}
+.fxbox{display:flex;flex-wrap:wrap;align-items:center;gap:6px 16px;font-size:12px}
+.tagrow,.bulktag{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px}
+.tagchip{border:1px solid var(--rule);background:var(--paper);padding:3px 8px;font-size:12px;cursor:pointer}
+.tagchip:hover{border-color:var(--ink)}
+.tagchip b{font-family:var(--f-mono);font-weight:500;margin-left:4px}
+.bulktag input{background:var(--paper);border:1px solid var(--ink);height:32px;padding:0 8px;min-width:0;flex:0 1 220px}
+.bulktag .btn{height:32px}
+.hash{font-family:var(--f-mono);font-size:11px;color:var(--ink);margin-left:2px}
+.ruleadd{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px}
+.ruleadd .field{flex:1 1 150px}
+.ruleadd .field:first-child{flex:2 1 200px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -275,10 +296,10 @@ var URL_KEY = 'ff_url_v1';
 var CACHE_KEY = 'ff_cache_v1';
 var KEY_KEY = 'ff_key_v1';
 var _cache = null;                         // last good data payload (also in localStorage)
-var TABLES = ['Transaction','Budget','CategorySettings','FundAllocation','FinancialGoal','GoalContribution','Subscription','NetWorthEntry','AssetSnapshot','Settings'];
+var TABLES = ['Transaction','Rule','Budget','CategorySettings','FundAllocation','FinancialGoal','GoalContribution','Subscription','NetWorthEntry','AssetSnapshot','Settings'];
 var DATA = {};                              // table name → rows
 var UI = { page:'dashboard', periodOffset:0, sync:'idle', syncMsg:'', lastSync:null,
-           tx:{ scope:'period', q:'', type:'', category:'', account:'', sub:'', from:'', to:'', dayToDay:false } };
+           tx:{ scope:'period', q:'', type:'', category:'', account:'', sub:'', from:'', to:'', tag:'', dayToDay:false } };
 var CHARTS = {};
 var START_DAY = 10;
 var EXPECTED_HOUSEHOLD_EXPENSE = 6700;
@@ -1136,6 +1157,76 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
   }
 
   // ─── Transactions ─────────────────────────────────────────────────────────
+  // ─── Tags, rules and foreign currency helpers ─────────────────────────────
+  function tagsOf(tx) { return String(tx.tags || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean); }
+  function allTags() {
+    var m = {};
+    txs().forEach(function (tx) {
+      var net = tx.type === 'refund' ? -(+tx.amount || 0) : tx.type === 'income' ? 0 : (+tx.amount || 0);
+      tagsOf(tx).forEach(function (t) {
+        m[t] = m[t] || { tag:t, total:0, n:0, from:tx.date, to:tx.date };
+        m[t].total += net; m[t].n++;
+        if (tx.date < m[t].from) m[t].from = tx.date; if (tx.date > m[t].to) m[t].to = tx.date;
+      });
+    });
+    return Object.keys(m).map(function (k) { return m[k]; }).sort(function (a, b) { return a.to < b.to ? 1 : -1; });
+  }
+  function setting(key, def) {
+    var s = (DATA.Settings || []).filter(function (r) { return r.key === key; })[0];
+    return s && s.value !== '' && s.value != null ? s.value : def;
+  }
+  function cardFeePct() { var v = parseFloat(setting('card_fee_pct', 1.75)); return isNaN(v) ? 1.75 : v; }
+
+  // Rules: description contains the match text (case-insensitive). Lower priority number wins, then the longer match.
+  function sortedRules() {
+    return (DATA.Rule || []).filter(function (r) { return String(r.match || '').trim(); }).slice().sort(function (a, b) {
+      var pa = +a.priority || 100, pb = +b.priority || 100;
+      return pa !== pb ? pa - pb : String(b.match).length - String(a.match).length;
+    });
+  }
+  function matchRule(desc) {
+    var d = String(desc || '').toLowerCase();
+    if (!d.trim()) return null;
+    return sortedRules().filter(function (r) { return d.indexOf(String(r.match).trim().toLowerCase()) > -1; })[0] || null;
+  }
+  // Suggested rules: a description used 3+ times that almost always lands in the same category
+  function suggestedRules() {
+    var by = {};
+    txs().forEach(function (tx) {
+      var k = String(tx.description || '').trim(); if (!k) return;
+      (by[k] = by[k] || []).push(tx);
+    });
+    return Object.keys(by).filter(function (k) { return by[k].length >= 3 && !matchRule(k); }).map(function (k) {
+      var list = by[k];
+      function top(field) {
+        var c = {}; list.forEach(function (t) { var v = t[field] || ''; c[v] = (c[v] || 0) + 1; });
+        var best = Object.keys(c).sort(function (a, b) { return c[b] - c[a]; })[0];
+        return { v:best, share:c[best] / list.length };
+      }
+      var cat = top('category'), sub = top('subcategory'), type = top('type'), acct = top('account');
+      if (cat.share < 0.9 || sub.share < 0.8) return null;
+      return { match:k, category:cat.v, subcategory:sub.v, type:type.share >= 0.8 ? type.v : '', account:acct.share >= 0.8 ? acct.v : '', n:list.length };
+    }).filter(Boolean).sort(function (a, b) { return b.n - a.n; });
+  }
+  function ruleText(r) {
+    return esc(r.category) + (r.subcategory ? ' › ' + esc(r.subcategory) : '') +
+      (r.type && r.type !== 'expense' ? ' · ' + esc(r.type) : '') +
+      (r.account ? ' · ' + (r.account === 'credit_card' ? 'credit card' : 'debit card') : '') +
+      (r.tags ? ' · #' + esc(r.tags) : '');
+  }
+
+  // Exchange rates: ECB reference rates via frankfurter (same source as Holotrack), cached per currency and day
+  var CURRENCIES = ['CHF','EUR','USD','GBP','SGD','JPY','RON','SEK','NOK','DKK','PLN','CZK','HUF','THB','AUD','CAD','HKD','CNY'];
+  var RATE_CACHE = {};
+  function fxRate(cur, date) {
+    if (cur === 'CHF') return Promise.resolve(1);
+    var day = date && date <= ymd(today()) ? date : 'latest', k = cur + '@' + day;
+    if (RATE_CACHE[k]) return Promise.resolve(RATE_CACHE[k]);
+    return fetch('https://api.frankfurter.app/' + day + '?from=' + cur + '&to=CHF').then(function (r) { return r.json(); })
+      .then(function (j) { var v = j && j.rates && j.rates.CHF; if (!v) throw new Error('No rate for ' + cur); RATE_CACHE[k] = v; return v; });
+  }
+
+  // ─── Transactions list ────────────────────────────────────────────────────
   function filteredTx() {
     var f = UI.tx, p = periodAt(UI.periodOffset), q = f.q.trim().toLowerCase();
     return txs().filter(function (tx) {
@@ -1146,8 +1237,9 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
       if (f.sub && (tx.subcategory || '') !== f.sub) return false;
       if (f.from && tx.date < f.from) return false;
       if (f.to && tx.date > f.to) return false;
+      if (f.tag && tagsOf(tx).indexOf(f.tag) < 0) return false;
       if (f.dayToDay && !((tx.type === 'expense' && !isInfra(tx, roles())) || tx.type === 'refund')) return false;
-      if (q && (tx.description + ' ' + tx.subcategory + ' ' + tx.category).toLowerCase().indexOf(q) < 0) return false;
+      if (q && (tx.description + ' ' + tx.subcategory + ' ' + tx.category + ' ' + (tx.tags || '')).toLowerCase().indexOf(q) < 0) return false;
       return true;
     }).sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
   }
@@ -1157,6 +1249,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
     if (f.category) c.push(esc(f.category) + (f.sub ? ' › ' + esc(f.sub) : ''));
     else if (f.sub) c.push(esc(f.sub));
     if (f.from || f.to) c.push(periodDay(pd(f.from || f.to)) + '–' + periodDay(pd(f.to || f.from)));
+    if (f.tag) c.push('#' + esc(f.tag));
     if (f.dayToDay) c.push('day-to-day only');
     if (f.account) c.push(f.account === 'credit_card' ? 'Credit card' : 'Debit card');
     if (f.type) c.push(f.type);
@@ -1165,18 +1258,30 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
       '<button class="navlink" data-act="clearf">Clear filters</button></div>';
   }
   function transactionsHTML() {
-    var f = UI.tx, list = filteredTx(), t = today();
+    var f = UI.tx, list = filteredTx(), t = today(), tagList = allTags();
     var inc = 0, out = 0, back = 0;
     list.forEach(function (tx) { var a = +tx.amount || 0; if (tx.type === 'income') inc += a; else if (tx.type === 'refund') back += a; else out += a; });
     var h = topbar('Transactions', f.scope === 'period', '<button class="btn primary" data-act="addtx">+ Add</button>');
     h += '<div style="display:grid;gap:14px"><div class="filters">' +
-      '<input type="search" id="fq" placeholder="Search description or category" value="' + esc(f.q) + '">' +
+      '<input type="search" id="fq" placeholder="Search description, category or tag" value="' + esc(f.q) + '">' +
       '<select id="fscope">' + opt('period','This period',f.scope) + opt('all','All time',f.scope) + '</select>' +
       '<select id="ftype">' + opt('','All types',f.type) + TYPES.map(function (x) { return opt(x[0], x[1], f.type); }).join('') + '</select>' +
       '<select id="fcat">' + opt('','All categories',f.category) + Object.keys(CATEGORIES).map(function (c) { return opt(c, c, f.category); }).join('') + '</select>' +
       '<select id="facct">' + opt('','Both cards',f.account) + ACCOUNTS.map(function (x) { return opt(x[0], x[1], f.account); }).join('') + '</select>' +
-      '</div>' + filterChips(f) + '<div class="sumbar"><span>' + list.length + ' transactions</span><span>Out<b>' + chf(out) + '</b></span><span>Refunds<b>' + chf(back) + '</b></span><span>Income<b>' + chf(inc) + '</b></span></div></div>';
-    h += '<div>';
+      (tagList.length ? '<select id="ftag">' + opt('','All tags',f.tag || '') + tagList.map(function (x) { return opt(x.tag, '#' + x.tag, f.tag || ''); }).join('') + '</select>' : '') +
+      '</div>' + filterChips(f) + '<div class="sumbar"><span>' + list.length + ' transactions</span><span>Out<b>' + chf(out) + '</b></span><span>Refunds<b>' + chf(back) + '</b></span><span>Income<b>' + chf(inc) + '</b></span></div>';
+    if (tagList.length && !f.tag) {
+      h += '<div class="tagrow"><span class="soon">Tags</span>' + tagList.slice(0, 8).map(function (x) {
+        return '<button class="tagchip" data-act="tagfilter" data-tag="' + esc(x.tag) + '">#' + esc(x.tag) + ' <b>' + sw0(x.total) + '</b></button>';
+      }).join('') + '</div>';
+    }
+    if (list.length) {
+      h += '<div class="bulktag"><label for="bulktag" class="soon">Tag all ' + list.length + ' shown</label>' +
+        '<input id="bulktag" list="tagList" placeholder="e.g. Singapore 2026" autocomplete="off">' +
+        '<button class="btn" data-act="bulktag">Add tag</button></div>' +
+        '<datalist id="tagList">' + tagList.map(function (x) { return '<option value="' + esc(x.tag) + '">'; }).join('') + '</datalist>';
+    }
+    h += '</div><div>';
     if (!list.length) h += '<div class="empty">No transactions match these filters</div>';
     var lastDate = null;
     list.forEach(function (tx) {
@@ -1192,53 +1297,104 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
       if (tx.type === 'refund') tags += ' <span class="tag">refund</span>';
       if (tx.type === 'investment') tags += ' <span class="tag">investment</span>';
       if (tx.anomaly_status === 'excluded') tags += ' <span class="tag ex">one-off</span>';
-      h += '<div class="tx" data-tx="' + esc(tx.id) + '" tabindex="0" role="button"><span class="sw" style="background:' + (CAT_COLOR[tx.category] || 'var(--faint)') + '"></span>' +
-        '<span class="d"><b>' + esc(tx.description) + tags + '</b><small>' + esc(tx.subcategory || tx.category) + ' · ' + (tx.account === 'credit_card' ? 'Credit card' : 'Debit card') + '</small></span>' +
+      var fx = tx.orig_currency && tx.orig_currency !== 'CHF' ? ' · ' + fmtCHF.format(+tx.orig_amount || 0) + ' ' + esc(tx.orig_currency) + (+tx.fx_fee ? ' + ' + tx.fx_fee + '% fee' : '') : '';
+      h += '<div class="tx" data-tx="' + esc(tx.id) + '" tabindex="0" role="button"><span class="sw"></span>' +
+        '<span class="d"><b>' + esc(tx.description) + tags + '</b><small>' + esc(tx.subcategory || tx.category) + ' · ' + (tx.account === 'credit_card' ? 'Credit card' : 'Debit card') + fx +
+        tagsOf(tx).map(function (g) { return ' <span class="hash">#' + esc(g) + '</span>'; }).join('') + '</small></span>' +
         '<span class="a ' + cls + '">' + sign + ' ' + fmtCHF.format(a) + '</span></div>';
     });
     if (lastDate) h += '</div>';
     return h + '</div>';
   }
 
+  // Save several rows in one call (used by "tag all shown")
+  function saveMany(table, rows) {
+    setSync('busy');
+    return post({ action:'upsertMany', table:table, rows:rows }).then(function (j) {
+      var arr = DATA[table] = DATA[table] || [];
+      (j.rows || []).forEach(function (r) { var i = arr.findIndex(function (x) { return x.id === r.id; }); if (i > -1) arr[i] = r; else arr.push(r); });
+      persistCache(); UI.lastSync = new Date(); setSync('ok'); draw();
+    }).catch(function (e) { setSync('err', e.message); toast('Not saved: ' + e.message); });
+  }
+
   // ─── Transaction form ─────────────────────────────────────────────────────
   var FORM = null; // working copy while the modal is open
   function openTx(id) {
     var src = id ? txs().filter(function (t) { return t.id === id; })[0] : null;
-    FORM = src ? Object.assign({}, src) : { date:ymd(today()), description:'', category:'Personal Cash', subcategory:'Lunches', amount:'', type:'expense', account:'credit_card', anomaly_status:'' };
-    FORM._confirmDelete = false; FORM._err = '';
+    FORM = src ? Object.assign({}, src) : { date:ymd(today()), description:'', category:'Personal Cash', subcategory:'Lunches', amount:'', type:'expense', account:'credit_card', anomaly_status:'', tags:'', orig_currency:'CHF', orig_amount:'', fx_fee:'' };
+    if (!FORM.orig_currency) FORM.orig_currency = 'CHF';
+    FORM._confirmDelete = false; FORM._err = ''; FORM._note = ''; FORM._rate = +FORM.fx_rate || null;
+    FORM._fee = FORM.orig_currency !== 'CHF' ? (+FORM.fx_fee > 0) : true;
     drawModal();
     setTimeout(function () { var d = $('mdesc'); if (d && !id) d.focus(); }, 30);
   }
   function closeModal() { FORM = null; $('modalRoot').innerHTML = ''; }
   function drawModal() {
     if (!FORM) return;
-    var descs = {};
+    var descs = {}, tagList = allTags();
     txs().forEach(function (t) { if (t.description) descs[t.description] = 1; });
-    var subs = CATEGORIES[FORM.category] || [];
+    var subs = CATEGORIES[FORM.category] || [], foreign = FORM.orig_currency && FORM.orig_currency !== 'CHF';
     var h = '<div class="scrim" data-act="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle">' +
       '<h2 id="mtitle">' + (FORM.id ? 'Edit transaction' : 'New transaction') + '</h2>' +
       '<div class="seg" id="mtype">' + TYPES.map(function (x) { return '<button type="button" data-type="' + x[0] + '" class="' + (FORM.type === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>' +
       '<div class="formgrid">' +
       '<div class="field full"><label for="mdesc">Description</label><input id="mdesc" list="descList" autocomplete="off" value="' + esc(FORM.description) + '"></div>' +
       '<datalist id="descList">' + Object.keys(descs).sort().map(function (d) { return '<option value="' + esc(d) + '">'; }).join('') + '</datalist>' +
-      '<div class="field"><label for="mamt">Amount (CHF)</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>' +
+      (FORM._note ? '<div class="field full rulenote">' + FORM._note + '</div>' : '') +
+      '<div class="field"><label for="mcur">Currency</label><select id="mcur">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select></div>' +
+      (foreign
+        ? '<div class="field"><label for="morig">Amount (' + esc(FORM.orig_currency) + ')</label><input id="morig" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.orig_amount) + '"></div>' +
+          '<div class="field full fxbox"><label class="switch" style="min-height:0"><input type="checkbox" id="mfee"' + (FORM._fee ? ' checked' : '') + '><span>Add card fee (' + cardFeePct() + '%)</span></label>' +
+          '<span id="mfxinfo" class="soon">' + fxInfo() + '</span></div>'
+        : '') +
+      '<div class="field"><label for="mamt">Amount (CHF)' + (foreign ? ' · calculated, editable' : '') + '</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>' +
       '<div class="field"><label for="mdate">Date</label><input id="mdate" type="date" value="' + esc(FORM.date) + '"></div>' +
       '<div class="field"><label for="mcat">Category</label><select id="mcat">' + Object.keys(CATEGORIES).map(function (c) { return opt(c, c, FORM.category); }).join('') + '</select></div>' +
       '<div class="field"><label for="msub">Subcategory</label><select id="msub">' + (subs.length ? subs : ['—']).map(function (s) { return opt(s === '—' ? '' : s, s, FORM.subcategory || ''); }).join('') + '</select></div>' +
       '<div class="field"><label for="macct">Account</label><select id="macct">' + ACCOUNTS.map(function (x) { return opt(x[0], x[1], FORM.account); }).join('') + '</select></div>' +
-      '<div class="field"><label for="manom">Anomaly review</label><select id="manom">' + opt('','Not reviewed',FORM.anomaly_status || '') + opt('confirmed','Confirmed (keep in projections)',FORM.anomaly_status) + opt('excluded','One-off (exclude from projections)',FORM.anomaly_status) + '</select></div>' +
+      '<div class="field"><label for="mtags">Tags (comma separated)</label><input id="mtags" list="mtagList" autocomplete="off" placeholder="e.g. Singapore 2026" value="' + esc(FORM.tags || '') + '"></div>' +
+      '<datalist id="mtagList">' + tagList.map(function (x) { return '<option value="' + esc(x.tag) + '">'; }).join('') + '</datalist>' +
+      '<div class="field full"><label for="manom">Anomaly review</label><select id="manom">' + opt('','Not reviewed',FORM.anomaly_status || '') + opt('confirmed','Confirmed (keep in projections)',FORM.anomaly_status) + opt('excluded','One-off (exclude from projections)',FORM.anomaly_status) + '</select></div>' +
       '</div>' + (FORM._err ? '<div class="err">' + esc(FORM._err) + '</div>' : '') +
       '<div class="actions">' +
       (FORM.id ? (FORM._confirmDelete
         ? '<span class="left"><button class="btn danger" data-act="delyes">Yes, delete</button> <button class="btn" data-act="delno">Keep</button></span>'
         : '<button class="btn danger left" data-act="del">Delete</button>') : '') +
+      '<button class="btn" data-act="mkrule" title="Future transactions with this description get the same category, type and account">Save as rule</button>' +
       '<button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="save">' + (FORM.id ? 'Save changes' : 'Add transaction') + '</button>' +
       '</div></div></div>';
     $('modalRoot').innerHTML = h;
   }
+  function fxInfo() {
+    if (!FORM || !FORM.orig_currency || FORM.orig_currency === 'CHF') return '';
+    if (FORM._rateErr) return '<span class="neg">' + esc(FORM._rateErr) + '. Enter the CHF amount yourself.</span>';
+    if (!FORM._rate) return 'Getting the ' + esc(FORM.orig_currency) + ' rate for this date…';
+    return '1 ' + esc(FORM.orig_currency) + ' = ' + FORM._rate.toFixed(4) + ' CHF (ECB, ' + (FORM.date <= ymd(today()) ? periodDay(pd(FORM.date)) : 'latest') + ')' + (FORM._fee ? ' + ' + cardFeePct() + '% fee' : '');
+  }
   function readForm() {
     FORM.description = $('mdesc').value; FORM.amount = $('mamt').value; FORM.date = $('mdate').value;
     FORM.category = $('mcat').value; FORM.subcategory = $('msub').value; FORM.account = $('macct').value; FORM.anomaly_status = $('manom').value;
+    FORM.tags = $('mtags').value; FORM.orig_currency = $('mcur').value;
+    if ($('morig')) FORM.orig_amount = $('morig').value;
+    if ($('mfee')) FORM._fee = $('mfee').checked;
+  }
+  // Recalculate the CHF amount from the foreign amount, the day's rate and the card fee (updates in place, keeps focus)
+  function recalcFx() {
+    if (!FORM || FORM.orig_currency === 'CHF') return;
+    readForm();
+    var cur = FORM.orig_currency, date = FORM.date;
+    FORM._rateErr = '';
+    fxRate(cur, date).then(function (rate) {
+      if (!FORM || FORM.orig_currency !== cur || FORM.date !== date) return;
+      FORM._rate = rate;
+      var o = parseFloat(String(FORM.orig_amount).replace(',', '.'));
+      if (o >= 0) {
+        var chfAmt = Math.round(o * rate * (1 + (FORM._fee ? cardFeePct() / 100 : 0)) * 100) / 100;
+        FORM.amount = chfAmt; if ($('mamt')) $('mamt').value = chfAmt.toFixed(2);
+      }
+      if ($('mfxinfo')) $('mfxinfo').innerHTML = fxInfo();
+    }).catch(function (e) { if (!FORM) return; FORM._rateErr = e.message; if ($('mfxinfo')) $('mfxinfo').innerHTML = fxInfo(); });
+    if ($('mfxinfo')) $('mfxinfo').innerHTML = fxInfo();
   }
   function saveForm() {
     readForm();
@@ -1246,22 +1402,44 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
     if (!FORM.description.trim()) { FORM._err = 'Add a description.'; return drawModal(); }
     if (!(amt >= 0)) { FORM._err = 'Enter the amount as a positive number.'; return drawModal(); }
     if (!FORM.date) { FORM._err = 'Pick a date.'; return drawModal(); }
+    var foreign = FORM.orig_currency && FORM.orig_currency !== 'CHF';
     var row = { id:FORM.id, date:FORM.date, description:FORM.description.trim(), category:FORM.category, subcategory:FORM.subcategory,
-      amount:Math.round(amt * 100) / 100, type:FORM.type, account:FORM.account, anomaly_status:FORM.anomaly_status, created_date:FORM.created_date };
+      amount:Math.round(amt * 100) / 100, type:FORM.type, account:FORM.account, anomaly_status:FORM.anomaly_status, created_date:FORM.created_date,
+      tags:tagsOf({ tags:FORM.tags }).join(', '),
+      orig_amount:foreign ? Math.round(parseFloat(String(FORM.orig_amount).replace(',', '.')) * 100) / 100 || '' : '',
+      orig_currency:foreign ? FORM.orig_currency : '', fx_rate:foreign && FORM._rate ? FORM._rate : '', fx_fee:foreign && FORM._fee ? cardFeePct() : '' };
     var isNew = !FORM.id;
     closeModal();
     saveRow('Transaction', row).then(function () { toast(isNew ? 'Transaction added' : 'Changes saved'); });
   }
-  // Picking a known description fills category, subcategory, type and account from its last use
+  // A matching rule fills the form; otherwise the last transaction with the same description does
   function autofill() {
-    var d = $('mdesc').value, last = null;
-    txs().forEach(function (t) { if (t.description === d && (!last || t.date > last.date)) last = t; });
-    if (!last || FORM.id) return;
+    if (FORM.id) return;
     readForm();
-    FORM.category = last.category; FORM.subcategory = last.subcategory; FORM.type = last.type; FORM.account = last.account;
-    if (!FORM.amount) FORM.amount = last.amount;
-    drawModal(); var a = $('mamt'); if (a) a.focus();
+    var d = FORM.description, r = matchRule(d), last = null;
+    if (r) {
+      FORM.category = r.category || FORM.category; FORM.subcategory = r.subcategory || ''; if (r.type) FORM.type = r.type; if (r.account) FORM.account = r.account;
+      if (r.tags && !FORM.tags) FORM.tags = r.tags;
+      FORM._note = 'Rule “' + esc(r.match) + '” applied: ' + ruleText(r);
+    } else {
+      txs().forEach(function (t) { if (t.description === d && (!last || t.date > last.date)) last = t; });
+      if (!last) { FORM._note = ''; return; }
+      FORM.category = last.category; FORM.subcategory = last.subcategory; FORM.type = last.type; FORM.account = last.account;
+      FORM._note = 'Filled from your last “' + esc(d) + '” on ' + periodDay(pd(last.date));
+      if (!FORM.amount) FORM.amount = last.amount;
+    }
+    drawModal(); var a = $(FORM.orig_currency !== 'CHF' ? 'morig' : 'mamt'); if (a) a.focus();
   }
+  function ruleFromForm() {
+    readForm();
+    var m = FORM.description.trim();
+    if (!m) { FORM._err = 'Add a description first; the rule matches on it.'; return drawModal(); }
+    var existing = (DATA.Rule || []).filter(function (r) { return String(r.match).trim().toLowerCase() === m.toLowerCase(); })[0];
+    var row = Object.assign({}, existing || {}, { match:m, category:FORM.category, subcategory:FORM.subcategory, type:FORM.type, account:FORM.account, tags:'', priority:(existing && existing.priority) || 100 });
+    saveRow('Rule', row).then(function () { toast('Rule saved: “' + m + '” → ' + FORM_cat(row)); });
+    FORM._note = 'Rule saved. New transactions containing “' + esc(m) + '” will be filled the same way.'; drawModal();
+  }
+  function FORM_cat(r) { return r.category + (r.subcategory ? ' › ' + r.subcategory : ''); }
 
   // ─── Settings ─────────────────────────────────────────────────────────────
   function settingsHTML() {
@@ -1276,11 +1454,45 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
       'Until you switch, keep adding and editing transactions in Base44: an hourly pull overwrites edits made here to Base44 entries.</p>' +
       '<div class="actions" style="justify-content:flex-start"><button class="btn" data-act="b44">Pull from Base44 now</button></div>' +
       '<div id="b44Out" class="soon" style="margin-top:8px"></div></div>';
+    h += rulesHTML();
+    h += '<div class="card"><h3>Foreign card payments</h3><div class="bedit" style="padding-top:0">' +
+      '<div class="field"><label for="sfee">Card fee on foreign currency (%)</label><input id="sfee" type="number" step="0.05" min="0" value="' + cardFeePct() + '"></div>' +
+      '<button class="btn" data-act="savefee">Save</button></div><p class="soon" style="margin:10px 0 0;font-size:13px">Added to the CHF amount when you enter a foreign-currency payment and tick “Add card fee”. Rates are the ECB reference rates for the transaction date.</p></div>';
     h += '<div class="card"><h3>Data in the Sheet</h3><div>' + TABLES.map(function (t) {
       return '<div class="rowline"><span>' + t + '</span><span class="num">' + (DATA[t] || []).length + '</span></div>';
     }).join('') + '</div><p class="soon" style="margin:12px 0 0">Period runs from day ' + START_DAY + ' to day ' + (START_DAY - 1) + ' of the next month. ' +
       'Free cash uses your average salary and household cost over the last ' + HIST_MONTHS + ' periods.</p></div>';
     return h;
+  }
+  function rulesHTML() {
+    var rules = sortedRules(), sugg = suggestedRules();
+    var combos = [];
+    Object.keys(CATEGORIES).forEach(function (c) { (CATEGORIES[c].length ? CATEGORIES[c] : ['']).forEach(function (sub) { combos.push([c + '|' + sub, c + (sub ? ' › ' + sub : '')]); }); });
+    var h = '<div class="card"><h3>Rules<span class="r">fill in new transactions automatically</span></h3>' +
+      '<p class="soon" style="margin:0 0 12px;font-size:13px">When a new description contains the match text, the category, subcategory, type and account are filled in. You can still change them before saving.</p>' +
+      '<div class="ruleadd">' +
+      '<div class="field"><label for="rmatch">Description contains</label><input id="rmatch" placeholder="e.g. Ricardo" autocomplete="off"></div>' +
+      '<div class="field"><label for="rcs">Category</label><select id="rcs">' + combos.map(function (x) { return opt(x[0], x[1], ''); }).join('') + '</select></div>' +
+      '<div class="field"><label for="rtype">Type</label><select id="rtype">' + opt('','Keep','') + TYPES.map(function (x) { return opt(x[0], x[1], ''); }).join('') + '</select></div>' +
+      '<div class="field"><label for="racct">Account</label><select id="racct">' + opt('','Keep','') + ACCOUNTS.map(function (x) { return opt(x[0], x[1], ''); }).join('') + '</select></div>' +
+      '<div class="field"><label for="rtags">Tag (optional)</label><input id="rtags" autocomplete="off"></div>' +
+      '<button class="btn primary" data-act="radd">Add rule</button></div>';
+    if (rules.length) {
+      h += '<div style="margin-top:14px">' + rules.map(function (r) {
+        return '<div class="rowline"><span>“' + esc(r.match) + '” <span class="sub">→ ' + ruleText(r) + '</span></span><button class="navlink" data-act="rdel" data-id="' + esc(r.id) + '">Remove</button></div>';
+      }).join('') + '</div>';
+    } else h += '<div class="empty" style="padding:14px 0">No rules yet. Start with the suggestions below.</div>';
+    if (sugg.length) {
+      h += '<div class="subhead" style="margin-top:18px"><b>Suggested from your history</b><button class="navlink" data-act="rsuggall">Add all ' + Math.min(sugg.length, 15) + '</button></div>' +
+        sugg.slice(0, 15).map(function (r, i) {
+          return '<div class="rowline"><span>“' + esc(r.match) + '” <span class="sub">' + r.n + '× → ' + ruleText(r) + '</span></span><button class="navlink" data-act="rsugg" data-i="' + i + '">Add</button></div>';
+        }).join('');
+    }
+    return h + '</div>';
+  }
+  function saveSetting(key, value) {
+    var r = (DATA.Settings || []).filter(function (x) { return x.key === key; })[0];
+    return saveRow('Settings', Object.assign({}, r || {}, { key:key, value:value }));
   }
   function soonHTML() {
     var label = '';
@@ -1318,8 +1530,33 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
       return;
     }
     if (act === 'reload') return loadAll();
+    if (act === 'mkrule') return ruleFromForm();
+    if (act === 'tagfilter') { UI.tx.tag = a.getAttribute('data-tag'); UI.tx.scope = 'all'; return draw(); }
+    if (act === 'bulktag') {
+      var tg = String($('bulktag').value || '').replace(/,/g, ' ').trim();
+      if (!tg) { toast('Type a tag first'); return; }
+      var rows = filteredTx().filter(function (t) { return tagsOf(t).indexOf(tg) < 0; }).map(function (t) { return Object.assign({}, t, { tags:tagsOf(t).concat([tg]).join(', ') }); });
+      if (!rows.length) { toast('All shown already have #' + tg); return; }
+      return saveMany('Transaction', rows).then(function () { toast('#' + tg + ' added to ' + rows.length + ' transactions'); });
+    }
+    if (act === 'radd') {
+      var mt = String($('rmatch').value || '').trim(); if (!mt) { toast('Type the text to match'); return; }
+      var cs = $('rcs').value.split('|');
+      return saveRow('Rule', { match:mt, category:cs[0], subcategory:cs[1] || '', type:$('rtype').value, account:$('racct').value, tags:String($('rtags').value || '').trim(), priority:100 })
+        .then(function () { toast('Rule added for “' + mt + '”'); });
+    }
+    if (act === 'rdel') return deleteRow('Rule', a.getAttribute('data-id')).then(function () { toast('Rule removed'); });
+    if (act === 'rsugg' || act === 'rsuggall') {
+      var sg = suggestedRules().slice(0, 15), pick = act === 'rsugg' ? [sg[+a.getAttribute('data-i')]] : sg;
+      var newRules = pick.filter(Boolean).map(function (r) { return { match:r.match, category:r.category, subcategory:r.subcategory, type:r.type, account:r.account, tags:'', priority:100 }; });
+      return saveMany('Rule', newRules).then(function () { toast(newRules.length + ' rule' + (newRules.length === 1 ? '' : 's') + ' added'); });
+    }
+    if (act === 'savefee') {
+      var fv = parseFloat($('sfee').value); if (!(fv >= 0)) { toast('Enter the fee as a number, e.g. 1.75'); return; }
+      return saveSetting('card_fee_pct', fv).then(function () { toast('Card fee set to ' + fv + '%'); });
+    }
     if (act === 'collmode') { lsSet(COLL_KEY, a.getAttribute('data-v')); return draw(); }
-    if (act === 'clearf') { UI.tx = { scope:'period', q:'', type:'', category:'', account:'', sub:'', from:'', to:'', dayToDay:false }; return draw(); }
+    if (act === 'clearf') { UI.tx = { scope:'period', q:'', type:'', category:'', account:'', sub:'', from:'', to:'', tag:'', dayToDay:false }; return draw(); }
     if (act === 'bsave') {
       var v = parseFloat(String($('blim' + a.getAttribute('data-i')).value).replace(',', '.'));
       if (!(v >= 0)) { toast('Enter the limit as a positive number'); return; }
@@ -1339,7 +1576,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
   });
   function openDrill(el) {
     var f = {}; try { f = JSON.parse(el.getAttribute('data-drill')); } catch (err) {}
-    UI.tx = { scope:'period', q:'', type:'', category:f.category || '', account:f.account || '', sub:f.sub || '', from:f.from || '', to:f.to || '', dayToDay:!!f.dayToDay };
+    UI.tx = { scope:'period', q:'', type:'', category:f.category || '', account:f.account || '', sub:f.sub || '', from:f.from || '', to:f.to || '', tag:'', dayToDay:!!f.dayToDay };
     go('transactions');
   }
   document.addEventListener('toggle', function (e) {
@@ -1354,6 +1591,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
   });
   document.addEventListener('input', function (e) {
     var id = e.target.id;
+    if (id === 'morig' && FORM) { recalcFx(); return; }
     if (id === 'fq') { UI.tx.q = e.target.value; var pos = e.target.selectionStart; draw(); var q = $('fq'); q.focus(); q.setSelectionRange(pos, pos); }
   });
   document.addEventListener('change', function (e) {
@@ -1362,6 +1600,9 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
     if (id === 'ftype') { UI.tx.type = e.target.value; draw(); }
     if (id === 'fcat') { UI.tx.category = e.target.value; draw(); }
     if (id === 'facct') { UI.tx.account = e.target.value; draw(); }
+    if (id === 'ftag') { UI.tx.tag = e.target.value; draw(); }
+    if (id === 'mcur' && FORM) { readForm(); FORM._rate = null; FORM._rateErr = ''; FORM._fee = FORM.account === 'credit_card'; drawModal(); recalcFx(); }
+    if ((id === 'mfee' || id === 'mdate' || id === 'macct') && FORM && FORM.orig_currency !== 'CHF') recalcFx();
     if (e.target.matches && e.target.matches('[data-act=broll]')) {
       var bc = e.target.getAttribute('data-cat'), on = e.target.checked;
       saveBudget(bc, { rollover_enabled: on }).then(function () { toast('Rollover ' + (on ? 'on' : 'off') + ' for ' + bc); });
@@ -1369,14 +1610,19 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, settings:1 };
     if (id === 'mcat' && FORM) { readForm(); FORM.subcategory = (CATEGORIES[FORM.category] || [''])[0] || ''; drawModal(); }
     if (id === 'mdesc' && FORM) autofill();
   });
-  window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h && h !== UI.page) { UI.page = h; draw(); } });
+  window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h === 'add') { try { history.replaceState(null, '', '#' + UI.page); } catch (e) {} return openTx(null); } if (h && h !== UI.page) { UI.page = h; draw(); } });
 
   // ─── boot ─────────────────────────────────────────────────────────────────
-  var h0 = location.hash.slice(1); if (h0) UI.page = h0;
+  var h0 = location.hash.slice(1), wantAdd = h0 === 'add';
+  if (wantAdd) { h0 = 'dashboard'; try { history.replaceState(null, '', '#dashboard'); } catch (e) {} }
+  if (h0) UI.page = h0;
   try { _cache = JSON.parse(lsGet(CACHE_KEY)); } catch (e) { _cache = null; }
   if (_cache && _cache.data) { applyData(_cache.data); UI.lastSync = new Date(_cache.at); }
   draw();
+  if (wantAdd) openTx(null);
   loadAll();
+
+  if ('serviceWorker' in navigator && location.protocol === 'https:') { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }
 
   // exposed for the diagnostic check only
   window.FF = { periodModel:periodModel, calcTotals:calcTotals, periodAt:periodAt, applyData:applyData, DATA:DATA };

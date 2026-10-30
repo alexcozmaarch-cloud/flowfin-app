@@ -14,7 +14,8 @@
 var SHEET_ID = 'PASTE_SHEET_ID_HERE';
 
 var TABLES = {
-  Transaction:      ['id','date','description','category','subcategory','amount','type','account','anomaly_status','created_date','updated_date'],
+  Transaction:      ['id','date','description','category','subcategory','amount','type','account','anomaly_status','created_date','updated_date','tags','orig_amount','orig_currency','fx_rate','fx_fee'],
+  Rule:             ['id','match','category','subcategory','type','account','tags','priority','created_date','updated_date'],
   Budget:           ['id','category','monthly_limit','period','is_default','rollover_enabled','created_date','updated_date'],
   CategorySettings: ['id','category','role','created_date','updated_date'],
   FundAllocation:   ['id','key','pct','created_date','updated_date'],
@@ -26,7 +27,7 @@ var TABLES = {
   Settings:         ['id','key','value','updated_date']
 };
 
-var NUMERIC = ['amount','monthly_limit','pct','target_amount','current_amount','saving_pct','net','current_value','total_invested','exchange_rate','value'];
+var NUMERIC = ['orig_amount','fx_rate','fx_fee','priority','amount','monthly_limit','pct','target_amount','current_amount','saving_pct','net','current_value','total_invested','exchange_rate','value'];
 var BOOLEAN = ['is_default','rollover_enabled','is_liability','auto_detected'];
 
 function ss_() { return SpreadsheetApp.openById(SHEET_ID); }
@@ -40,6 +41,10 @@ function setup() {
     if (existing.join('') === '') {
       sh.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight('bold');
       sh.setFrozenRows(1);
+    } else {
+      // add any new columns at the end, keeping existing data where it is
+      var missing = headers.filter(function (h) { return existing.indexOf(h) < 0; });
+      if (missing.length) sh.getRange(1, existing.length + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
     }
   });
   return 'ok';

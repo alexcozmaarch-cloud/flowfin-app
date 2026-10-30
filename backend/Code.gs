@@ -177,7 +177,11 @@ function syncFromBase44() {
       var r = remoteById[id];
       if (!r) { removed++; return; }                              // deleted in Base44
       seen[id] = true;
-      var next = headers.map(function (h, i) { return r[h] === undefined || r[h] === null ? row[i] : r[h]; });
+      // FlowFin owns the one-off decision: once a row has an anomaly status in the Sheet, Base44 no longer overwrites it
+      var next = headers.map(function (h, i) {
+        if (h === 'anomaly_status' && String(row[i]) !== '') return row[i];
+        return r[h] === undefined || r[h] === null ? row[i] : r[h];
+      });
       var changed = next.some(function (v, i) { return norm(v) !== norm(row[i]); });
       if (changed) updated++;
       kept.push(next);

@@ -432,7 +432,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
     for (var i = 1; i <= HIST_MONTHS; i++) {
       var p = periodAt(-i), pi = 0, pf = 0;
       all.forEach(function (tx) {
-        if (!inPeriod(tx, p)) return;
+        if (!inPeriod(tx, p) || tx.anomaly_status === 'excluded') return;   // one-offs don't shape the allowance
         if (isSalary(tx, r)) pi += +tx.amount || 0;
         if (isInfra(tx, r))  pf += +tx.amount || 0;
       });

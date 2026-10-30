@@ -298,6 +298,7 @@ details.fold>summary:hover h3{color:var(--muted)}
 .rtable .off{color:var(--faint)}
 .rtable .inflow{color:var(--good)}
 .rtable select{background:var(--paper);border:1px solid var(--ink);height:30px;padding:0 6px}
+.chartnote{margin:-4px 0 10px;font-size:13px;color:var(--muted);max-width:70rem}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -627,7 +628,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
         '<div class="line"><span>Available now</span><span class="num ' + (m.availableNow < 0 ? 'neg' : '') + '">' + sw(m.availableNow) + '</span></div>' +
         (m.scheduledFree ? '<div class="line"><span>After scheduled</span><span class="num ' + (m.afterScheduled < 0 ? 'neg' : '') + '">' + sw(m.afterScheduled) + '</span></div>' : '') +
         (pe ? '<div class="line" style="display:block"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px"><span>Projected by ' + periodDay(m.p.end) + '</span><span class="num ' + (pe.end < 0 ? 'neg' : '') + '">' + signed(pe.end) + '</span></div>' +
-          '<div class="projnote">Balance now ' + signed(pe.now) + ', plus ' + sw0(pe.budgetLeft) + ' budget for ' + pe.daysLeft + ' days, minus ' + sw0(pe.still) + ' forecast spending. Last period ended ' + signed(pe.prevEnd) + '.</div></div>' : '') +
+          '<div class="projnote">Allowance balance now ' + signed(pe.now) + ', plus ' + sw0(pe.budgetLeft) + ' allowance for ' + pe.daysLeft + ' days, minus ' + sw0(pe.sched) + ' scheduled and ' + sw0(pe.still - pe.sched) + ' ' + (pe.basis === 'pace' ? 'at this period’s pace' : 'usual spending') + '. Last period ended ' + signed(pe.prevEnd) + '.</div></div>' : '') +
         '<div class="line" style="display:block"><div style="display:flex;justify-content:space-between;font-size:14px"><span>Day ' + m.daysElapsed + ' of ' + m.daysInPeriod + '</span><span class="num soon" style="font-size:13px">' + left + ' day' + (left === 1 ? '' : 's') + ' left</span></div>' +
         '<div class="progress"><i style="width:' + Math.round(m.daysElapsed / m.daysInPeriod * 100) + '%"></i></div></div>' +
         '</div>';
@@ -640,22 +641,26 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
     }
     h += '</section>';
     h += upcomingHTML(m);
+    if (!m.isCurrent) var pe = null;
 
     h += '<section class="kpis">' +
       kpi('Income', sw(T.income), T.expectedIncome ? '<span class="tag exp">expected</span>' : '') +
       kpi('Expenses', sw(T.expenses), T.expectedExpense ? '<span class="tag exp">incl. 6’700 expected</span>' : (T.refunds ? 'after ' + sw0(T.refunds) + ' refunds' : '')) +
       kpi('Net cash flow', '<span class="' + (T.netCashFlow < 0 ? 'neg' : '') + '">' + sw(T.netCashFlow) + '</span>', '') +
       kpi('Collectibles', sw(T.collectibles), 'at cost') +
-      kpi('Net saved', '<span class="' + (T.netSaved < 0 ? 'neg' : '') + '">' + sw(T.netSaved) + '</span>', '') +
+      kpi('Net saved', '<span class="' + (T.netSaved < 0 ? 'neg' : '') + '">' + sw(T.netSaved) + '</span>',
+        pe ? '<span class="' + (T.netSaved - pe.still < 0 ? 'neg' : '') + '">' + signed(T.netSaved - pe.still) + ' by ' + periodDay(m.p.end) + '</span>' : (m.isCurrent ? '' : 'final')) +
       kpi('Savings rate', (T.savingsRate * 100).toFixed(1) + '%', T.financialInvesting ? sw0(T.financialInvesting) + ' invested' : '') +
       '</section>';
 
-    h += '<section class="card"><h3>Daily net balance<span class="r legend">' +
+    h += '<section class="card"><h3>Allowance balance<span class="r legend">' +
       '<span><i style="border-top:2px solid var(--ink)"></i>This period</span>' +
       '<span><i style="border-top:2px dashed var(--faint)"></i>Previous period</span>' +
       (m.isCurrent ? '<span><i style="border-top:2px dotted var(--ink)"></i>Projected</span>' : '') +
       '<span><i style="border-top:2px solid var(--signal)"></i>Below zero</span></span></h3>' +
-      '<div class="chartbox"><canvas id="chDaily" role="img" aria-label="Cumulative net balance for the period against ' + sw(m.dailyBudget) + ' a day"></canvas></div></section>';
+      '<p class="chartnote">Starts at 0 each period. Every day adds your allowance of ' + sw(m.dailyBudget) + ' (salary minus household, averaged, spread over the period) and subtracts what you spent that day, household excluded. ' +
+      'Above 0: you are spending less than your allowance. Net saved above is different: it counts this month’s whole salary already, so it includes the allowance for the days still to come.</p>' +
+      '<div class="chartbox"><canvas id="chDaily" role="img" aria-label="Allowance balance for the period, ' + sw(m.dailyBudget) + ' a day"></canvas></div></section>';
 
     h += '<div class="grid2">' + budgetForecastHTML(m) + categoryHTML(m) + '</div>';
 
@@ -724,14 +729,21 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
   }
   // Day-to-day categories get a forecast; fixed household and investing are lump sums, so they don't
   function isDayToDay(cat) { var r = roles(); var inf = r.infra.length ? r.infra : ['Family Infrastructure']; return inf.indexOf(cat) < 0 && cat !== 'Financial Investing' && cat !== 'Retirement 3a'; }
+  var PROJ_KEY = 'ff_proj_v1';
+  function projBasis() { return lsGet(PROJ_KEY) === 'pace' ? 'pace' : 'usual'; }
   function budgetForecastRows(m) {
     return budgetRows(UI.periodOffset).filter(function (r) { return r.limit > 0 || r.spent > 5; }).map(function (r) {
       r.dayToDay = isDayToDay(r.cat);
       r.fc = null;
       if (m.isCurrent && r.dayToDay) {
-        var vals = []; for (var i = 6; i >= 1; i--) vals.push(Math.max(0, catSpend(r.cat, periodAt(UI.periodOffset - i)).spent));
+        var vals = []; for (var i = 6; i >= 1; i--) vals.push(Math.max(0, catSpend(r.cat, periodAt(UI.periodOffset - i), true).spent));
         r.avg = weightedAvg(vals);
-        r.fc = blend(m.daysElapsed, m.daysInPeriod, r.spent, r.avg);
+        var cur = catSpend(r.cat, periodAt(UI.periodOffset), true), daysLeft = m.daysInPeriod - m.daysElapsed;
+        r.toDate = cur.spent - cur.sched;                                   // spent so far, scheduled and one-offs left out
+        r.remainUsual = r.avg * daysLeft / m.daysInPeriod;                  // the last days' share of a usual period
+        r.remainPace = m.daysElapsed > 0 ? Math.max(0, r.toDate) / m.daysElapsed * daysLeft : 0;   // this period's daily pace
+        r.remain = projBasis() === 'pace' ? r.remainPace : r.remainUsual;
+        r.fc = r.spent + r.remain;                                          // spent (incl. scheduled) + still to come
       }
       r.over = r.limit > 0 && r.spent > r.limit + 0.004;
       r.willOver = !r.over && r.fc !== null && r.limit > 0 && r.fc > r.limit;
@@ -744,7 +756,11 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
     if (m.isCurrent && d2d.length) {
       var spent = sumBy(d2d, function (r) { return r.spent; }), fc = sumBy(d2d, function (r) { return r.fc || 0; }), avg = sumBy(d2d, function (r) { return r.avg || 0; });
       var sched = sumBy(d2d, function (r) { return r.sched; }), vs = avg > 0 ? (fc - avg) / avg * 100 : 0;
-      h += '<div class="trio">' +
+      var pace = projBasis() === 'pace';
+      h += '<div class="collmode"><span class="soon">Forecast the last ' + (m.daysInPeriod - m.daysElapsed) + ' days from</span><div class="seg2">' +
+        '<button class="' + (pace ? '' : 'on') + '" data-act="projbasis" data-v="usual">Your usual (6 periods)</button>' +
+        '<button class="' + (pace ? 'on' : '') + '" data-act="projbasis" data-v="pace">This period’s pace</button></div></div>' +
+        '<div class="trio">' +
         '<div><label>Day-to-day spent</label><span class="num">' + sw(spent) + '</span><small>' + (sched ? 'incl. ' + sw(sched) + ' scheduled' : '&nbsp;') + '</small></div>' +
         '<div><label>Forecast</label><span class="num">' + sw(fc) + '</span><small class="' + (vs > 10 ? 'neg' : '') + '">' + (vs >= 0 ? '+' : '') + vs.toFixed(0) + '% vs 6-period avg</small></div>' +
         '<div><label>Still to come</label><span class="num">' + sw(Math.max(0, fc - spent)) + '</span><small>' + (m.daysInPeriod - m.daysElapsed) + ' days left</small></div></div>';
@@ -938,7 +954,12 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
         plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:C.ink, cornerRadius:0, titleFont:{ family:'IBM Plex Mono' }, bodyFont:{ family:'IBM Plex Mono' },
           filter:function (c) { return Number.isInteger(c.parsed.x) && (c.dataset.label !== 'Projected' || c.dataIndex === proj.length - 1); },
           callbacks:{ title:function (items) { return items.length ? labels[Math.round(items[0].parsed.x)] : ''; },
-                      label:function (c) { return c.dataset.label + ': ' + sw(c.parsed.y); } } } },
+                      label:function (c) { return c.dataset.label + ': ' + sw(c.parsed.y); },
+                      afterBody:function (items) {
+                        if (!pe || !items.some(function (c) { return c.dataset.label === 'Projected'; })) return [];
+                        return ['', 'Now ' + signed(pe.now) + ' + allowance ' + sw0(pe.budgetLeft), 'Scheduled − ' + sw0(pe.sched)].concat(
+                          pe.parts.map(function (x) { return x.cat + ' − ' + sw0(x.v) + (pe.basis === 'pace' ? ' (pace)' : ' (usual)'); }));
+                      } } } },
         scales:{
           x:{ type:'linear', min:0, max:m.daysInPeriod - 1, ticks:{ color:C.muted, stepSize:4, maxRotation:0, font:{ family:'IBM Plex Mono', size:11 },
               callback:function (v) { return Number.isInteger(v) ? labels[v] : ''; } }, grid:{ display:false }, border:{ color:C.ink } },
@@ -991,14 +1012,14 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
   function periodEndProjection(m) {
     if (!m.isCurrent) return null;
     var d2d = budgetForecastRows(m).filter(function (r) { return r.dayToDay && r.fc !== null; });
-    var fc = sumBy(d2d, function (r) { return r.fc; });
-    var spentToDate = sumBy(d2d, function (r) { return r.spent - r.sched; });
-    var still = Math.max(0, fc - spentToDate);
+    var sched = sumBy(d2d, function (r) { return r.sched; });
+    var parts = d2d.map(function (r) { return { cat:r.cat, v:r.remain }; }).filter(function (x) { return x.v > 0.5; });
+    var still = sched + sumBy(parts, function (x) { return x.v; });
     var daysLeft = m.daysInPeriod - m.daysElapsed, now = 0;
     for (var i = 0; i < m.daysElapsed; i++) now += m.dailyBudget - (m.dailyMap[ymd(addDays(m.p.start, i))] || 0);
     var prev = periodModel(UI.periodOffset - 1), prevEnd = 0;
     for (var j = 0; j < prev.daysInPeriod; j++) prevEnd += prev.dailyBudget - (prev.dailyMap[ymd(addDays(prev.p.start, j))] || 0);
-    return { now:now, end:now + m.dailyBudget * daysLeft - still, still:still, budgetLeft:m.dailyBudget * daysLeft, daysLeft:daysLeft, prevEnd:prevEnd };
+    return { sched:sched, parts:parts, basis:projBasis(), now:now, end:now + m.dailyBudget * daysLeft - still, still:still, budgetLeft:m.dailyBudget * daysLeft, daysLeft:daysLeft, prevEnd:prevEnd };
   }
 
   // Savings: net saved in the last 6 finished periods, then 12 periods forward at your pace and at target
@@ -1216,10 +1237,11 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
   // ─── Budgets (shared by the Budgets page and the dashboard gauges) ────────
   // Spend = expense + investment rows in the category minus refunds in it, whole period (scheduled included).
   // Rollover: effective limit = base + last period's unspent amount (never a deficit).
-  function catSpend(cat, p) {
+  function catSpend(cat, p, skipOneOffs) {
     var spent = 0, sched = 0, t = today();
     txs().forEach(function (tx) {
       if (tx.category !== cat || !inPeriod(tx, p)) return;
+      if (skipOneOffs && tx.anomaly_status === 'excluded') return;
       var a = +tx.amount || 0;
       if (tx.type === 'expense' || tx.type === 'investment') { spent += a; if (pd(tx.date) > t) sched += a; }
       else if (tx.type === 'refund') spent -= a;
@@ -1679,6 +1701,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
     }
     if (act === 'reload') return loadAll();
     if (act === 'mkrule') return ruleFromForm();
+    if (act === 'projbasis') { lsSet(PROJ_KEY, a.getAttribute('data-v')); return draw(); }
     if (act === 'rtrack') {
       var ri = recurringItems()[+a.getAttribute('data-i')]; if (!ri) return;
       return saveRow('Subscription', { name:ri.name, amount:ri.amount, frequency:ri.frequency, account:ri.account, category:ri.category, subcategory:ri.subcategory,

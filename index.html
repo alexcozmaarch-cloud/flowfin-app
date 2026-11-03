@@ -1359,7 +1359,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     return { head:head, rows:rows.filter(function (r) { return r.join('') !== ''; }).map(function (r) { var o = {}; head.forEach(function (h, k) { o[h] = r[k] === undefined ? '' : r[k]; }); return o; }) };
   }
   function tableForFile(name, head) {
-    var base = String(name).replace(/\.csv$/i, '').replace(/_export$/i, '').replace(/^.*[\\/]/, '');
+    var base = String(name).replace(/\.csv$/i, '').replace(/_export(_\d+)?$/i, '').replace(/^.*[\\/]/, '').replace(/^[0-9a-f]{6,}-/i, '');
     var hit = TABLES.filter(function (t) { return t.toLowerCase() === base.toLowerCase(); })[0];
     if (hit) return hit;
     // fall back to the columns: the table whose known columns best match the file's header
@@ -1391,6 +1391,13 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
           });
           return o;
         });
+        if (t === 'GoalContribution') {
+          // Base44 exports repeat each goal/period many times: keep only the newest row per goal and period
+          var best = {};
+          (DATA.GoalContribution || []).forEach(function (r) { best[r.goal_id + '|' + String(r.period).slice(0, 10)] = 'have'; });
+          rows.forEach(function (r) { var k = r.goal_id + '|' + String(r.period).slice(0, 10); if (best[k] === 'have') return; if (!best[k] || String(r.created_date) > String(best[k].created_date)) best[k] = r; });
+          rows = rows.filter(function (r) { return best[r.goal_id + '|' + String(r.period).slice(0, 10)] === r; });
+        }
         var skipped = p.rows.length - rows.length;
         lines.push(t + ': ' + rows.length + ' new' + (skipped ? ', ' + skipped + ' already in the Sheet' : ''));
         for (var i = 0; i < rows.length; i += 100) jobs.push({ t:t, rows:rows.slice(i, i + 100) });

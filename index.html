@@ -314,6 +314,9 @@ details.fold>summary:hover h3{color:var(--muted)}
 .utable b{font-weight:500;display:block}
 .utable small{display:block;color:var(--muted);font-size:11px}
 .utable input{width:100%;background:var(--paper);border:1px solid var(--ink);height:34px;padding:0 8px;font-family:var(--f-mono)}
+.gtable{overflow-x:auto}
+.gtable>div{display:grid;grid-template-columns:minmax(190px,1.6fr) 120px 110px minmax(150px,1fr);gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);min-width:560px;font-size:14px}
+.gtable>div span:nth-child(2),.gtable>div span:nth-child(3){text-align:right}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -360,7 +363,7 @@ var NAV = [
   { label:'App',      items:[['settings','Settings']] }
 ];
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['add','+'],['budgets','Budgets'],['settings','More']];
-var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, wealth:1, settings:1 };
+var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, wealth:1, settings:1 };
 
 (function () {
   'use strict';
@@ -518,6 +521,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, wealth:1,
       setSync('ok');
       draw();
       repairDuplicates();
+      repairContribs();
     }).catch(function (e) {
       setSync('err', /access key/i.test(e.message) ? 'Add your access key in Settings' : 'Could not reach the Sheet: ' + e.message);
       if (/access key/i.test(e.message) && UI.page !== 'settings') { UI.page = 'settings'; draw(); }
@@ -640,6 +644,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, wealth:1,
     else if (UI.page === 'budgets') v.innerHTML = budgetsHTML();
     else if (UI.page === 'subscriptions') v.innerHTML = recurringHTML();
     else if (UI.page === 'wealth') v.innerHTML = wealthHTML();
+    else if (UI.page === 'goals') v.innerHTML = goalsHTML();
     else v.innerHTML = soonHTML();
     if (UI.page === 'wealth') {
       var wc = function () { if (UI.page === 'wealth') wealthChart(); };
@@ -1603,6 +1608,141 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, wealth:1,
     chain.then(function () { toast('Account deleted'); });
   }
 
+  // ─── Goals ────────────────────────────────────────────────────────────────
+  // Contribution rule (as in Base44): saving % of a finished period's net saved (cash flow after collectibles), only when positive.
+  // One record per goal and period: recording again updates it, and the goal's saved amount moves by the difference only.
+  function goalContribs(goalId) {
+    var by = {};
+    (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === goalId; }).forEach(function (c) {
+      var k = String(c.period).slice(0, 10), cur = by[k];
+      if (!cur || String(c.updated_date || c.created_date) > String(cur.updated_date || cur.created_date)) by[k] = c;
+    });
+    return by;
+  }
+  function goalPeriods(g) {
+    var pct = +g.saving_pct || 0, have = goalContribs(g.id), out = [];
+    for (var i = 6; i >= 1; i--) {
+      var p = periodAt(UI.periodOffset - i), key = ymd(p.start), list = txs().filter(function (tx) { return inPeriod(tx, p); });
+      if (!list.length) continue;
+      var T = calcTotals(list, p.end, 0, 0), net = T.netSaved;
+      var suggested = net > 0 && pct > 0 ? Math.round(net * pct) / 100 : 0;
+      out.push({ p:p, key:key, net:net, suggested:suggested, rec:have[key] || null });
+    }
+    return out;
+  }
+  function avgNetCashFlow() {
+    var tot = 0, n = 0;
+    for (var i = 1; i <= 6; i++) {
+      var p = periodAt(UI.periodOffset - i), list = txs().filter(function (tx) { return inPeriod(tx, p) && tx.anomaly_status !== 'excluded'; });
+      if (!list.some(function (tx) { return tx.type === 'income'; })) continue;
+      tot += calcTotals(list, p.end, 0, 0).netSaved; n++;
+    }
+    return n ? tot / n : 0;
+  }
+  function monthsUntil(d) { var t = today(); return (d.getFullYear() - t.getFullYear()) * 12 + (d.getMonth() - t.getMonth()) + (d.getDate() >= t.getDate() ? 0 : -1); }
+  function goalsHTML() {
+    var goals = (DATA.FinancialGoal || []).slice().sort(function (a, b) { return String(a.deadline || '9') < String(b.deadline || '9') ? -1 : 1; });
+    var h = topbar('Goals', false, '<button class="btn primary" data-act="gnew">+ Goal</button>');
+    if (!goals.length) return h + '<section class="card"><h3>No goals yet</h3><p class="soon" style="margin:0">Import FinancialGoal.csv and GoalContribution.csv in <button class="navlink" data-nav="settings">Settings → Import data</button>, or add your first goal.</p></section>';
+    var tTarget = sumBy(goals, function (g) { return +g.target_amount; }), tSaved = sumBy(goals, function (g) { return +g.current_amount; });
+    var avgNet = avgNetCashFlow();
+    h += '<section class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">' +
+      kpi('Saved towards goals', sw0(tSaved), 'of ' + sw0(tTarget) + ' · ' + (tTarget ? (tSaved / tTarget * 100).toFixed(1) : 0) + '%') +
+      kpi('Still to save', sw0(Math.max(0, tTarget - tSaved)), goals.length + ' goal' + (goals.length === 1 ? '' : 's')) +
+      kpi('Net saved', '<span class="' + (avgNet < 0 ? 'neg' : '') + '">' + sw0(avgNet) + '</span>', 'a period, 6-period average, one-offs left out') + '</section>';
+    goals.forEach(function (g) {
+      var target = +g.target_amount || 0, cur = +g.current_amount || 0, left = Math.max(0, target - cur), pct = target ? cur / target : 0;
+      var dl = g.deadline ? pd(g.deadline) : null, mLeft = dl ? monthsUntil(dl) : null;
+      var need = dl && mLeft > 0 ? left / mLeft : null;
+      var perPeriod = (+g.saving_pct || 0) / 100 * Math.max(0, avgNet);
+      var eta = perPeriod >= 1 && left / perPeriod <= 600 ? Math.ceil(left / perPeriod) : null, etaDate = eta !== null ? periodAt(UI.periodOffset + eta).start : null;
+      var late = dl && etaDate && etaDate > dl;
+      var per = goalPeriods(g), missing = per.filter(function (x) { return x.suggested > 0 && (!x.rec || Math.abs((+x.rec.amount || 0) - x.suggested) > 0.004); });
+      h += '<section class="card"><h3>' + esc(g.name) + '<span class="r"><button class="navlink" data-act="gedit" data-id="' + esc(g.id) + '">Edit</button></span></h3>' +
+        '<div class="bhead"><span class="num" style="font-size:28px">' + sw0(cur) + ' <span class="soon" style="font-size:18px">/ ' + sw0(target) + '</span></span><span class="num">' + (pct * 100).toFixed(1) + '%</span></div>' +
+        '<div class="bar bbar"><i style="width:' + Math.min(100, pct * 100) + '%"></i></div>' +
+        (g.notes ? '<p class="soon" style="margin:0;font-size:13px">' + esc(g.notes) + '</p>' : '') +
+        '<div class="trio" style="margin-top:6px">' +
+        '<div><label>Deadline</label><span class="num">' + (dl ? monthYear(dl) : '—') + '</span><small>' + (mLeft !== null ? (mLeft > 0 ? mLeft + ' months away' : 'passed') : 'none set') + '</small></div>' +
+        '<div><label>Needed a month</label><span class="num">' + (need !== null ? sw(need) : '—') + '</span><small>' + (need !== null ? 'to reach it by the deadline' : '&nbsp;') + '</small></div>' +
+        '<div><label>At ' + (+g.saving_pct || 0) + '% of net saved</label><span class="num ' + (late || eta === null ? 'neg' : '') + '">' + (etaDate ? monthYear(etaDate) : 'not reached at this pace') + '</span><small>' + (perPeriod > 0 ? sw(perPeriod) + ' a period on average' : 'average net saved is not positive') + '</small></div></div>';
+      h += '<div class="subhead" style="margin-top:6px"><b>Contributions</b><span>' + (+g.saving_pct || 0) + '% of each finished period’s net saved, when positive</span></div><div class="gtable">' +
+        per.map(function (x) {
+          var state = x.suggested <= 0 ? '<span class="soon">no contribution · negative period</span>'
+            : x.rec && Math.abs((+x.rec.amount || 0) - x.suggested) <= 0.004 ? '<span class="soon">recorded</span>'
+            : '<button class="navlink" data-act="grec" data-id="' + esc(g.id) + '" data-k="' + x.key + '">' + (x.rec ? 'Update to ' + sw(x.suggested) : 'Record') + '</button>';
+          return '<div><span>' + periodLabel(x.p) + '</span><span class="num ' + (x.net < 0 ? 'neg' : 'soon') + '">' + sw(x.net) + '</span><span class="num">' + (x.rec ? sw(+x.rec.amount) : x.suggested > 0 ? '<span class="soon">' + sw(x.suggested) + '</span>' : '—') + '</span><span>' + state + '</span></div>';
+        }).join('') + '</div>' +
+        (missing.length > 1 ? '<div class="actions" style="justify-content:flex-start;margin-top:10px"><button class="btn" data-act="grecall" data-id="' + esc(g.id) + '">Record all ' + missing.length + '</button></div>' : '') +
+        '</section>';
+    });
+    return h;
+  }
+  // Record (or correct) one period's contribution; the goal moves by the difference only
+  function recordContribs(goalId, keys) {
+    var g = (DATA.FinancialGoal || []).filter(function (x) { return x.id === goalId; })[0]; if (!g) return Promise.resolve();
+    var per = goalPeriods(g).filter(function (x) { return keys.indexOf(x.key) > -1 && x.suggested > 0; });
+    var delta = 0, rows = per.map(function (x) {
+      delta += x.suggested - (x.rec ? +x.rec.amount || 0 : 0);
+      var r = { goal_id:goalId, period:x.key, amount:x.suggested, pct:+g.saving_pct || 0, net:Math.round(x.net * 100) / 100 };
+      if (x.rec) { r.id = x.rec.id; r.created_date = x.rec.created_date; }
+      return r;
+    });
+    if (!rows.length) return Promise.resolve();
+    return saveMany('GoalContribution', rows).then(function () {
+      return saveRow('FinancialGoal', Object.assign({}, g, { current_amount:Math.round(((+g.current_amount || 0) + delta) * 100) / 100 }));
+    }).then(function () { toast(rows.length + ' contribution' + (rows.length === 1 ? '' : 's') + ' recorded · ' + (delta >= 0 ? '+' : '−') + sw(Math.abs(delta)) + ' to ' + g.name); });
+  }
+  // One-time clean-up of Base44's repeated contribution rows: keep the newest per goal and period
+  function repairContribs() {
+    var seen = {}, drop = [];
+    (DATA.GoalContribution || []).slice().sort(function (a, b) { return String(b.updated_date || b.created_date) < String(a.updated_date || a.created_date) ? -1 : 1; })
+      .forEach(function (c) { var k = c.goal_id + '|' + String(c.period).slice(0, 10); if (seen[k]) drop.push(c.id); else seen[k] = 1; });
+    var chain = Promise.resolve();
+    drop.forEach(function (id) { chain = chain.then(function () { return deleteRow('GoalContribution', id, true); }); });
+    return chain;
+  }
+  var GFORM = null;
+  function openGoal(id) {
+    var g = id ? (DATA.FinancialGoal || []).filter(function (x) { return x.id === id; })[0] : null;
+    GFORM = { g:g ? Object.assign({}, g) : { name:'', target_amount:'', current_amount:0, saving_pct:10, deadline:'', notes:'', fund_bucket:'savings' }, err:'', confirm:false };
+    drawGoal();
+  }
+  function closeGForm() { GFORM = null; $('modalRoot').innerHTML = ''; }
+  function drawGoal() {
+    var g = GFORM.g;
+    $('modalRoot').innerHTML = '<div class="scrim" data-act="gscrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="gtitle"><h2 id="gtitle">' + (g.id ? 'Edit goal' : 'New goal') + '</h2><div class="formgrid">' +
+      '<div class="field full"><label for="gname">Name</label><input id="gname" value="' + esc(g.name) + '"></div>' +
+      '<div class="field"><label for="gtarget">Target (CHF)</label><input id="gtarget" type="number" step="1" min="0" value="' + esc(g.target_amount) + '"></div>' +
+      '<div class="field"><label for="gcur">Saved so far (CHF)</label><input id="gcur" type="number" step="0.01" min="0" value="' + esc(g.current_amount) + '"></div>' +
+      '<div class="field"><label for="gpct">Share of net saved each period (%)</label><input id="gpct" type="number" step="1" min="0" max="100" value="' + esc(g.saving_pct) + '"></div>' +
+      '<div class="field"><label for="gdl">Deadline</label><input id="gdl" type="date" value="' + esc(String(g.deadline || '').slice(0, 10)) + '"></div>' +
+      '<div class="field full"><label for="gnotes">Notes</label><input id="gnotes" value="' + esc(g.notes) + '"></div>' +
+      '</div>' + (GFORM.err ? '<div class="err">' + esc(GFORM.err) + '</div>' : '') +
+      '<div class="actions">' + (g.id ? (GFORM.confirm ? '<span class="left"><button class="btn danger" data-act="gdelyes">Yes, delete with its contributions</button> <button class="btn" data-act="gdelno">Keep</button></span>' : '<button class="btn danger left" data-act="gdel">Delete</button>') : '') +
+      '<button class="btn" data-act="gcancel">Cancel</button><button class="btn primary" data-act="gsave">' + (g.id ? 'Save changes' : 'Add goal') + '</button></div></div></div>';
+  }
+  function readGoal() {
+    var g = GFORM.g;
+    g.name = $('gname').value.trim(); g.target_amount = $('gtarget').value; g.current_amount = $('gcur').value; g.saving_pct = $('gpct').value; g.deadline = $('gdl').value; g.notes = $('gnotes').value;
+  }
+  function saveGoal() {
+    readGoal();
+    var g = GFORM.g, t = parseFloat(g.target_amount);
+    if (!g.name) { GFORM.err = 'Give the goal a name.'; return drawGoal(); }
+    if (!(t > 0)) { GFORM.err = 'Enter a target above 0.'; return drawGoal(); }
+    var row = Object.assign({}, g, { target_amount:t, current_amount:parseFloat(g.current_amount) || 0, saving_pct:parseFloat(g.saving_pct) || 0 });
+    var isNew = !g.id; closeGForm();
+    saveRow('FinancialGoal', row).then(function () { toast(isNew ? 'Goal added' : 'Goal saved'); });
+  }
+  function deleteGoal() {
+    var id = GFORM.g.id, cs = (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === id; });
+    closeGForm();
+    var chain = deleteRow('FinancialGoal', id);
+    cs.forEach(function (c) { chain = chain.then(function () { return deleteRow('GoalContribution', c.id, true); }); });
+    chain.then(function () { toast('Goal deleted'); });
+  }
+
   // ─── Budgets (shared by the Budgets page and the dashboard gauges) ────────
   // Spend = expense + investment rows in the category minus refunds in it, whole period (scheduled included).
   // Rollover: effective limit = base + last period's unspent amount (never a deficit).
@@ -2072,6 +2212,20 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, wealth:1,
     if (act === 'reload') return loadAll();
     if (act === 'mkrule') return ruleFromForm();
     if (act === 'wupdate') return openUpdate();
+    if (act === 'gnew') return openGoal(null);
+    if (act === 'gedit') return openGoal(a.getAttribute('data-id'));
+    if (act === 'gscrim' && e.target === a) return closeGForm();
+    if (act === 'gcancel') return closeGForm();
+    if (act === 'gsave') return saveGoal();
+    if (act === 'gdel') { readGoal(); GFORM.confirm = true; return drawGoal(); }
+    if (act === 'gdelno') { readGoal(); GFORM.confirm = false; return drawGoal(); }
+    if (act === 'gdelyes') return deleteGoal();
+    if (act === 'grec') { a.disabled = true; return recordContribs(a.getAttribute('data-id'), [a.getAttribute('data-k')]); }
+    if (act === 'grecall') {
+      var gg = (DATA.FinancialGoal || []).filter(function (x) { return x.id === a.getAttribute('data-id'); })[0];
+      a.disabled = true;
+      return recordContribs(gg.id, goalPeriods(gg).map(function (x) { return x.key; }));
+    }
     if (act === 'waddacct') return openAcct(null);
     if (act === 'weditacct') return openAcct(a.getAttribute('data-id'));
     if (act === 'wscrim' && e.target === a) return closeWForm();
@@ -2144,6 +2298,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, wealth:1,
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-drill]')) openDrill(e.target);
     if (e.key === 'Escape' && FORM) closeModal();
     if (e.key === 'Escape' && WFORM) closeWForm();
+    if (e.key === 'Escape' && GFORM) closeGForm();
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-act=weditacct]')) openAcct(e.target.getAttribute('data-id'));
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-tx]')) openTx(e.target.getAttribute('data-tx'));
   });

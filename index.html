@@ -299,6 +299,21 @@ details.fold>summary:hover h3{color:var(--muted)}
 .rtable .inflow{color:var(--good)}
 .rtable select{background:var(--paper);border:1px solid var(--ink);height:30px;padding:0 6px}
 .chartnote{margin:-4px 0 10px;font-size:13px;color:var(--muted);max-width:70rem}
+/* wealth & import */
+.notice{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 20px;border:1px solid var(--ink);background:var(--paper);padding:12px 14px;font-size:14px}
+.atable{overflow-x:auto}
+.atable>div{display:grid;grid-template-columns:minmax(220px,2.2fr) 110px 110px 130px 140px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule);min-width:680px;font-size:14px}
+.atable>div span:nth-child(n+2){text-align:right}
+.atable .ah{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom-color:var(--ink)}
+.atable b{font-weight:500;display:block}
+.atable small{color:var(--muted);font-size:12px}
+.modal.wide{width:min(760px,100%)}
+.utable{overflow-x:auto}
+.utable>div{display:grid;grid-template-columns:minmax(180px,1.6fr) 130px 130px 130px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);min-width:600px;font-size:14px}
+.utable .uh{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);border-bottom-color:var(--ink)}
+.utable b{font-weight:500;display:block}
+.utable small{display:block;color:var(--muted);font-size:11px}
+.utable input{width:100%;background:var(--paper);border:1px solid var(--ink);height:34px;padding:0 8px;font-family:var(--f-mono)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
@@ -345,7 +360,7 @@ var NAV = [
   { label:'App',      items:[['settings','Settings']] }
 ];
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['add','+'],['budgets','Budgets'],['settings','More']];
-var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:1 };
+var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, wealth:1, settings:1 };
 
 (function () {
   'use strict';
@@ -624,7 +639,12 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
     else if (UI.page === 'settings') v.innerHTML = settingsHTML();
     else if (UI.page === 'budgets') v.innerHTML = budgetsHTML();
     else if (UI.page === 'subscriptions') v.innerHTML = recurringHTML();
+    else if (UI.page === 'wealth') v.innerHTML = wealthHTML();
     else v.innerHTML = soonHTML();
+    if (UI.page === 'wealth') {
+      var wc = function () { if (UI.page === 'wealth') wealthChart(); };
+      if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(wc); else wc();
+    }
     if (UI.page === 'dashboard') {
       var charts = function () { if (UI.page === 'dashboard') { dashboardCharts(); savingsChart(); netSavingsChart(); } };
       if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(charts); else charts();
@@ -1282,6 +1302,307 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
     return h;
   }
 
+  // ─── Import (Base44 exports converted to the Sheet layout) ────────────────
+  var IMPORT_NUM = ['orig_amount','fx_rate','fx_fee','priority','amount','monthly_limit','pct','target_amount','current_amount','saving_pct','net','current_value','total_invested','exchange_rate','value'];
+  var IMPORT_BOOL = ['is_default','rollover_enabled','is_liability','auto_detected'];
+  function parseCSV(text) {
+    var rows = [], row = [], cur = '', q = false;
+    text = String(text).replace(/^﻿/, '');
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (q) { if (c === '"') { if (text[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c; }
+      else if (c === '"') q = true;
+      else if (c === ',') { row.push(cur); cur = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+      else cur += c;
+    }
+    if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+    var head = rows.shift() || [];
+    return { head:head, rows:rows.filter(function (r) { return r.join('') !== ''; }).map(function (r) { var o = {}; head.forEach(function (h, k) { o[h] = r[k] === undefined ? '' : r[k]; }); return o; }) };
+  }
+  function tableForFile(name, head) {
+    var base = String(name).replace(/\.csv$/i, '').replace(/_export$/i, '').replace(/^.*[\\/]/, '');
+    var hit = TABLES.filter(function (t) { return t.toLowerCase() === base.toLowerCase(); })[0];
+    if (hit) return hit;
+    // fall back to the columns: the table whose known columns best match the file's header
+    var sigs = { Transaction:'description', NetWorthEntry:'account_type', AssetSnapshot:'entry_id', FinancialGoal:'target_amount', GoalContribution:'goal_id', FundAllocation:'key', CategorySettings:'role', Budget:'monthly_limit', Subscription:'next_renewal', Rule:'match' };
+    return Object.keys(sigs).filter(function (t) { return head.indexOf(sigs[t]) > -1; })[0] || null;
+  }
+  var IMPORT_MSG = '';
+  function importMsg(h) { IMPORT_MSG = h; var o = $('importOut'); if (o) o.innerHTML = h; }
+  function importFiles(files) {
+    importMsg('Reading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '…');
+    var jobs = [];
+    var reads = Array.prototype.map.call(files, function (f) {
+      return new Promise(function (res) { var r = new FileReader(); r.onload = function () { res({ name:f.name, text:r.result }); }; r.onerror = function () { res({ name:f.name, text:'' }); }; r.readAsText(f); });
+    });
+    Promise.all(reads).then(function (list) {
+      var lines = [];
+      list.forEach(function (f) {
+        var p = parseCSV(f.text), t = tableForFile(f.name, p.head);
+        if (!t) { lines.push(esc(f.name) + ': not recognised, skipped'); return; }
+        var have = {}; (DATA[t] || []).forEach(function (r) { have[String(r.id)] = 1; });
+        var rows = p.rows.filter(function (r) { return !r.id || !have[String(r.id)]; }).map(function (r) {
+          var o = {};
+          Object.keys(r).forEach(function (k) {
+            if (['created_by_id','created_by','is_sample'].indexOf(k) > -1) return;
+            var v = r[k];
+            if (IMPORT_NUM.indexOf(k) > -1 && v !== '') v = Number(v);
+            if (IMPORT_BOOL.indexOf(k) > -1) v = String(v).toLowerCase() === 'true';
+            o[k] = v;
+          });
+          return o;
+        });
+        var skipped = p.rows.length - rows.length;
+        lines.push(t + ': ' + rows.length + ' new' + (skipped ? ', ' + skipped + ' already in the Sheet' : ''));
+        for (var i = 0; i < rows.length; i += 100) jobs.push({ t:t, rows:rows.slice(i, i + 100) });
+      });
+      importMsg(lines.join('<br>') + (jobs.length ? '<br>Saving…' : ''));
+      var chain = Promise.resolve();
+      jobs.forEach(function (j) { chain = chain.then(function () { return saveMany(j.t, j.rows); }); });
+      return chain.then(function () { importMsg(lines.join('<br>') + (jobs.length ? '<br><span class="pos">Done.</span>' : '')); if (jobs.length) toast('Import finished'); });
+    }).catch(function (e) { importMsg('<span class="neg">Import stopped: ' + esc(e.message) + '</span>'); });
+  }
+  function importHTML() {
+    var empty = ['NetWorthEntry','AssetSnapshot','FinancialGoal','GoalContribution','FundAllocation','CategorySettings'].filter(function (t) { return !(DATA[t] || []).length; });
+    return '<div class="card"><h3>Import data<span class="r">CSV files from flowfin-import.zip</span></h3>' +
+      '<p class="soon" style="margin:0 0 10px;font-size:13px">' + (empty.length ? 'Empty tabs: ' + empty.join(', ') + '. ' : '') +
+      'Select one or more of the CSV files. Each goes to the tab with its name; rows already in the Sheet are skipped, so importing twice is safe.</p>' +
+      '<label class="btn" style="display:inline-flex;align-items:center;cursor:pointer">Choose files<input id="importFiles" type="file" accept=".csv,text/csv" multiple style="position:absolute;width:1px;height:1px;opacity:0"></label>' +
+      '<div id="importOut" class="soon" style="margin-top:10px;font-size:13px">' + IMPORT_MSG + '</div></div>';
+  }
+
+  // ─── Wealth & Assets ──────────────────────────────────────────────────────
+  var ACCOUNT_TYPES = {
+    current_account:['Current account','cash'], savings_account:['Savings account','cash'],
+    investment_account:['Investment account','invest'], third_pillar:['3rd pillar (3a)','invest'], private_pension:['Private pension','invest'], tcg_investments:['TCG investments','invest'],
+    real_estate:['Real estate','physical'], vehicle:['Vehicle','physical'], other_asset:['Other asset','physical'],
+    loan:['Loan','liab'], mortgage:['Mortgage','liab'], credit_card_debt:['Credit card debt','liab'], other_liability:['Other liability','liab']
+  };
+  var WEALTH_GROUPS = [['cash','Cash & savings'],['invest','Investments'],['physical','Physical assets'],['liab','Liabilities']];
+  function acctType(t) { return ACCOUNT_TYPES[t] || ACCOUNT_TYPES.other_asset; }
+  function isLiab(e) { return truthy(e.is_liability) || acctType(e.account_type)[1] === 'liab'; }
+  function isInv(e) { return acctType(e.account_type)[1] === 'invest'; }
+  function accounts() { return (DATA.NetWorthEntry || []).slice(); }
+  function snapsByEntry() {
+    var m = {};
+    (DATA.AssetSnapshot || []).forEach(function (s) { if (s.entry_id && s.date) (m[s.entry_id] = m[s.entry_id] || []).push(s); });
+    Object.keys(m).forEach(function (k) { m[k].sort(function (a, b) { return String(a.date) < String(b.date) ? -1 : 1; }); });
+    return m;
+  }
+  // Value of every account on a date: its latest snapshot on or before that date (0 if it didn't exist yet)
+  function wealthOn(date, by) {
+    var r = { net:0, assets:0, liab:0, invValue:0, invested:0, per:{} };
+    accounts().forEach(function (e) {
+      var list = by[e.id] || [], s = null;
+      for (var i = 0; i < list.length; i++) if (String(list[i].date) <= date) s = list[i];
+      if (!s) { r.per[e.id] = 0; return; }
+      var rate = +s.exchange_rate || +e.exchange_rate || 1, chfV = (+s.value || 0) * rate;
+      r.per[e.id] = isLiab(e) ? -chfV : chfV;
+      if (isLiab(e)) r.liab += chfV; else r.assets += chfV;
+      if (isInv(e)) { r.invValue += chfV; r.invested += ((s.total_invested !== '' && s.total_invested != null) ? +s.total_invested : (+e.total_invested || 0)) * rate; }
+    });
+    r.net = r.assets - r.liab;
+    return r;
+  }
+  // Today's figures come from each account's current value, so a value edited without a snapshot still counts
+  function wealthNow() {
+    var r = { net:0, assets:0, liab:0, invValue:0, invested:0, per:{}, byCur:{} };
+    accounts().forEach(function (e) {
+      var rate = (e.currency && e.currency !== 'CHF') ? (+e.exchange_rate || 1) : 1, chfV = (+e.current_value || 0) * rate;
+      r.per[e.id] = isLiab(e) ? -chfV : chfV;
+      if (isLiab(e)) r.liab += chfV; else { r.assets += chfV; var c = e.currency || 'CHF'; r.byCur[c] = (r.byCur[c] || 0) + chfV; }
+      if (isInv(e)) { r.invValue += chfV; r.invested += (+e.total_invested || 0) * rate; }
+    });
+    r.net = r.assets - r.liab;
+    return r;
+  }
+  function wealthSeries() {
+    var by = snapsByEntry(), dates = {};
+    (DATA.AssetSnapshot || []).forEach(function (s) { if (s.date) dates[String(s.date).slice(0, 10)] = 1; });
+    var pts = Object.keys(dates).sort().map(function (d) { var w = wealthOn(d, by); w.date = d; return w; });
+    var now = wealthNow(), last = pts[pts.length - 1];
+    if (!last || Math.abs(last.net - now.net) > 0.5) { now.date = ymd(today()); now.isNow = true; pts.push(now); }
+    return pts;
+  }
+  function lastSnapshotDate() { var d = ''; (DATA.AssetSnapshot || []).forEach(function (s) { if (String(s.date) > d) d = String(s.date).slice(0, 10); }); return d; }
+
+  function wealthHTML() {
+    var acc = accounts(), h = topbar('Wealth &amp; Assets', false, '<button class="btn" data-act="waddacct">+ Account</button><button class="btn primary" data-act="wupdate">Update values</button>');
+    if (!acc.length) {
+      return h + '<section class="card"><h3>No accounts yet</h3><p class="soon" style="margin:0">Import NetWorthEntry.csv and AssetSnapshot.csv from flowfin-import.zip in <button class="navlink" data-nav="settings">Settings → Import data</button>, or add your first account.</p></section>';
+    }
+    var now = wealthNow(), series = wealthSeries(), by = snapsByEntry();
+    var prev = series.length >= 2 ? series[series.length - 2] : null, cur = series[series.length - 1];
+    var chg = prev ? cur.net - prev.net : null, gain = now.invValue - now.invested;
+    var lastD = lastSnapshotDate(), due = !lastD || daysBetween(pd(lastD), today()) >= 30;
+    h += '<section class="hero"><div class="main"><div class="eyebrow">Net worth</div>' +
+      '<div class="bignum"><span class="cur">CHF</span><span class="val ' + (now.net < 0 ? 'neg' : '') + '">' + sw0(now.net) + '</span></div>' +
+      '<p class="why">' + (chg !== null ? (chg >= 0 ? '+' : '−') + sw0(Math.abs(chg)) + ' since ' + periodDay(pd(prev.date)) + (prev.net ? ' (' + (chg >= 0 ? '+' : '') + (chg / Math.abs(prev.net) * 100).toFixed(1) + '%)' : '') + '. ' : '') +
+      'Values last updated ' + (lastD ? periodDay(pd(lastD)) + pd(lastD).getFullYear() : 'never') + '.</p></div>' +
+      '<div class="side">' +
+      '<div class="line"><span>Assets</span><span class="num">' + sw0(now.assets) + '</span></div>' +
+      (now.liab ? '<div class="line"><span>Liabilities</span><span class="num neg">−' + sw0(now.liab) + '</span></div>' : '') +
+      '<div class="line"><span>Investments</span><span class="num">' + sw0(now.invValue) + '</span></div>' +
+      '<div class="line"><span>Gain on investments</span><span class="num ' + (gain < 0 ? 'neg' : '') + '">' + (gain >= 0 ? '+' : '−') + sw0(Math.abs(gain)) + (now.invested ? ' <span class="soon" style="font-size:13px">' + (gain / now.invested * 100).toFixed(0) + '%</span>' : '') + '</span></div>' +
+      '</div></section>';
+    if (due) h += '<section class="notice"><span>' + (lastD ? 'It’s been ' + daysBetween(pd(lastD), today()) + ' days since your last update.' : 'No values recorded yet.') + ' A monthly update keeps the history chart accurate.</span><button class="btn primary" data-act="wupdate">Update values</button></section>';
+    h += '<section class="card"><h3>Net worth over time<span class="r legend"><span><i style="border-top:2px solid var(--ink)"></i>Net worth</span><span><i style="border-top:2px dashed var(--faint)"></i>Investments</span><span><i style="border-top:2px dotted var(--muted)"></i>Invested (cost)</span></span></h3>' +
+      '<div class="chartbox"><canvas id="chWealth" role="img" aria-label="Net worth at each update"></canvas></div></section>';
+    // accounts by group
+    WEALTH_GROUPS.forEach(function (g) {
+      var list = acc.filter(function (e) { return acctType(e.account_type)[1] === g[0] || (g[0] === 'liab' && isLiab(e) && acctType(e.account_type)[1] !== 'liab'); })
+        .filter(function (e) { return g[0] === 'liab' ? isLiab(e) : !isLiab(e); })
+        .sort(function (a, b) { return Math.abs(now.per[b.id]) - Math.abs(now.per[a.id]); });
+      if (!list.length) return;
+      var tot = sumBy(list, function (e) { return Math.abs(now.per[e.id]); });
+      h += '<section class="card"><h3>' + g[1] + '<span class="r num" style="font-size:16px;color:var(--ink)">' + (g[0] === 'liab' ? '−' : '') + sw0(tot) + '</span></h3><div class="atable">' +
+        '<div class="ah"><span>Account</span><span>Value</span>' + (g[0] === 'invest' ? '<span>Invested</span><span>Gain</span>' : '<span></span><span></span>') + '<span>Since last update</span></div>' +
+        list.map(function (e) {
+          var v = Math.abs(now.per[e.id]), foreign = e.currency && e.currency !== 'CHF';
+          var snaps = by[e.id] || [], ch = null;
+          if (snaps.length >= 2) { var a = snaps[snaps.length - 1], b = snaps[snaps.length - 2]; ch = (+a.value || 0) * (+a.exchange_rate || 1) - (+b.value || 0) * (+b.exchange_rate || 1); }
+          var inv = isInv(e) ? (+e.total_invested || 0) * (foreign ? (+e.exchange_rate || 1) : 1) : 0, gn = v - inv;
+          return '<div class="drill" data-act="weditacct" data-id="' + esc(e.id) + '" tabindex="0" role="button"><span><b>' + esc(e.name) + '</b><small>' + esc(acctType(e.account_type)[0]) + (e.institution ? ' · ' + esc(e.institution) : '') +
+            (foreign ? ' · ' + fmt0.format(Math.round(+e.current_value || 0)) + ' ' + esc(e.currency) : '') + '</small></span>' +
+            '<span class="num">' + sw0(v) + '</span>' +
+            (isInv(e) && inv ? '<span class="num soon">' + sw0(inv) + '</span><span class="num ' + (gn < 0 ? 'neg' : '') + '">' + (gn >= 0 ? '+' : '−') + sw0(Math.abs(gn)) + ' <small>' + (gn / inv * 100).toFixed(0) + '%</small></span>' : '<span></span><span></span>') +
+            '<span class="num ' + (ch !== null && ch < 0 ? 'neg' : 'soon') + '">' + (ch === null ? '—' : (ch >= 0 ? '+' : '−') + sw0(Math.abs(ch))) + '</span></div>';
+        }).join('') + '</div></section>';
+    });
+    // currency exposure
+    var curs = Object.keys(now.byCur).sort(function (a, b) { return now.byCur[b] - now.byCur[a]; });
+    if (curs.length > 1) {
+      var shades = ['var(--ink)', '#4A4F4C', '#8A8F8B', '#B9BDB9', '#D3D6D2'];
+      h += '<section class="card"><h3>Currency exposure<span class="r">assets, in CHF</span></h3><div class="split">' +
+        curs.map(function (c, i) { return '<i style="width:' + (now.byCur[c] / now.assets * 100) + '%;background:' + shades[i % shades.length] + '"></i>'; }).join('') + '</div><div class="splitkey">' +
+        curs.map(function (c, i) { return '<span><i style="background:' + shades[i % shades.length] + '"></i>' + esc(c) + ' ' + (now.byCur[c] / now.assets * 100).toFixed(0) + '% · ' + sw0(now.byCur[c]) + '</span>'; }).join('') + '</div></section>';
+    }
+    return h;
+  }
+  function wealthChart() {
+    var el = $('chWealth'); if (!el || !window.Chart || CHARTS.wealth) return;
+    var s = wealthSeries(), C = chartColors();
+    if (!s.length) return;
+    var t0 = pd(s[0].date), X = function (p) { return daysBetween(t0, pd(p.date)); };
+    var lbl = function (d) { var x = addDays(t0, Math.round(d)); return periodDay(x) + String(x.getFullYear()).slice(2); };
+    var pts = function (f) { return s.map(function (p) { return { x:X(p), y:Math.round(f(p)) }; }); };
+    var span = Math.max(1, X(s[s.length - 1]));
+    CHARTS.wealth = new Chart(el, {
+      type:'line',
+      data:{ datasets:[
+        { label:'Net worth', data:pts(function (p) { return p.net; }), borderColor:C.ink, borderWidth:2.5, pointRadius:3, pointBackgroundColor:C.ink, tension:0 },
+        { label:'Investments', data:pts(function (p) { return p.invValue; }), borderColor:C.faint, borderDash:[6,4], borderWidth:1.5, pointRadius:0, tension:0 },
+        { label:'Invested (cost)', data:pts(function (p) { return p.invested; }), borderColor:C.muted, borderDash:[2,3], borderWidth:1.5, pointRadius:0, tension:0 }
+      ]},
+      options:{ responsive:true, maintainAspectRatio:false, layout:{ padding:{ left:4, right:8 } }, interaction:{ mode:'nearest', axis:'x', intersect:false },
+        plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:C.ink, cornerRadius:0, titleFont:{ family:'IBM Plex Mono' }, bodyFont:{ family:'IBM Plex Mono' },
+          callbacks:{ title:function (it) { return it.length ? (s[it[0].dataIndex].isNow ? 'Now' : lbl(it[0].parsed.x)) : ''; }, label:function (c) { return c.dataset.label + ': ' + sw0(c.parsed.y); } } } },
+        scales:{
+          x:{ type:'linear', min:0, max:span, ticks:{ color:C.muted, maxRotation:0, maxTicksLimit:7, font:{ family:'IBM Plex Mono', size:11 }, callback:function (v) { return lbl(v); } }, grid:{ display:false }, border:{ color:C.ink } },
+          y:{ ticks:{ color:C.muted, font:{ family:'IBM Plex Mono', size:11 }, callback:function (v) { return sw0(v); } }, grid:{ color:C.rule }, border:{ display:false } }
+        } }
+    });
+  }
+
+  // Monthly update: one value per account; writes a snapshot per account for the date (replacing any for that date) and the current values
+  var WFORM = null;
+  function closeWForm() { WFORM = null; $('modalRoot').innerHTML = ''; }
+  function openUpdate() {
+    var d = ymd(today()), by = snapsByEntry();
+    WFORM = { kind:'update', date:d, rates:{}, err:'' };
+    drawUpdate();
+    accounts().forEach(function (e) {
+      if (!e.currency || e.currency === 'CHF') return;
+      fxRate(e.currency, d).then(function (r) {
+        if (!WFORM || WFORM.kind !== 'update') return;
+        WFORM.rates[e.currency] = r;
+        var inp = $('wr_' + e.id); if (inp && !inp.dataset.touched) inp.value = r.toFixed(4);
+        var note = $('wrn_' + e.id); if (note) note.textContent = 'ECB rate ' + periodDay(pd(d));
+      }).catch(function () {});
+    });
+  }
+  function drawUpdate() {
+    var acc = accounts().sort(function (a, b) { return WEALTH_GROUPS.map(function (g) { return g[0]; }).indexOf(acctType(a.account_type)[1]) - WEALTH_GROUPS.map(function (g) { return g[0]; }).indexOf(acctType(b.account_type)[1]); });
+    var h = '<div class="scrim" data-act="wscrim"><div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="wtitle"><h2 id="wtitle">Update values</h2>' +
+      '<div class="field" style="max-width:200px"><label for="wdate">Date of these values</label><input id="wdate" type="date" value="' + esc(WFORM.date) + '"></div>' +
+      '<div class="utable"><div class="uh"><span>Account</span><span>Value</span><span>Invested</span><span>Rate to CHF</span></div>' +
+      acc.map(function (e) {
+        var foreign = e.currency && e.currency !== 'CHF';
+        return '<div><span><b>' + esc(e.name) + '</b><small>' + esc(acctType(e.account_type)[0]) + ' · ' + esc(e.currency || 'CHF') + '</small></span>' +
+          '<span><input id="wv_' + esc(e.id) + '" type="number" inputmode="decimal" step="0.01" aria-label="Value of ' + esc(e.name) + '" value="' + esc(e.current_value) + '"></span>' +
+          '<span>' + (isInv(e) ? '<input id="wi_' + esc(e.id) + '" type="number" inputmode="decimal" step="0.01" aria-label="Invested in ' + esc(e.name) + '" value="' + esc(e.total_invested) + '">' : '') + '</span>' +
+          '<span>' + (foreign ? '<input id="wr_' + esc(e.id) + '" type="number" step="0.0001" aria-label="Rate for ' + esc(e.name) + '" value="' + esc(e.exchange_rate || 1) + '"><small id="wrn_' + esc(e.id) + '">last used</small>' : '') + '</span></div>';
+      }).join('') + '</div>' + (WFORM.err ? '<div class="err">' + esc(WFORM.err) + '</div>' : '') +
+      '<div class="actions"><button class="btn" data-act="wcancel">Cancel</button><button class="btn primary" data-act="wsaveupdate">Save ' + acc.length + ' values</button></div></div></div>';
+    $('modalRoot').innerHTML = h;
+  }
+  function saveUpdate() {
+    var d = $('wdate').value; if (!d) { WFORM.err = 'Pick a date.'; return drawUpdate(); }
+    var existing = {}; (DATA.AssetSnapshot || []).forEach(function (s) { if (String(s.date).slice(0, 10) === d) existing[s.entry_id] = s; });
+    var snaps = [], ents = [], bad = '';
+    accounts().forEach(function (e) {
+      var v = parseFloat(String($('wv_' + e.id).value).replace(',', '.'));
+      if (!(v >= 0)) { bad = e.name; return; }
+      var inv = $('wi_' + e.id) ? parseFloat(String($('wi_' + e.id).value).replace(',', '.')) : null;
+      var rate = $('wr_' + e.id) ? parseFloat($('wr_' + e.id).value) || 1 : 1;
+      var prevSnap = existing[e.id];
+      snaps.push({ id:prevSnap ? prevSnap.id : '', entry_id:e.id, date:d, value:v, total_invested:inv === null || isNaN(inv) ? '' : inv, exchange_rate:rate, created_date:prevSnap ? prevSnap.created_date : '' });
+      var en = Object.assign({}, e, { current_value:v, exchange_rate:rate });
+      if (inv !== null && !isNaN(inv)) en.total_invested = inv;
+      if (!e.last_updated || d >= String(e.last_updated)) en.last_updated = d; else { en.current_value = e.current_value; en.exchange_rate = e.exchange_rate; en.total_invested = e.total_invested; }
+      ents.push(en);
+    });
+    if (bad) { WFORM.err = 'Enter a value of 0 or more for ' + bad + '.'; return drawUpdate(); }
+    snaps.forEach(function (s) { if (!s.id) delete s.id; if (!s.created_date) delete s.created_date; });
+    closeWForm();
+    saveMany('AssetSnapshot', snaps).then(function () { return saveMany('NetWorthEntry', ents); }).then(function () { toast('Values saved for ' + periodDay(pd(d))); });
+  }
+  // Add or edit one account
+  function openAcct(id) {
+    var e = id ? accounts().filter(function (x) { return x.id === id; })[0] : null;
+    WFORM = { kind:'acct', e:e ? Object.assign({}, e) : { name:'', account_type:'savings_account', currency:'CHF', current_value:'', total_invested:'', institution:'', exchange_rate:1, is_liability:false }, err:'', confirm:false };
+    drawAcct();
+  }
+  function drawAcct() {
+    var e = WFORM.e;
+    var h = '<div class="scrim" data-act="wscrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="wtitle"><h2 id="wtitle">' + (e.id ? 'Edit account' : 'New account') + '</h2><div class="formgrid">' +
+      '<div class="field full"><label for="wname">Name</label><input id="wname" value="' + esc(e.name) + '"></div>' +
+      '<div class="field"><label for="wtype">Type</label><select id="wtype">' + Object.keys(ACCOUNT_TYPES).map(function (k) { return opt(k, ACCOUNT_TYPES[k][0], e.account_type); }).join('') + '</select></div>' +
+      '<div class="field"><label for="wcur">Currency</label><select id="wcur">' + CURRENCIES.map(function (c) { return opt(c, c, e.currency || 'CHF'); }).join('') + '</select></div>' +
+      '<div class="field"><label for="wval">Current value</label><input id="wval" type="number" step="0.01" value="' + esc(e.current_value) + '"></div>' +
+      '<div class="field"><label for="winv">Invested (cost), for investments</label><input id="winv" type="number" step="0.01" value="' + esc(e.total_invested) + '"></div>' +
+      '<div class="field"><label for="winst">Bank or provider</label><input id="winst" value="' + esc(e.institution) + '"></div>' +
+      '<div class="field"><label for="wrate">Rate to CHF (foreign currency)</label><input id="wrate" type="number" step="0.0001" value="' + esc(e.exchange_rate || 1) + '"></div>' +
+      '</div>' + (WFORM.err ? '<div class="err">' + esc(WFORM.err) + '</div>' : '') +
+      '<p class="soon" style="font-size:12px;margin:0">Changing the value here doesn’t add a point to the history chart. Use “Update values” for that.</p>' +
+      '<div class="actions">' + (e.id ? (WFORM.confirm ? '<span class="left"><button class="btn danger" data-act="wdelyes">Yes, delete with its history</button> <button class="btn" data-act="wdelno">Keep</button></span>' : '<button class="btn danger left" data-act="wdel">Delete</button>') : '') +
+      '<button class="btn" data-act="wcancel">Cancel</button><button class="btn primary" data-act="wsaveacct">' + (e.id ? 'Save changes' : 'Add account') + '</button></div></div></div>';
+    $('modalRoot').innerHTML = h;
+  }
+  function readAcct() {
+    var e = WFORM.e;
+    e.name = $('wname').value.trim(); e.account_type = $('wtype').value; e.currency = $('wcur').value; e.institution = $('winst').value.trim();
+    e.current_value = $('wval').value; e.total_invested = $('winv').value; e.exchange_rate = $('wrate').value;
+  }
+  function saveAcct() {
+    readAcct();
+    var e = WFORM.e, v = parseFloat(e.current_value);
+    if (!e.name) { WFORM.err = 'Give the account a name.'; return drawAcct(); }
+    if (!(v >= 0)) { WFORM.err = 'Enter the current value as 0 or more.'; return drawAcct(); }
+    var row = Object.assign({}, e, { current_value:v, total_invested:e.total_invested === '' ? '' : parseFloat(e.total_invested) || 0,
+      exchange_rate:e.currency === 'CHF' ? 1 : (parseFloat(e.exchange_rate) || 1), is_liability:acctType(e.account_type)[1] === 'liab', last_updated:e.last_updated || ymd(today()) });
+    var isNew = !e.id; closeWForm();
+    saveRow('NetWorthEntry', row).then(function () { toast(isNew ? 'Account added' : 'Account saved'); });
+  }
+  function deleteAcct() {
+    var id = WFORM.e.id, snaps = (DATA.AssetSnapshot || []).filter(function (s) { return s.entry_id === id; });
+    closeWForm();
+    var chain = deleteRow('NetWorthEntry', id);
+    snaps.forEach(function (s) { chain = chain.then(function () { return deleteRow('AssetSnapshot', s.id, true); }); });
+    chain.then(function () { toast('Account deleted'); });
+  }
+
   // ─── Budgets (shared by the Budgets page and the dashboard gauges) ────────
   // Spend = expense + investment rows in the category minus refunds in it, whole period (scheduled included).
   // Rollover: effective limit = base + last period's unspent amount (never a deficit).
@@ -1672,6 +1993,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
       'Until you switch, keep adding and editing transactions in Base44: an hourly pull overwrites edits made here to Base44 entries.</p>' +
       '<div class="actions" style="justify-content:flex-start"><button class="btn" data-act="b44">Pull from Base44 now</button></div>' +
       '<div id="b44Out" class="soon" style="margin-top:8px"></div></div>';
+    h += importHTML();
     h += rulesHTML();
     h += '<div class="card"><h3>Foreign card payments</h3><div class="bedit" style="padding-top:0">' +
       '<div class="field"><label for="sfee">Card fee on foreign currency (%)</label><input id="sfee" type="number" step="0.05" min="0" value="' + cardFeePct() + '"></div>' +
@@ -1749,6 +2071,16 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
     }
     if (act === 'reload') return loadAll();
     if (act === 'mkrule') return ruleFromForm();
+    if (act === 'wupdate') return openUpdate();
+    if (act === 'waddacct') return openAcct(null);
+    if (act === 'weditacct') return openAcct(a.getAttribute('data-id'));
+    if (act === 'wscrim' && e.target === a) return closeWForm();
+    if (act === 'wcancel') return closeWForm();
+    if (act === 'wsaveupdate') return saveUpdate();
+    if (act === 'wsaveacct') return saveAcct();
+    if (act === 'wdel') { readAcct(); WFORM.confirm = true; return drawAcct(); }
+    if (act === 'wdelno') { readAcct(); WFORM.confirm = false; return drawAcct(); }
+    if (act === 'wdelyes') return deleteAcct();
     if (act === 'projbasis') { lsSet(PROJ_KEY, a.getAttribute('data-v')); return draw(); }
     if (act === 'rtrack') {
       var ri = recurringItems()[+a.getAttribute('data-i')]; if (!ri) return;
@@ -1811,11 +2143,14 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-drill]')) openDrill(e.target);
     if (e.key === 'Escape' && FORM) closeModal();
+    if (e.key === 'Escape' && WFORM) closeWForm();
+    if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-act=weditacct]')) openAcct(e.target.getAttribute('data-id'));
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-tx]')) openTx(e.target.getAttribute('data-tx'));
   });
   document.addEventListener('input', function (e) {
     var id = e.target.id;
     if (id === 'morig' && FORM) { recalcFx(); return; }
+    if (id.indexOf('wr_') === 0) e.target.dataset.touched = '1';
     if (id === 'fq') { UI.tx.q = e.target.value; var pos = e.target.selectionStart; draw(); var q = $('fq'); q.focus(); q.setSelectionRange(pos, pos); }
   });
   document.addEventListener('change', function (e) {
@@ -1825,6 +2160,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, subscriptions:1, settings:
     if (id === 'fcat') { UI.tx.category = e.target.value; draw(); }
     if (id === 'facct') { UI.tx.account = e.target.value; draw(); }
     if (id === 'ftag') { UI.tx.tag = e.target.value; draw(); }
+    if (id === 'importFiles' && e.target.files && e.target.files.length) importFiles(e.target.files);
     if (e.target.matches && e.target.matches('[data-act=rstatus]')) {
       var sid = e.target.getAttribute('data-id'), st = e.target.value, srow = (DATA.Subscription || []).filter(function (x) { return x.id === sid; })[0];
       if (srow) saveRow('Subscription', Object.assign({}, srow, { status:st })).then(function () { toast(srow.name + ': ' + st); });

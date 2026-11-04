@@ -2275,8 +2275,20 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     if (cur === 'CHF') return Promise.resolve(1);
     var day = date && date <= ymd(today()) ? date : 'latest', k = cur + '@' + day;
     if (RATE_CACHE[k]) return Promise.resolve(RATE_CACHE[k]);
-    return fetch('https://api.frankfurter.app/' + day + '?from=' + cur + '&to=CHF').then(function (r) { return r.json(); })
-      .then(function (j) { var v = j && j.rates && j.rates.CHF; if (!v) throw new Error('No rate for ' + cur); RATE_CACHE[k] = v; return v; });
+    // ECB rates from Frankfurter (new address first, old one second); if both fail, the open currency-api on jsDelivr
+    var lc = cur.toLowerCase(), sources = [
+      ['https://api.frankfurter.dev/v1/' + day + '?base=' + cur + '&symbols=CHF', function (j) { return j && j.rates && j.rates.CHF; }],
+      ['https://api.frankfurter.app/' + day + '?from=' + cur + '&to=CHF', function (j) { return j && j.rates && j.rates.CHF; }],
+      ['https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@' + day + '/v1/currencies/' + lc + '.json', function (j) { return j && j[lc] && j[lc].chf; }],
+      ['https://' + day + '.currency-api.pages.dev/v1/currencies/' + lc + '.json', function (j) { return j && j[lc] && j[lc].chf; }]
+    ];
+    var tryAt = function (i) {
+      if (i >= sources.length) return Promise.reject(new Error('Couldn’t reach a rate service for ' + cur));
+      return fetch(sources[i][0]).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (j) { var v = +sources[i][1](j); if (!(v > 0)) throw new Error('no rate'); RATE_CACHE[k] = v; return v; })
+        .catch(function () { return tryAt(i + 1); });
+    };
+    return tryAt(0);
   }
 
   // ─── Transactions list ────────────────────────────────────────────────────
@@ -2389,8 +2401,17 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     setTimeout(function () { var d = $('mdesc'); if (d && !id) d.focus(); }, 30);
   }
   function closeModal() { FORM = null; $('modalRoot').innerHTML = ''; }
+  // Redrawing the form removes the focused field, which can fire its change event mid-redraw (e.g. the description
+  // autofill). Such a nested redraw is postponed until the current one has finished instead of crashing it.
+  var MODAL_BUSY = false, MODAL_AGAIN = false;
   function drawModal() {
     if (!FORM) return;
+    if (MODAL_BUSY) { MODAL_AGAIN = true; return; }
+    MODAL_BUSY = true;
+    try { drawModalNow(); } finally { MODAL_BUSY = false; }
+    if (MODAL_AGAIN) { MODAL_AGAIN = false; drawModal(); }
+  }
+  function drawModalNow() {
     var descs = {}, tagList = allTags();
     txs().forEach(function (t) { if (t.description) descs[t.description] = 1; });
     var subs = CATEGORIES[FORM.category] || [], foreign = FORM.orig_currency && FORM.orig_currency !== 'CHF';
@@ -2429,7 +2450,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     if (!FORM || !FORM.orig_currency || FORM.orig_currency === 'CHF') return '';
     if (FORM._rateErr) return '<span class="neg">' + esc(FORM._rateErr) + '. Enter the CHF amount yourself.</span>';
     if (!FORM._rate) return 'Getting the ' + esc(FORM.orig_currency) + ' rate for this date…';
-    return '1 ' + esc(FORM.orig_currency) + ' = ' + FORM._rate.toFixed(4) + ' CHF (ECB, ' + (FORM.date <= ymd(today()) ? periodDay(pd(FORM.date)) : 'latest') + ')' + (FORM._fee ? ' + ' + cardFeePct() + '% fee' : '');
+    return '1 ' + esc(FORM.orig_currency) + ' = ' + FORM._rate.toFixed(4) + ' CHF (rate for ' + (FORM.date <= ymd(today()) ? periodDay(pd(FORM.date)) : 'today') + ')' + (FORM._fee ? ' + ' + cardFeePct() + '% fee' : '');
   }
   function readForm() {
     FORM.description = $('mdesc').value; FORM.amount = $('mamt').value; FORM.date = $('mdate').value;

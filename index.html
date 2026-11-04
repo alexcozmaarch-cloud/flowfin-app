@@ -106,6 +106,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .fmore{display:contents}
 .phoneonly{display:none}
 @media (max-width:720px){.phoneonly{display:block}}
+.bottomnav button.plus{background:var(--ink);color:var(--bg)!important;border-top-color:var(--ink)}
+@media (max-width:360px){.bottomnav button{font-size:10px}}
 .morepages .rowline{width:100%;background:none;border:0;border-bottom:1px solid var(--rule);font:inherit;font-size:17px;text-align:left;padding:14px 0;display:flex;justify-content:space-between;cursor:pointer;color:var(--ink)}
 .ffbtn{display:none;height:36px;align-items:center}
 @media (max-width:480px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
@@ -191,8 +193,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
   .grid2{gap:30px}
   .bignum .cur{font-size:18px}
   .formgrid{grid-template-columns:1fr}
-  .bottomnav{display:grid;grid-template-columns:repeat(5,1fr);align-items:stretch;position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:2px solid var(--ink);padding:0 max(4px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(4px,env(safe-area-inset-left,0px));z-index:40}
-  .bottomnav button{border:0;border-top:3px solid transparent;background:none;color:var(--muted);font-size:11px;padding:12px 2px 14px;cursor:pointer}
+  .bottomnav{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));align-items:stretch;position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:2px solid var(--ink);padding:0 max(4px,env(safe-area-inset-right,0px)) env(safe-area-inset-bottom,0px) max(4px,env(safe-area-inset-left,0px));z-index:40}
+  .bottomnav button{border:0;border-top:3px solid transparent;background:none;color:var(--muted);font-size:11px;padding:12px 0 14px;cursor:pointer;white-space:nowrap;overflow:hidden;position:relative}
+  .bottomnav .nbadge{position:absolute;top:3px;right:2px;margin:0;min-width:15px;padding:0 3px;font-size:9px;line-height:15px}
   .bottomnav button.on{color:var(--ink);font-weight:700;border-top-color:var(--signal)}
   .bottomnav button.plus{font-size:26px;line-height:1;color:var(--ink);padding-top:8px}
 }
@@ -411,7 +414,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['add','+'],['budgets','Budgets'],['settings','More']];
+var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
 (function () {
@@ -2504,7 +2507,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     // on a phone this is the "More" tab, so it lists every page the bottom bar doesn't have
     var inBar = MOBILE_NAV.map(function (x) { return x[0]; }), more = [];
     NAV.forEach(function (g) { g.items.forEach(function (it) { if (inBar.indexOf(it[0]) < 0 && it[0] !== 'settings') more.push(it); }); });
-    h += '<div class="card phoneonly morepages"><h3>Pages</h3>' + more.map(function (it) { return '<button class="drill rowline" data-nav="' + it[0] + '"><span>' + it[1] + '</span><span class="soon">›</span></button>'; }).join('') + '</div>';
+    if (more.length) h += '<div class="card phoneonly morepages"><h3>Pages</h3>' + more.map(function (it) { return '<button class="drill rowline" data-nav="' + it[0] + '"><span>' + it[1] + '</span><span class="soon">›</span></button>'; }).join('') + '</div>';
     h += '<div class="card"><h3>Google Sheet connection</h3><div class="field"><label for="surl">Apps Script web app URL</label>' +
       '<input id="surl" value="' + esc(apiUrl()) + '" style="font-family:var(--f-mono);font-size:12px"></div>' +
       '<div class="field" style="margin-top:10px"><label for="skey">Access key (kept only in this browser)</label>' +

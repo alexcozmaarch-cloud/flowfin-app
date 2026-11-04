@@ -102,7 +102,27 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 /* chart */
 .chartbox{position:relative;height:260px}
 .stale{color:var(--faint)}
-.atable.mtab>div{grid-template-columns:minmax(200px,2fr) 110px 110px 110px 110px;min-width:620px}
+.nbadge{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;background:var(--signal);color:#fff;font:500 11px/18px 'IBM Plex Mono',monospace;text-align:center;vertical-align:1px}
+.fmore{display:contents}
+.phoneonly{display:none}
+@media (max-width:720px){.phoneonly{display:block}}
+.morepages .rowline{width:100%;background:none;border:0;border-bottom:1px solid var(--rule);font:inherit;font-size:17px;text-align:left;padding:14px 0;display:flex;justify-content:space-between;cursor:pointer;color:var(--ink)}
+.ffbtn{display:none;height:36px;align-items:center}
+@media (max-width:480px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){
+  .ffbtn{display:inline-flex}
+  .filters input[type=search]{flex:1 1 0}
+  .fmore{display:none}
+  .fmore.open{display:flex;flex-wrap:wrap;gap:8px;width:100%}
+  .fmore.open select{flex:1 1 45%}
+  .phonefold:not(.open){display:none}
+}
+.up.late{border-color:var(--signal)}
+.up.late .uk{color:var(--signal)}
+.uq{display:flex;gap:12px;margin-top:6px;font-size:12px}
+.txtabs{margin:-12px 0 18px;max-width:340px}
+.sechead{font-size:28px;font-weight:800;letter-spacing:-.02em;margin:56px 0 20px;padding-top:18px;border-top:2px solid var(--ink)}
+.atable.mtab>div{grid-template-columns:minmax(170px,1.6fr) repeat(6,minmax(84px,1fr));min-width:780px}
 .legend{display:flex;gap:18px;font-size:13px;color:var(--muted);font-weight:400}
 .legend i{display:inline-block;width:18px;vertical-align:middle;margin-right:4px}
 
@@ -386,8 +406,8 @@ var TYPES = [['expense','Expense'],['income','Income'],['refund','Refund'],['inv
 var ACCOUNTS = [['credit_card','Credit card'],['debit_card','Debit card']];
 var NAV = [
   { label:'Overview', items:[['dashboard','Dashboard'],['transactions','Transactions']] },
-  { label:'Planning', items:[['budgets','Budgets'],['goals','Goals'],['subscriptions','Recurring']] },
-  { label:'Analysis', items:[['anomalies','Anomaly Review'],['monthly','Monthly']] },
+  { label:'Planning', items:[['budgets','Budgets'],['goals','Goals']] },
+  { label:'Analysis', items:[['monthly','Monthly']] },
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
@@ -651,19 +671,27 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     var links = '';
     NAV.forEach(function (g) { g.items.forEach(function (it) {
       if (it[0] === 'settings') return;
-      links += '<button class="navlink' + (UI.page === it[0] ? ' on' : '') + '" data-nav="' + it[0] + '">' + it[1] + (BUILT[it[0]] ? '' : '<small>soon</small>') + '</button>';
+      links += '<button class="navlink' + (UI.page === it[0] ? ' on' : '') + '" data-nav="' + it[0] + '">' + it[1] + navBadge(it[0]) + (BUILT[it[0]] ? '' : '<small>soon</small>') + '</button>';
     }); });
     $('side').innerHTML = '<div class="brand">FlowFin<b>.</b></div><nav class="navlinks" aria-label="Pages">' + links + '</nav>' +
       '<button class="navlink' + (UI.page === 'settings' ? ' on' : '') + '" data-nav="settings">Settings</button>';
     $('bottomnav').innerHTML = MOBILE_NAV.map(function (it) {
       if (it[0] === 'add') return '<button class="plus" data-act="addtx" aria-label="Add transaction">+</button>';
-      return '<button class="' + (UI.page === it[0] ? 'on' : '') + '" data-nav="' + it[0] + '">' + it[1] + '</button>';
+      return '<button class="' + (UI.page === it[0] ? 'on' : '') + '" data-nav="' + it[0] + '">' + it[1] + navBadge(it[0]) + '</button>';
     }).join('');
   }
-  function go(page) { UI.page = page; location.hash = page; window.scrollTo(0, 0); draw(); }
+  // Transactions carries the count of transactions waiting for review
+  function navBadge(page) {
+    if (page !== 'transactions' || !txs().length) return '';
+    var n = reviewCount(); return n ? ' <span class="nbadge" aria-label="' + n + ' to review">' + n + '</span>' : '';
+  }
+  function reviewCount() { return anomalyList().filter(function (x) { return !x.tx.anomaly_status; }).length; }
+  function go(page) { if (page === 'transactions') UI.txTab = 'all'; UI.page = page; location.hash = page; window.scrollTo(0, 0); draw(); }
 
   // ─── draw dispatcher (pages never call each other) ────────────────────────
   function draw() {
+    if (UI.page === 'anomalies') { UI.page = 'transactions'; UI.txTab = 'review'; try { history.replaceState(null, '', '#transactions'); } catch (e) {} }
+    if (UI.page === 'subscriptions') { UI.page = 'budgets'; UI.jump = 'recurring'; try { history.replaceState(null, '', '#budgets'); } catch (e) {} }
     drawNav();
     Object.keys(CHARTS).forEach(function (k) { CHARTS[k].destroy(); delete CHARTS[k]; });
     var v = $('view');
@@ -671,10 +699,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     else if (UI.page === 'transactions') v.innerHTML = transactionsHTML();
     else if (UI.page === 'settings') v.innerHTML = settingsHTML();
     else if (UI.page === 'budgets') v.innerHTML = budgetsHTML();
-    else if (UI.page === 'subscriptions') v.innerHTML = recurringHTML();
     else if (UI.page === 'wealth') v.innerHTML = wealthHTML();
     else if (UI.page === 'goals') v.innerHTML = goalsHTML();
-    else if (UI.page === 'anomalies') v.innerHTML = anomalyHTML();
     else if (UI.page === 'monthly') v.innerHTML = monthlyHTML();
     else v.innerHTML = soonHTML();
     if (UI.page === 'monthly') {
@@ -685,8 +711,13 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       var wc = function () { if (UI.page === 'wealth') wealthChart(); };
       if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(wc); else wc();
     }
+    if (UI.jump) { var jt = $(UI.jump); UI.jump = ''; if (jt) setTimeout(function () { jt.scrollIntoView({ block:'start' }); }, 0); }
+    if (UI.page === 'goals') {
+      var gc = function () { if (UI.page === 'goals') savingsChart(); };
+      if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(gc); else gc();
+    }
     if (UI.page === 'dashboard') {
-      var charts = function () { if (UI.page === 'dashboard') { dashboardCharts(); savingsChart(); netSavingsChart(); } };
+      var charts = function () { if (UI.page === 'dashboard') { dashboardCharts(); netSavingsChart(); } };
       if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(charts); else charts();
     }
   }
@@ -770,10 +801,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       'Above 0: you are spending less than your allowance. Net saved above is different: it counts this month’s whole salary already, so it includes the allowance for the days still to come.</p>' +
       '<div class="chartbox"><canvas id="chDaily" role="img" aria-label="Allowance balance for the period, ' + sw(m.dailyBudget) + ' a day"></canvas></div></section>';
 
-    h += '<div class="grid2">' + budgetForecastHTML(m) + categoryHTML(m) + '</div>';
-
-    var sp = savingsProjection();
-    h += fold('savings', 'Savings projection', (sp.pace >= 0 ? '+' : '−') + sw0(Math.abs(sp.pace)) + ' a period at your pace', savingsProjectionBody(sp), true);
+    h += budgetForecastHTML(m);
 
     var w = weeklyModel(m), done = w.filter(function (x) { return !x.future && !x.partial; });
     var good = done.filter(function (x) { return x.surplus >= 0; }).length;
@@ -1069,7 +1097,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
                           pe.parts.map(function (x) { return x.cat + ' − ' + sw0(x.v) + (pe.basis === 'pace' ? ' (pace)' : ' (usual)'); }));
                       } } } },
         scales:{
-          x:{ type:'linear', min:0, max:m.daysInPeriod - 1, ticks:{ color:C.muted, stepSize:4, maxRotation:0, font:{ family:'IBM Plex Mono', size:11 },
+          x:{ type:'linear', min:0, max:m.daysInPeriod - 1, afterBuildTicks:function (ax) { var st = ax.options.ticks.stepSize; ax.ticks = ax.ticks.filter(function (t) { return t.value === ax.max || ax.max - t.value >= st * 0.75; }); },
+            ticks:{ color:C.muted, stepSize:el.clientWidth < 560 ? 7 : 4, maxRotation:0, font:{ family:'IBM Plex Mono', size:11 },
               callback:function (v) { return Number.isInteger(v) ? labels[v] : ''; } }, grid:{ display:false }, border:{ color:C.ink } },
           y:{ ticks:{ color:C.muted, font:{ family:'IBM Plex Mono', size:11 }, callback:function (v) { return sw0(v); } },
               grid:{ color:function (c) { return c.tick.value === 0 ? C.ink : C.rule; }, lineWidth:function (c) { return c.tick.value === 0 ? 1.2 : 1; } }, border:{ display:false } }
@@ -1293,7 +1322,10 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       if (r.status && r.status !== 'active') return;
       if (!r.next || r.next > end || r.next < addDays(t, -7)) return;
       if (out.some(function (o) { return normDesc(o.name) === normDesc(r.name) && Math.abs(daysBetween(o.d, r.next)) < 7; })) return;
-      out.push({ d:r.next, name:r.name, amount:r.amount, inflow:r.type === 'income' || r.type === 'refund', kind:r.next < t ? 'expected any day' : 'expected', approx:true });
+      var skip = 'skip_' + normDesc(r.name) + '_' + ymd(r.next);
+      if (setting(skip, '')) return;                      // you said it won't come this time
+      var late = r.next < t;
+      out.push({ d:r.next, name:r.name, amount:r.amount, inflow:r.type === 'income' || r.type === 'refund', kind:late ? 'late · ' + daysBetween(r.next, t) + 'd' : 'expected', approx:true, late:late, r:r, skip:skip });
     });
     var cc = creditCardModel(periodModel(UI.periodOffset - 1));
     var payPrev = new Date(m.p.start.getFullYear(), m.p.start.getMonth(), 25);
@@ -1301,6 +1333,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     return out.sort(function (a, b) { return a.d - b.d; });
   }
   function upcomingHTML(m) {
+    UI.upLate = [];
     if (!m.isCurrent) return '';
     var u = upcomingItems(m);
     if (!u.length) return '';
@@ -1308,18 +1341,20 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     return '<section class="upcoming"><div class="uphead"><b>Upcoming until ' + periodDay(m.p.end) + '</b><span class="soon">' + sw0(outSum) + ' out' + (inSum ? ' · ' + sw0(inSum) + ' in' : '') + '</span>' +
       '<button class="navlink" data-nav="subscriptions">All recurring</button></div><div class="upstrip">' +
       u.map(function (x) {
-        return '<div class="up' + (x.inflow ? ' in' : '') + '"><span class="ud">' + periodDay(x.d) + '</span><span class="un">' + esc(x.name) + '</span>' +
-          '<span class="ua num">' + (x.inflow ? '+' : '') + (x.approx ? '~' : '') + sw(x.amount) + '</span><span class="uk">' + x.kind + '</span></div>';
+        var i = x.late ? UI.upLate.push(x) - 1 : -1;
+        return '<div class="up' + (x.inflow ? ' in' : '') + (x.late ? ' late' : '') + '"><span class="ud">' + periodDay(x.d) + '</span><span class="un">' + esc(x.name) + '</span>' +
+          '<span class="ua num">' + (x.inflow ? '+' : '') + (x.approx ? '~' : '') + sw(x.amount) + '</span><span class="uk">' + x.kind + '</span>' +
+          (x.late ? '<span class="uq"><button class="navlink" data-act="uppaid" data-i="' + i + '">' + (x.inflow ? 'Received' : 'Paid') + '</button><button class="navlink" data-act="upskip" data-i="' + i + '">Not this time</button></span>' : '') + '</div>';
       }).join('') + '</div></section>';
   }
 
   // ─── Recurring page ───────────────────────────────────────────────────────
-  function recurringHTML() {
+  function recurringBody() {
     var items = recurringItems(), active = items.filter(function (r) { return !r.status || r.status === 'active'; });
     var outY = sumBy(active, function (r) { return (r.type === 'income' || r.type === 'refund') ? 0 : r.amount * r.perYear; });
     var inY = sumBy(active, function (r) { return (r.type === 'income' || r.type === 'refund') ? r.amount * r.perYear : 0; });
     var subsY = sumBy(active, function (r) { return r.subcategory === 'Subscriptions' ? r.amount * r.perYear : 0; });
-    var h = topbar('Recurring', false);
+    var h = '<h2 class="sechead" id="recurring">Recurring</h2>';
     h += '<section class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))">' +
       kpi('Recurring out', sw0(outY / 12), 'a month · ' + sw0(outY) + ' a year') +
       kpi('Recurring in', sw0(inY / 12), 'a month') +
@@ -1431,6 +1466,16 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   function isLiab(e) { return truthy(e.is_liability) || acctType(e.account_type)[1] === 'liab'; }
   function isInv(e) { return acctType(e.account_type)[1] === 'invest'; }
   function accounts() { return (DATA.NetWorthEntry || []).slice(); }
+  // Archived accounts still count in net worth and history but leave the lists and the monthly update
+  function isArchived(e) { return setting('acct_archived_' + e.id, '') === '1'; }
+  function activeAccounts() { return accounts().filter(function (e) { return !isArchived(e); }); }
+  // Saved according to your transactions in a calendar month: income minus spending (money moved into
+  // collectibles, investing or 3a stays yours, so it isn't spending here)
+  function txSavedInMonth(k) {
+    var t = today(), list = txs().filter(function (tx) { return tx.date && mkey(tx.date) === k && pd(tx.date) <= t; });
+    if (!list.length) return null;
+    return calcTotals(list, t).netCashFlow;
+  }
   function snapsByEntry() {
     var m = {};
     (DATA.AssetSnapshot || []).forEach(function (s) { if (s.entry_id && s.date) (m[s.entry_id] = m[s.entry_id] || []).push(s); });
@@ -1495,7 +1540,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
         if (isLiab(e)) m.liab += v; else m.assets += v;
         if (isInv(e)) { m.invValue += v; m.invested += inv; }
       });
-      m.nUpd = Object.keys(m.updated).length;
+      m.nUpd = acc.filter(function (e) { return m.updated[e.id] && !isArchived(e); }).length;
       m.net = m.assets - m.liab;
       out.push(m);
     }
@@ -1511,8 +1556,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   function sgn0(v) { return (v >= 0 ? '+' : '−') + sw0(Math.abs(v)); }
 
   function wealthHTML() {
-    var acc = accounts(), h = topbar('Wealth &amp; Assets', false, '<button class="btn" data-act="waddacct">+ Account</button><button class="btn primary" data-act="wupdate">Update values</button>');
-    if (!acc.length) {
+    var acc = activeAccounts(), arch = accounts().filter(isArchived), h = topbar('Wealth &amp; Assets', false, '<button class="btn" data-act="waddacct">+ Account</button><button class="btn primary" data-act="wupdate">Update values</button>');
+    if (!acc.length && !arch.length) {
       return h + '<section class="card"><h3>No accounts yet</h3><p class="soon" style="margin:0">Import NetWorthEntry.csv and AssetSnapshot.csv in <button class="navlink" data-nav="settings">Settings → Import data</button>, or add your first account.</p></section>';
     }
     var ms = monthEnds(), cur = ms[ms.length - 1], prev = ms.length > 1 ? ms[ms.length - 2] : null;
@@ -1537,13 +1582,17 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
 
     // month-end table, newest first
     var rows = ms.slice().reverse().slice(0, 12);
-    h += '<section class="card"><h3>Month by month<span class="r">market = change in gain on investments · you = everything else</span></h3><div class="atable mtab">' +
-      '<div class="ah"><span>Month</span><span>Net worth</span><span>Change</span><span>Market</span><span>You</span></div>' +
+    h += '<section class="card"><h3>Month by month<span class="r">calendar months</span></h3><div class="atable mtab">' +
+      '<div class="ah"><span>Month</span><span>Net worth</span><span>Change</span><span>Market</span><span>You</span><span>Saved per transactions</span><span>Gap</span></div>' +
       rows.map(function (m) {
-        var c = function (v) { return v === undefined ? '<span class="num soon">—</span>' : '<span class="num ' + (v < 0 ? 'neg' : '') + '">' + sgn0(v) + '</span>'; };
+        var c = function (v, quiet) { return v === undefined || v === null ? '<span class="num soon">—</span>' : '<span class="num ' + (v < 0 && !quiet ? 'neg' : quiet ? 'soon' : '') + '">' + sgn0(v) + '</span>'; };
+        var tx = txSavedInMonth(m.key), gap = tx === null || m.you === undefined ? null : m.you - tx;
         return '<div><span><b>' + esc(mLong(m.key)) + '</b><small>' + (m.final ? 'final' : 'so far') + ' · ' + m.nUpd + ' of ' + acc.length + ' updated</small></span>' +
-          '<span class="num">' + sw0(m.net) + '</span>' + c(m.chg) + c(m.market) + c(m.you) + '</div>';
-      }).join('') + '</div></section>';
+          '<span class="num">' + sw0(m.net) + '</span>' + c(m.chg) + c(m.market) + c(m.you) + c(tx, true) +
+          (gap === null ? '<span class="num soon">—</span>' : '<span class="num ' + (Math.abs(gap) >= 500 ? 'neg' : 'soon') + '">' + sgn0(gap) + '</span>') + '</div>';
+      }).join('') + '</div>' +
+      '<p class="soon" style="margin:10px 0 0;font-size:12px;max-width:62rem"><b style="color:var(--ink)">Market</b>: change in the gain on your investments. <b style="color:var(--ink)">You</b>: the rest of the change, money you added, spent or moved. ' +
+      '<b style="color:var(--ink)">Saved per transactions</b>: income minus spending logged in that month (buying cards or investing isn’t spending). <b style="color:var(--ink)">Gap</b>: You minus that; a large gap means money moved that FlowFin has no transaction for, or a balance wasn’t updated. Gaps of 500 or more are red.</p></section>';
 
     // accounts by group
     WEALTH_GROUPS.forEach(function (g) {
@@ -1566,8 +1615,14 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
             '<span class="num ' + (ch !== null && ch < 0 ? 'neg' : 'soon') + '">' + (ch === null ? '—' : sgn0(ch)) + '</span></div>';
         }).join('') + '</div></section>';
     });
+    if (arch.length) {
+      h += fold('archived', 'Archived accounts', arch.length + ' · still counted in net worth', '<div class="atable">' + arch.map(function (e) {
+        return '<div><span><b>' + esc(e.name) + '</b><small>' + esc(acctType(e.account_type)[0]) + (e.institution ? ' · ' + esc(e.institution) : '') + '</small></span><span class="num">' + sw0(acctCHF(e)) + '</span><span></span><span></span>' +
+          '<span><button class="navlink" data-act="wunarch" data-id="' + esc(e.id) + '">Restore</button></span></div>';
+      }).join('') + '</div>', false);
+    }
     // currency exposure
-    var byCur = {}; acc.forEach(function (e) { if (!isLiab(e)) { var c = e.currency || 'CHF'; byCur[c] = (byCur[c] || 0) + Math.abs(cur.per[e.id]); } });
+    var byCur = {}; accounts().forEach(function (e) { if (!isLiab(e)) { var c = e.currency || 'CHF'; byCur[c] = (byCur[c] || 0) + Math.abs(cur.per[e.id]); } });
     var curs = Object.keys(byCur).sort(function (a, b) { return byCur[b] - byCur[a]; });
     if (curs.length > 1) {
       var shades = ['var(--ink)', '#4A4F4C', '#8A8F8B', '#B9BDB9', '#D3D6D2'];
@@ -1614,7 +1669,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   }
   function loadRates() {
     var d = monthDate(WFORM.month), k = WFORM.month;
-    accounts().forEach(function (e) {
+    activeAccounts().forEach(function (e) {
       if (!e.currency || e.currency === 'CHF' || monthSnaps(k)[e.id]) return;
       fxRate(e.currency, d).then(function (r) {
         if (!WFORM || WFORM.kind !== 'update' || WFORM.month !== k) return;
@@ -1625,7 +1680,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   }
   function drawUpdate() {
     var k = WFORM.month, cur = mkey(ymd(today())), have = monthSnaps(k), by = snapsByEntry();
-    var acc = accounts().sort(function (a, b) { return WEALTH_GROUPS.map(function (g) { return g[0]; }).indexOf(acctType(a.account_type)[1]) - WEALTH_GROUPS.map(function (g) { return g[0]; }).indexOf(acctType(b.account_type)[1]); });
+    var acc = activeAccounts().sort(function (a, b) { return WEALTH_GROUPS.map(function (g) { return g[0]; }).indexOf(acctType(a.account_type)[1]) - WEALTH_GROUPS.map(function (g) { return g[0]; }).indexOf(acctType(b.account_type)[1]); });
     var opts = [], x = cur; for (var i = 0; i < 13; i++) { opts.push(x); var d = mDate(x); d.setMonth(d.getMonth() - 1); x = ymd(d).slice(0, 7); }
     // starting value for each field: this month's entry, else the latest value before it
     var start = function (e) {
@@ -1654,7 +1709,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   function saveUpdate() {
     var k = WFORM.month, d = monthDate(k), have = monthSnaps(k), latestMonth = k >= mkey(ymd(today()));
     var snaps = [], ents = [], bad = '';
-    accounts().forEach(function (e) {
+    activeAccounts().forEach(function (e) {
       var raw = String($('wv_' + e.id).value).trim();
       if (raw === '' && !have[e.id]) return;                  // left empty for a past month: skip this account
       var v = parseFloat(raw.replace(',', '.'));
@@ -1693,7 +1748,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       '<div class="field"><label for="wrate">Rate to CHF (foreign currency)</label><input id="wrate" type="number" step="0.0001" value="' + esc(e.exchange_rate || 1) + '"></div>' +
       '</div>' + (WFORM.err ? '<div class="err">' + esc(WFORM.err) + '</div>' : '') +
       '<p class="soon" style="font-size:12px;margin:0">Changing the value here doesn’t add a point to the history chart. Use “Update values” for that.</p>' +
-      '<div class="actions">' + (e.id ? (WFORM.confirm ? '<span class="left"><button class="btn danger" data-act="wdelyes">Yes, delete with its history</button> <button class="btn" data-act="wdelno">Keep</button></span>' : '<button class="btn danger left" data-act="wdel">Delete</button>') : '') +
+      '<div class="actions">' + (e.id ? (WFORM.confirm ? '<span class="left"><button class="btn danger" data-act="wdelyes">Yes, delete with its history</button> <button class="btn" data-act="wdelno">Keep</button></span>' : '<span class="left"><button class="btn danger" data-act="wdel">Delete</button> <button class="btn" data-act="warch" data-id="' + esc(e.id) + '">' + (isArchived(e) ? 'Restore' : 'Archive') + '</button></span>') : '') +
       '<button class="btn" data-act="wcancel">Cancel</button><button class="btn primary" data-act="wsaveacct">' + (e.id ? 'Save changes' : 'Add account') + '</button></div></div></div>';
     $('modalRoot').innerHTML = h;
   }
@@ -1752,23 +1807,46 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     return n ? tot / n : 0;
   }
   function monthsUntil(d) { var t = today(); return (d.getFullYear() - t.getFullYear()) * 12 + (d.getMonth() - t.getMonth()) + (d.getDate() >= t.getDate() ? 0 : -1); }
+  // How a goal is funded: pct = share of each period's net saved (Base44 rule), fixed = an amount you put in each month,
+  // account = the goal follows the balance of an account on Wealth.
+  function goalFund(g) {
+    var v = {}; try { v = JSON.parse(setting('goal_fund_' + g.id, '') || '{}') || {}; } catch (e) { v = {}; }
+    return { mode:v.mode || 'pct', amount:+v.amount || 0, account:v.account || '' };
+  }
+  function acctCHF(e) { if (!e) return 0; return (+e.current_value || 0) * ((e.currency && e.currency !== 'CHF') ? (+e.exchange_rate || 1) : 1); }
+  function acctTrend(id) {           // average change a month over the last up-to-6 months
+    var ms = monthEnds().slice(-7); if (ms.length < 2) return { per:0, n:0 };
+    return { per:((ms[ms.length - 1].per[id] || 0) - (ms[0].per[id] || 0)) / (ms.length - 1), n:ms.length - 1 };
+  }
+  function addMonthsD(d, n) { return new Date(d.getFullYear(), d.getMonth() + n, 1); }
+  function goalView(g) {
+    var f = goalFund(g), acct = f.mode === 'account' ? accounts().filter(function (e) { return e.id === f.account; })[0] : null;
+    var cur = f.mode === 'account' ? acctCHF(acct) : (+g.current_amount || 0), target = +g.target_amount || 0, left = Math.max(0, target - cur);
+    var rate, label, note;
+    if (f.mode === 'fixed') { rate = f.amount; label = 'At ' + sw0(f.amount) + ' a month'; note = 'your fixed amount'; }
+    else if (f.mode === 'account') { var tr = acctTrend(f.account); rate = tr.per; label = 'At the account’s trend'; note = tr.n ? (rate >= 0 ? '+' : '−') + sw0(Math.abs(rate)) + ' a month over ' + tr.n + ' month' + (tr.n === 1 ? '' : 's') : 'needs two months of values'; }
+    else { var avgNet = avgNetCashFlow(); rate = (+g.saving_pct || 0) / 100 * Math.max(0, avgNet); label = 'At ' + (+g.saving_pct || 0) + '% of net saved'; note = rate > 0 ? sw(rate) + ' a period on average' : 'average net saved is not positive'; }
+    var months = rate >= 1 && left / rate <= 600 ? Math.ceil(left / rate) : null;
+    return { f:f, acct:acct, cur:cur, target:target, left:left, rate:rate, label:label, note:note, eta:left <= 0 ? today() : months !== null ? addMonthsD(today(), months) : null };
+  }
   function goalsHTML() {
     var goals = (DATA.FinancialGoal || []).slice().sort(function (a, b) { return String(a.deadline || '9') < String(b.deadline || '9') ? -1 : 1; });
     var h = topbar('Goals', false, '<button class="btn primary" data-act="gnew">+ Goal</button>');
     if (!goals.length) return h + '<section class="card"><h3>No goals yet</h3><p class="soon" style="margin:0">Import FinancialGoal.csv and GoalContribution.csv in <button class="navlink" data-nav="settings">Settings → Import data</button>, or add your first goal.</p></section>';
-    var tTarget = sumBy(goals, function (g) { return +g.target_amount; }), tSaved = sumBy(goals, function (g) { return +g.current_amount; });
-    var avgNet = avgNetCashFlow();
+    var views = goals.map(goalView);
+    var tTarget = sumBy(views, function (v) { return v.target; }), tSaved = sumBy(views, function (v) { return Math.min(v.cur, v.target); });
+    var going = sumBy(views, function (v) { return Math.max(0, v.rate); });
     h += '<section class="kpis" style="grid-template-columns:repeat(3,minmax(0,1fr))">' +
       kpi('Saved towards goals', sw0(tSaved), 'of ' + sw0(tTarget) + ' · ' + (tTarget ? (tSaved / tTarget * 100).toFixed(1) : 0) + '%') +
       kpi('Still to save', sw0(Math.max(0, tTarget - tSaved)), goals.length + ' goal' + (goals.length === 1 ? '' : 's')) +
-      kpi('Net saved', '<span class="' + (avgNet < 0 ? 'neg' : '') + '">' + sw0(avgNet) + '</span>', 'a period, 6-period average, one-offs left out') + '</section>';
-    goals.forEach(function (g) {
-      var target = +g.target_amount || 0, cur = +g.current_amount || 0, left = Math.max(0, target - cur), pct = target ? cur / target : 0;
+      kpi('Going in', sw0(going), 'a month at the current pace, all goals') + '</section>';
+    var sp = savingsProjection();
+    h += fold('savings', 'Savings projection', (sp.pace >= 0 ? '+' : '−') + sw0(Math.abs(sp.pace)) + ' a period at your pace', savingsProjectionBody(sp), false);
+    goals.forEach(function (g, gi) {
+      var v = views[gi], target = v.target, cur = v.cur, left = v.left, pct = target ? cur / target : 0;
       var dl = g.deadline ? pd(g.deadline) : null, mLeft = dl ? monthsUntil(dl) : null;
       var need = dl && mLeft > 0 ? left / mLeft : null;
-      var perPeriod = (+g.saving_pct || 0) / 100 * Math.max(0, avgNet);
-      var eta = perPeriod >= 1 && left / perPeriod <= 600 ? Math.ceil(left / perPeriod) : null, etaDate = eta !== null ? periodAt(UI.periodOffset + eta).start : null;
-      var late = dl && etaDate && etaDate > dl;
+      var etaDate = v.eta, late = dl && etaDate && etaDate > dl;
       var per = goalPeriods(g), missing = per.filter(function (x) { return x.suggested > 0 && (!x.rec || Math.abs((+x.rec.amount || 0) - x.suggested) > 0.004); });
       h += '<section class="card"><h3>' + esc(g.name) + '<span class="r"><button class="navlink" data-act="gedit" data-id="' + esc(g.id) + '">Edit</button></span></h3>' +
         '<div class="bhead"><span class="num" style="font-size:28px">' + sw0(cur) + ' <span class="soon" style="font-size:18px">/ ' + sw0(target) + '</span></span><span class="num">' + (pct * 100).toFixed(1) + '%</span></div>' +
@@ -1777,7 +1855,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
         '<div class="trio" style="margin-top:6px">' +
         '<div><label>Deadline</label><span class="num">' + (dl ? monthYear(dl) : '—') + '</span><small>' + (mLeft !== null ? (mLeft > 0 ? mLeft + ' months away' : 'passed') : 'none set') + '</small></div>' +
         '<div><label>Needed a month</label><span class="num">' + (need !== null ? sw(need) : '—') + '</span><small>' + (need !== null ? 'to reach it by the deadline' : '&nbsp;') + '</small></div>' +
-        '<div><label>At ' + (+g.saving_pct || 0) + '% of net saved</label><span class="num ' + (late || eta === null ? 'neg' : '') + '">' + (etaDate ? monthYear(etaDate) : 'not reached at this pace') + '</span><small>' + (perPeriod > 0 ? sw(perPeriod) + ' a period on average' : 'average net saved is not positive') + '</small></div></div>';
+        '<div><label>' + v.label + '</label><span class="num ' + (late || !etaDate ? 'neg' : '') + '">' + (left <= 0 ? 'reached' : etaDate ? monthYear(etaDate) : 'not reached at this pace') + '</span><small>' + v.note + '</small></div></div>';
+      if (v.f.mode !== 'pct') { h += goalFundBody(g, v) + '</section>'; return; }
       h += '<div class="subhead" style="margin-top:6px"><b>Contributions</b><span>' + (+g.saving_pct || 0) + '% of each finished period’s net saved, when positive</span></div><div class="gtable">' +
         per.map(function (x) {
           var state = x.suggested <= 0 ? '<span class="soon">no contribution · negative period</span>'
@@ -1789,6 +1868,27 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
         '</section>';
     });
     return h;
+  }
+  function goalFundBody(g, v) {
+    if (v.f.mode === 'account') {
+      return '<div class="subhead" style="margin-top:6px"><b>Funded by an account</b><span>' + (v.acct ? 'follows ' + esc(v.acct.name) + ' on Wealth' : 'the linked account is gone: pick another in Edit') + '</span></div>' +
+        '<p class="soon" style="margin:6px 0 0;font-size:13px">The saved amount is the account’s current value' + (v.acct && v.acct.last_updated ? ', last updated ' + periodDay(pd(v.acct.last_updated)) : '') + '. Update it in <button class="navlink" data-nav="wealth">Wealth → Update values</button>.</p>';
+    }
+    var k = mkey(ymd(today())), recs = (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === g.id && String(c.period).length === 7; })
+      .sort(function (a, b) { return String(a.period) < String(b.period) ? 1 : -1; });
+    var done = recs.some(function (c) { return c.period === k; });
+    return '<div class="subhead" style="margin-top:6px"><b>Monthly amounts</b><span>' + sw0(v.f.amount) + ' a month, added when you confirm it</span></div><div class="gtable">' +
+      (done ? '' : '<div><span>' + esc(mLong(k)) + '</span><span></span><span class="num soon">' + sw(v.f.amount) + '</span><span><button class="navlink" data-act="gfix" data-id="' + esc(g.id) + '">Add to goal</button></span></div>') +
+      recs.slice(0, 12).map(function (c) { return '<div><span>' + esc(mLong(c.period)) + '</span><span></span><span class="num">' + sw(+c.amount) + '</span><span class="soon">added</span></div>'; }).join('') +
+      (!recs.length && done ? '' : '') + '</div>';
+  }
+  function addFixed(id) {
+    var g = (DATA.FinancialGoal || []).filter(function (x) { return x.id === id; })[0]; if (!g) return;
+    var f = goalFund(g), k = mkey(ymd(today()));
+    if ((DATA.GoalContribution || []).some(function (c) { return c.goal_id === id && c.period === k; })) return;
+    saveRow('GoalContribution', { goal_id:id, period:k, amount:f.amount, pct:'', net:'' })
+      .then(function () { return saveRow('FinancialGoal', Object.assign({}, g, { current_amount:Math.round(((+g.current_amount || 0) + f.amount) * 100) / 100 })); })
+      .then(function () { toast(sw0(f.amount) + ' added to ' + g.name); });
   }
   // Record (or correct) one period's contribution; the goal moves by the difference only
   function recordContribs(goalId, keys) {
@@ -1818,6 +1918,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   function openGoal(id) {
     var g = id ? (DATA.FinancialGoal || []).filter(function (x) { return x.id === id; })[0] : null;
     GFORM = { g:g ? Object.assign({}, g) : { name:'', target_amount:'', current_amount:0, saving_pct:10, deadline:'', notes:'', fund_bucket:'savings' }, err:'', confirm:false };
+    GFORM.fund = g ? goalFund(g) : { mode:'pct', amount:0, account:'' };
     drawGoal();
   }
   function closeGForm() { GFORM = null; $('modalRoot').innerHTML = ''; }
@@ -1826,26 +1927,40 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     $('modalRoot').innerHTML = '<div class="scrim" data-act="gscrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="gtitle"><h2 id="gtitle">' + (g.id ? 'Edit goal' : 'New goal') + '</h2><div class="formgrid">' +
       '<div class="field full"><label for="gname">Name</label><input id="gname" value="' + esc(g.name) + '"></div>' +
       '<div class="field"><label for="gtarget">Target (CHF)</label><input id="gtarget" type="number" step="1" min="0" value="' + esc(g.target_amount) + '"></div>' +
-      '<div class="field"><label for="gcur">Saved so far (CHF)</label><input id="gcur" type="number" step="0.01" min="0" value="' + esc(g.current_amount) + '"></div>' +
-      '<div class="field"><label for="gpct">Share of net saved each period (%)</label><input id="gpct" type="number" step="1" min="0" max="100" value="' + esc(g.saving_pct) + '"></div>' +
+      '<div class="field"><label for="gfund">Funded by</label><select id="gfund">' + opt('pct', 'A share of net saved', GFORM.fund.mode) + opt('fixed', 'A fixed amount a month', GFORM.fund.mode) + opt('account', 'An account on Wealth', GFORM.fund.mode) + '</select></div>' +
+      (GFORM.fund.mode === 'pct' ? '<div class="field"><label for="gpct">Share of net saved each period (%)</label><input id="gpct" type="number" step="1" min="0" max="100" value="' + esc(g.saving_pct) + '"></div>'
+        : GFORM.fund.mode === 'fixed' ? '<div class="field"><label for="gfix">Amount a month (CHF)</label><input id="gfix" type="number" step="1" min="0" value="' + esc(GFORM.fund.amount || '') + '"></div>'
+        : '<div class="field"><label for="gacct">Account</label><select id="gacct">' + accounts().filter(function (e) { return !isArchived(e); }).map(function (e) { return opt(e.id, e.name, GFORM.fund.account); }).join('') + '</select></div>') +
+      (GFORM.fund.mode !== 'account' ? '<div class="field"><label for="gcur">Saved so far (CHF)</label><input id="gcur" type="number" step="0.01" min="0" value="' + esc(g.current_amount) + '"></div>' : '') +
       '<div class="field"><label for="gdl">Deadline</label><input id="gdl" type="date" value="' + esc(String(g.deadline || '').slice(0, 10)) + '"></div>' +
       '<div class="field full"><label for="gnotes">Notes</label><input id="gnotes" value="' + esc(g.notes) + '"></div>' +
       '</div>' + (GFORM.err ? '<div class="err">' + esc(GFORM.err) + '</div>' : '') +
       '<div class="actions">' + (g.id ? (GFORM.confirm ? '<span class="left"><button class="btn danger" data-act="gdelyes">Yes, delete with its contributions</button> <button class="btn" data-act="gdelno">Keep</button></span>' : '<button class="btn danger left" data-act="gdel">Delete</button>') : '') +
       '<button class="btn" data-act="gcancel">Cancel</button><button class="btn primary" data-act="gsave">' + (g.id ? 'Save changes' : 'Add goal') + '</button></div></div></div>';
+    var sel = $('gfund'); if (sel) sel.onchange = function () { readGoal(); GFORM.fund.mode = sel.value; GFORM.err = ''; drawGoal(); };
   }
   function readGoal() {
     var g = GFORM.g;
-    g.name = $('gname').value.trim(); g.target_amount = $('gtarget').value; g.current_amount = $('gcur').value; g.saving_pct = $('gpct').value; g.deadline = $('gdl').value; g.notes = $('gnotes').value;
+    g.name = $('gname').value.trim(); g.target_amount = $('gtarget').value; g.deadline = $('gdl').value; g.notes = $('gnotes').value;
+    if ($('gcur')) g.current_amount = $('gcur').value;
+    if ($('gpct')) g.saving_pct = $('gpct').value;
+    if ($('gfix')) GFORM.fund.amount = $('gfix').value;
+    if ($('gacct')) GFORM.fund.account = $('gacct').value;
   }
   function saveGoal() {
     readGoal();
     var g = GFORM.g, t = parseFloat(g.target_amount);
     if (!g.name) { GFORM.err = 'Give the goal a name.'; return drawGoal(); }
     if (!(t > 0)) { GFORM.err = 'Enter a target above 0.'; return drawGoal(); }
-    var row = Object.assign({}, g, { target_amount:t, current_amount:parseFloat(g.current_amount) || 0, saving_pct:parseFloat(g.saving_pct) || 0 });
-    var isNew = !g.id; closeGForm();
-    saveRow('FinancialGoal', row).then(function () { toast(isNew ? 'Goal added' : 'Goal saved'); });
+    var F = GFORM.fund, fund = { mode:F.mode };
+    if (F.mode === 'fixed') { fund.amount = parseFloat(F.amount); if (!(fund.amount > 0)) { GFORM.err = 'Enter the amount a month.'; return drawGoal(); } }
+    if (F.mode === 'account') { fund.account = F.account; if (!fund.account) { GFORM.err = 'Pick the account.'; return drawGoal(); } }
+    var row = Object.assign({}, g, { target_amount:t, current_amount:parseFloat(g.current_amount) || 0, saving_pct:F.mode === 'pct' ? parseFloat(g.saving_pct) || 0 : (+g.saving_pct || 0) });
+    var isNew = !g.id, was = g.id ? goalFund(g) : null; closeGForm();
+    saveRow('FinancialGoal', row).then(function (saved) {
+      var same = was && JSON.stringify(was) === JSON.stringify({ mode:fund.mode, amount:fund.amount || 0, account:fund.account || '' });
+      return same || (!was && fund.mode === 'pct') ? null : saveSetting('goal_fund_' + saved.id, JSON.stringify(fund));
+    }).then(function () { toast(isNew ? 'Goal added' : 'Goal saved'); });
   }
   function deleteGoal() {
     var id = GFORM.g.id, cs = (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === id; });
@@ -1891,13 +2006,13 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     });
     return out.sort(function (x, y) { return x.tx.date < y.tx.date ? 1 : -1; });
   }
-  function anomalyHTML() {
+  function anomalyBody() {
     var list = anomalyList(), f = UI.anFilter || 'pending';
     var st = function (x) { return x.tx.anomaly_status || 'pending'; };
     var count = { pending:0, excluded:0, confirmed:0 }; list.forEach(function (x) { count[st(x)] = (count[st(x)] || 0) + 1; });
     var shown = f === 'all' ? list : list.filter(function (x) { return st(x) === f; });
-    var h = topbar('Anomaly Review', false);
-    h += '<p class="soon" style="margin:-16px 0 0;font-size:14px;max-width:62rem"><b style="color:var(--ink)">One-off</b> takes a transaction out of your usual spending, your average salary and the forecasts. It still counts in that period’s totals. ' +
+    var h = '';
+    h += '<p class="soon" style="margin:0;font-size:14px;max-width:62rem"><b style="color:var(--ink)">One-off</b> takes a transaction out of your usual spending, your average salary and the forecasts. It still counts in that period’s totals. ' +
       '<b style="color:var(--ink)">Keep</b> marks it as normal. Covers your whole history; decisions made here stay through the Base44 sync.</p>';
     h += '<div class="seg3" role="tablist">' + [['pending','To review'],['excluded','One-off'],['confirmed','Kept'],['all','All']].map(function (o) {
       return '<button role="tab" aria-selected="' + (f === o[0]) + '" class="' + (f === o[0] ? 'on' : '') + '" data-act="anf" data-v="' + o[0] + '">' + o[1] + ' <span class="num">' + (o[0] === 'all' ? list.length : count[o[0]] || 0) + '</span></button>';
@@ -1959,6 +2074,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
           '<span class="num ' + (cls && v < 0 ? 'neg' : '') + '">' + (cls ? (v < 0 ? '−' : '') : (v < 0 ? '− ' : '+ ')) + sw(Math.abs(v)) + '</span>' +
           '<span class="num soon">' + (m.income ? (Math.abs(v) / m.income * 100).toFixed(0) + '%' : '') + '</span></div>';
       }).join('') + '</div></section>';
+    h += categoryHTML(periodModel(UI.periodOffset));
     // compare table
     var lines = [['income','Income'],['household','Household'],['personal','Personal Cash'],['coll','Collectibles'],['invest','Invested'],['left','Left over']];
     h += '<section class="card"><h3>Compared with<span class="r">' + periodLabel(prev.p) + ' and your ' + hist.length + '-period average</span></h3><div class="ctable">' +
@@ -2081,7 +2197,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       }
       h += '</section>';
     });
-    return h;
+    return h + recurringBody();
   }
 
   function saveBudget(cat, patch) {
@@ -2195,22 +2311,29 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     var f = UI.tx, list = filteredTx(), t = today(), tagList = allTags();
     var inc = 0, out = 0, back = 0;
     list.forEach(function (tx) { var a = +tx.amount || 0; if (tx.type === 'income') inc += a; else if (tx.type === 'refund') back += a; else out += a; });
-    var h = topbar('Transactions', f.scope === 'period', '<button class="btn primary" data-act="addtx">+ Add</button>');
+    var nRev = reviewCount(), tab = UI.txTab === 'review' ? 'review' : 'all';
+    var tabs = '<div class="seg3 txtabs" role="tablist">' +
+      '<button role="tab" aria-selected="' + (tab === 'all') + '" class="' + (tab === 'all' ? 'on' : '') + '" data-act="txtab" data-v="all">All</button>' +
+      '<button role="tab" aria-selected="' + (tab === 'review') + '" class="' + (tab === 'review' ? 'on' : '') + '" data-act="txtab" data-v="review">To review' + (nRev ? ' <span class="nbadge">' + nRev + '</span>' : '') + '</button></div>';
+    if (tab === 'review') return topbar('Transactions', false, '<button class="btn primary" data-act="addtx">+ Add</button>') + tabs + '<div style="display:grid;gap:14px">' + anomalyBody() + '</div>';
+    var h = topbar('Transactions', f.scope === 'period', '<button class="btn primary" data-act="addtx">+ Add</button>') + tabs;
+    var nf = (f.scope !== 'period' ? 1 : 0) + (f.type ? 1 : 0) + (f.category ? 1 : 0) + (f.account ? 1 : 0) + (f.tag ? 1 : 0);
     h += '<div style="display:grid;gap:14px"><div class="filters">' +
       '<input type="search" id="fq" placeholder="Search description, category or tag" value="' + esc(f.q) + '">' +
-      '<select id="fscope">' + opt('period','This period',f.scope) + opt('all','All time',f.scope) + '</select>' +
+      '<button class="btn ffbtn' + (UI.fOpen ? ' on' : '') + '" data-act="ftoggle" aria-expanded="' + !!UI.fOpen + '">Filter' + (nf ? ' · ' + nf : '') + '</button>' +
+      '<div class="fmore' + (UI.fOpen ? ' open' : '') + '"><select id="fscope">' + opt('period','This period',f.scope) + opt('all','All time',f.scope) + '</select>' +
       '<select id="ftype">' + opt('','All types',f.type) + TYPES.map(function (x) { return opt(x[0], x[1], f.type); }).join('') + '</select>' +
       '<select id="fcat">' + opt('','All categories',f.category) + Object.keys(CATEGORIES).map(function (c) { return opt(c, c, f.category); }).join('') + '</select>' +
       '<select id="facct">' + opt('','Both cards',f.account) + ACCOUNTS.map(function (x) { return opt(x[0], x[1], f.account); }).join('') + '</select>' +
       (tagList.length ? '<select id="ftag">' + opt('','All tags',f.tag || '') + tagList.map(function (x) { return opt(x.tag, '#' + x.tag, f.tag || ''); }).join('') + '</select>' : '') +
-      '</div>' + filterChips(f) + '<div class="sumbar"><span>' + list.length + ' transactions</span><span>Out<b>' + chf(out) + '</b></span><span>Refunds<b>' + chf(back) + '</b></span><span>Income<b>' + chf(inc) + '</b></span></div>';
+      '</div></div>' + filterChips(f) + '<div class="sumbar"><span>' + list.length + ' transactions</span><span>Out<b>' + chf(out) + '</b></span><span>Refunds<b>' + chf(back) + '</b></span><span>Income<b>' + chf(inc) + '</b></span></div>';
     if (tagList.length && !f.tag) {
-      h += '<div class="tagrow"><span class="soon">Tags</span>' + tagList.slice(0, 8).map(function (x) {
+      h += '<div class="tagrow phonefold' + (UI.fOpen ? ' open' : '') + '"><span class="soon">Tags</span>' + tagList.slice(0, 8).map(function (x) {
         return '<button class="tagchip" data-act="tagfilter" data-tag="' + esc(x.tag) + '">#' + esc(x.tag) + ' <b>' + sw0(x.total) + '</b></button>';
       }).join('') + '</div>';
     }
     if (list.length) {
-      h += '<div class="bulktag"><label for="bulktag" class="soon">Tag all ' + list.length + ' shown</label>' +
+      h += '<div class="bulktag phonefold' + (UI.fOpen ? ' open' : '') + '"><label for="bulktag" class="soon">Tag all ' + list.length + ' shown</label>' +
         '<input id="bulktag" list="tagList" placeholder="e.g. Singapore 2026" autocomplete="off">' +
         '<button class="btn" data-act="bulktag">Add tag</button></div>' +
         '<datalist id="tagList">' + tagList.map(function (x) { return '<option value="' + esc(x.tag) + '">'; }).join('') + '</datalist>';
@@ -2378,6 +2501,10 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   // ─── Settings ─────────────────────────────────────────────────────────────
   function settingsHTML() {
     var h = topbar('Settings', false);
+    // on a phone this is the "More" tab, so it lists every page the bottom bar doesn't have
+    var inBar = MOBILE_NAV.map(function (x) { return x[0]; }), more = [];
+    NAV.forEach(function (g) { g.items.forEach(function (it) { if (inBar.indexOf(it[0]) < 0 && it[0] !== 'settings') more.push(it); }); });
+    h += '<div class="card phoneonly morepages"><h3>Pages</h3>' + more.map(function (it) { return '<button class="drill rowline" data-nav="' + it[0] + '"><span>' + it[1] + '</span><span class="soon">›</span></button>'; }).join('') + '</div>';
     h += '<div class="card"><h3>Google Sheet connection</h3><div class="field"><label for="surl">Apps Script web app URL</label>' +
       '<input id="surl" value="' + esc(apiUrl()) + '" style="font-family:var(--f-mono);font-size:12px"></div>' +
       '<div class="field" style="margin-top:10px"><label for="skey">Access key (kept only in this browser)</label>' +
@@ -2469,6 +2596,21 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     if (act === 'wupdate') return openUpdate(a.dataset.month);
     if (act === 'gnew') return openGoal(null);
     if (act === 'anf') { UI.anFilter = a.getAttribute('data-v'); return draw(); }
+    if (act === 'uppaid') {        // log the late item as paid: the add form opens filled in
+      var lu = (UI.upLate || [])[+a.getAttribute('data-i')]; if (!lu) return;
+      var rr = lu.r; openTx(null);
+      Object.assign(FORM, { description:rr.name, amount:Math.round(rr.amount * 100) / 100, type:rr.type || 'expense', category:rr.category || FORM.category, subcategory:rr.subcategory || FORM.subcategory, account:rr.account || FORM.account, date:ymd(today()) });
+      return drawModal();
+    }
+    if (act === 'upskip') { var ls = (UI.upLate || [])[+a.getAttribute('data-i')]; if (!ls) return; return saveSetting(ls.skip, '1').then(function () { toast(ls.name + ': skipped for ' + periodDay(ls.d)); }); }
+    if (act === 'gfix') return addFixed(a.getAttribute('data-id'));
+    if (act === 'warch' || act === 'wunarch') {
+      var aid = a.getAttribute('data-id'), ae = accounts().filter(function (x) { return x.id === aid; })[0]; if (!ae) return;
+      var arc = isArchived(ae); if (act === 'warch') closeWForm();
+      return saveSetting('acct_archived_' + aid, arc ? '' : '1').then(function () { toast(ae.name + (arc ? ' restored' : ' archived')); });
+    }
+    if (act === 'ftoggle') { UI.fOpen = !UI.fOpen; return draw(); }
+    if (act === 'txtab') { UI.txTab = a.getAttribute('data-v'); window.scrollTo(0, 0); return draw(); }
     if (act === 'anset') return setAnomaly(a.getAttribute('data-id'), a.getAttribute('data-v'));
     if (act === 'gedit') return openGoal(a.getAttribute('data-id'));
     if (act === 'gscrim' && e.target === a) return closeGForm();

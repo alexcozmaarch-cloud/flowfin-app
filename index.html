@@ -2535,10 +2535,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       '<input id="skey" type="password" autocomplete="off" value="' + esc(apiKey()) + '" style="font-family:var(--f-mono);font-size:12px"></div>' +
       '<div class="actions" style="justify-content:flex-start;margin-top:10px"><button class="btn primary" data-act="saveurl">Save &amp; reload</button><button class="btn" data-act="ping">Test connection</button><button class="btn" data-act="reload">Reload data</button></div>' +
       '<div id="pingOut" class="soon" style="margin-top:8px"></div></div>';
-    h += '<div class="card"><h3>Base44 transition</h3><p class="soon" style="margin:0 0 10px">Transactions are pulled from Base44 into the Sheet every hour. ' +
-      'Until you switch, keep adding and editing transactions in Base44: an hourly pull overwrites edits made here to Base44 entries.</p>' +
-      '<div class="actions" style="justify-content:flex-start"><button class="btn" data-act="b44">Pull from Base44 now</button></div>' +
-      '<div id="b44Out" class="soon" style="margin-top:8px"></div></div>';
+    h += '<div class="card"><h3>Base44</h3><p class="soon" style="margin:0">Switched over on 05.11.2026: FlowFin is where transactions are added and edited. ' +
+      'The hourly pull from Base44 is stopped (stopHourlySync in Apps Script), so nothing from Base44 overwrites your changes.</p></div>';
     h += importHTML();
     h += rulesHTML();
     h += '<div class="card"><h3>Foreign card payments</h3><div class="bedit" style="padding-top:0">' +

@@ -155,9 +155,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .atable.chk>div{grid-template-columns:minmax(170px,2fr) repeat(3,minmax(70px,1fr)) minmax(90px,1.1fr);min-width:560px}
 .atable.chk2>div{grid-template-columns:minmax(0,3fr) minmax(70px,1fr) minmax(90px,1fr)}
 .atable.chk2 small{white-space:normal}
-.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:-3.5px}
-.tx .ti{width:36px;height:36px;border:1px solid var(--rule);display:grid;place-items:center;color:var(--ink);background:var(--paper)}
-.tx .ti.in{color:var(--good)}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:-3.5px}
+.tx .ti{width:22px;display:grid;place-items:center}
+.tx .ti .ic{width:20px;height:20px}
 h3 .ic{width:20px;height:20px;margin-right:4px;vertical-align:-4px}
 .up .un .ic{width:15px;height:15px;vertical-align:-3px}
 .tx .d{min-width:0}
@@ -382,35 +382,39 @@ details.fold>summary:hover h3{color:var(--muted)}
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<symbol id="i-house" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-6h4v6"/></symbol>
-<symbol id="i-basket" viewBox="0 0 24 24"><path d="M3.5 9h17l-1.6 10.2a1 1 0 0 1-1 .8H6.1a1 1 0 0 1-1-.8zM8 9l3-5M16 9l-3-5M9 13v4M15 13v4"/></symbol>
-<symbol id="i-meal" viewBox="0 0 24 24"><path d="M6 3v6a2 2 0 0 0 4 0V3M8 3v18M16 21V3c-2.2 1.2-3 4-3 7 0 1.7 1.3 3 3 3"/></symbol>
-<symbol id="i-cup" viewBox="0 0 24 24"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5v2.5M12 3.5v2.5"/></symbol>
-<symbol id="i-glass" viewBox="0 0 24 24"><path d="M6 3h12l-1.2 7.5a4.9 4.9 0 0 1-9.6 0zM12 15.5V21M8 21h8M6.6 7h10.8"/></symbol>
-<symbol id="i-apple" viewBox="0 0 24 24"><path d="M12 8c-3-2.2-7.5-.4-7.5 4.6 0 4.2 2.8 8.4 5 8.4 1.2 0 1.6-.6 2.5-.6s1.3.6 2.5.6c2.2 0 5-4.2 5-8.4C19.5 7.6 15 5.8 12 8zM12 8c0-2.2 1-3.6 3-4.5"/></symbol>
-<symbol id="i-tram" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="13" rx="2"/><path d="M5 11h14M8.5 14h.01M15.5 14h.01M8 17l-2 4M16 17l2 4M10 4l1-2h2l1 2"/></symbol>
-<symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4.5 11A7.5 7.5 0 0 1 17.6 6.4L19.5 8M19.5 3.5V8H15M19.5 13a7.5 7.5 0 0 1-13.1 4.6L4.5 16M4.5 20.5V16H9"/></symbol>
-<symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/></symbol>
-<symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></symbol>
-<symbol id="i-gift" viewBox="0 0 24 24"><rect x="3.5" y="8.5" width="17" height="4" rx=".5"/><path d="M5 12.5V20h14v-7.5M12 8.5V20M12 8.5C10.5 5 7 4.5 7 6.7 7 8 9 8.5 12 8.5c3 0 5-.5 5-1.8 0-2.2-3.5-1.7-5 1.8"/></symbol>
-<symbol id="i-dots" viewBox="0 0 24 24"><path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="3"/></symbol>
-<symbol id="i-note" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1"/><circle cx="12" cy="12" r="2.6"/><path d="M6.5 9.5h.01M17.5 14.5h.01"/></symbol>
-<symbol id="i-plane" viewBox="0 0 24 24"><path d="M3 11.5L21 4l-5.5 16-4-6.5zM11.5 13.5L21 4"/></symbol>
-<symbol id="i-cards" viewBox="0 0 24 24"><rect x="4" y="7" width="11" height="14" rx="1.5"/><path d="M8.5 4H18.5A1.5 1.5 0 0 1 20 5.5V17"/></symbol>
-<symbol id="i-chart" viewBox="0 0 24 24"><path d="M3.5 20.5h17M5 16l4.5-4.5 3.5 3 6.5-7M15 7.5h4v4"/></symbol>
-<symbol id="i-pillar" viewBox="0 0 24 24"><path d="M12 2.5L4.5 6h15zM6.5 8.5h11M8 8.5v9.5M12 8.5v9.5M16 8.5v9.5M6 18h12M4.5 21h15"/></symbol>
-<symbol id="i-bank" viewBox="0 0 24 24"><path d="M3.5 9.5L12 4l8.5 5.5zM5.5 10v7.5M9.5 10v7.5M14.5 10v7.5M18.5 10v7.5M3.5 20.5h17"/></symbol>
-<symbol id="i-vault" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 8.8V7M6 19v2M18 19v2"/></symbol>
-<symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 7.5h15a1.5 1.5 0 0 1 1.5 1.5v9.5A1.5 1.5 0 0 1 19 20H5.5A1.5 1.5 0 0 1 4 18.5zM4 7.5L15.5 4v3.5M16 13.8h1.5"/></symbol>
-<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12h.01" stroke-width="2.5"/></symbol>
-<symbol id="i-refund" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
-<symbol id="i-in" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5M4.5 16v3.5h15V16"/></symbol>
-<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></symbol>
-<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.7-3.2 8-7.5 9.5-4.3-1.5-7.5-4.8-7.5-9.5V6z"/></symbol>
-<symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20z"/></symbol>
-<symbol id="i-car" viewBox="0 0 24 24"><path d="M3.5 16.5V12l2-5h13l2 5v4.5zM3.5 12h17M7 16.5V19M17 16.5V19M7 14h.01M17 14h.01"/></symbol>
-<symbol id="i-minus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
-<symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="1"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+<symbol id="i-house" viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-zap" viewBox="0 0 24 24"><path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/></symbol>
+<symbol id="i-shopping-cart" viewBox="0 0 24 24"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></symbol>
+<symbol id="i-car" viewBox="0 0 24 24"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></symbol>
+<symbol id="i-baby" viewBox="0 0 24 24"><path d="M9 12h.01"/><path d="M15 12h.01"/><path d="M10 16c.5.3 1.2.5 2 .5s1.5-.2 2-.5"/><path d="M19 6.3a9 9 0 0 1 1.8 3.9 2 2 0 0 1 0 3.6 9 9 0 0 1-17.6 0 2 2 0 0 1 0-3.6A9 9 0 0 1 12 3c2 0 3.5 1.1 3.5 2.5s-.9 2.5-2 2.5c-.8 0-1.5-.4-1.5-1"/></symbol>
+<symbol id="i-trophy" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></symbol>
+<symbol id="i-plane" viewBox="0 0 24 24"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></symbol>
+<symbol id="i-wrench" viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+<symbol id="i-salad" viewBox="0 0 24 24"><path d="M7 21h10"/><path d="M12 21a9 9 0 0 0 9-9H3a9 9 0 0 0 9 9Z"/><path d="M11.38 12a2.4 2.4 0 0 1-.4-4.77 2.4 2.4 0 0 1 3.2-2.77 2.4 2.4 0 0 1 3.47-.63 2.4 2.4 0 0 1 3.37 3.37 2.4 2.4 0 0 1-1.1 3.7 2.51 2.51 0 0 1 .03 1.1"/><path d="m13 12 4-4"/><path d="M10.9 7.25A3.99 3.99 0 0 0 4 10c0 .73.2 1.41.54 2"/></symbol>
+<symbol id="i-utensils" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></symbol>
+<symbol id="i-beer" viewBox="0 0 24 24"><path d="M17 11h1a3 3 0 0 1 0 6h-1"/><path d="M9 12v6"/><path d="M13 12v6"/><path d="M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.72.5-2.5.5a2.5 2.5 0 0 1 0-5c.78 0 1.57.5 2.5.5S9.44 2 11 2s2 1.5 3 1.5 1.72-.5 2.5-.5a2.5 2.5 0 0 1 0 5c-.78 0-1.5-.5-2.5-.5Z"/><path d="M5 8v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8"/></symbol>
+<symbol id="i-coffee" viewBox="0 0 24 24"><path d="M10 2v2"/><path d="M14 2v2"/><path d="M16 8a1 1 0 0 1 1 1v8a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V9a1 1 0 0 1 1-1h14a4 4 0 1 1 0 8h-1"/><path d="M6 2v2"/></symbol>
+<symbol id="i-popcorn" viewBox="0 0 24 24"><path d="M18 8a2 2 0 0 0 0-4 2 2 0 0 0-4 0 2 2 0 0 0-4 0 2 2 0 0 0-4 0 2 2 0 0 0 0 4"/><path d="M10 22 9 8"/><path d="m14 22 1-14"/><path d="M20 8c.5 0 .9.4.8 1l-2.6 12c-.1.5-.7 1-1.2 1H7c-.6 0-1.1-.4-1.2-1L3.2 9c-.1-.6.3-1 .8-1Z"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></symbol>
+<symbol id="i-smartphone" viewBox="0 0 24 24"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></symbol>
+<symbol id="i-clapperboard" viewBox="0 0 24 24"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"/><path d="m6.2 5.3 3.1 3.9"/><path d="m12.4 3.4 3.1 4"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+<symbol id="i-gift" viewBox="0 0 24 24"><rect x="3" y="8" width="18" height="4" rx="1"/><path d="M12 8v13"/><path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7"/><path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 8 0 0 1 12 8a4.8 8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5"/></symbol>
+<symbol id="i-banknote" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></symbol>
+<symbol id="i-shopping-bag" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></symbol>
+<symbol id="i-trending-up" viewBox="0 0 24 24"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></symbol>
+<symbol id="i-arrow-left-right" viewBox="0 0 24 24"><path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/></symbol>
+<symbol id="i-layers" viewBox="0 0 24 24"><path d="M12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83z"/><path d="M2 12a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 12"/><path d="M2 17a1 1 0 0 0 .58.91l8.6 3.91a2 2 0 0 0 1.65 0l8.58-3.9A1 1 0 0 0 22 17"/></symbol>
+<symbol id="i-wallet" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+<symbol id="i-landmark" viewBox="0 0 24 24"><line x1="3" x2="21" y1="22" y2="22"/><line x1="6" x2="6" y1="18" y2="11"/><line x1="10" x2="10" y1="18" y2="11"/><line x1="14" x2="14" y1="18" y2="11"/><line x1="18" x2="18" y1="18" y2="11"/><polygon points="12 2 20 7 4 7"/></symbol>
+<symbol id="i-piggy-bank" viewBox="0 0 24 24"><path d="M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z"/><path d="M2 9v1c0 1.1.9 2 2 2h1"/><path d="M16 11h.01"/></symbol>
+<symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+<symbol id="i-credit-card" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
+<symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+<symbol id="i-arrow-down-to-line" viewBox="0 0 24 24"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></symbol>
+<symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
+<symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
 </defs></svg>
 
 <div class="shell">
@@ -445,14 +449,15 @@ var CATEGORIES = {
   'Collectibles':['TCG Investing']
 };
 var CAT_COLOR = { 'Family Infrastructure':'var(--c-infra)', 'Personal Cash':'var(--c-personal)', 'Retirement 3a':'var(--c-3a)', 'Financial Investing':'var(--c-fin)', 'Collectibles':'var(--c-coll)' };
-// Simple line icons: one per subcategory, falling back to the category
-var SUB_ICON = { 'Groceries':'basket', 'Lunches':'meal', 'Dinners':'meal', 'Eating out':'meal', 'Coffees':'cup', 'Drinks':'glass', 'Snacks':'apple',
-  'Transportation':'tram', 'Subscriptions':'repeat', 'Entertainment':'play', 'Hobbies':'star', 'Activities':'star', 'Presents':'gift', 'Extras':'dots', 'Cash':'note',
-  'Vacations':'plane', 'General Household':'house', 'Mortgage':'house', 'Utilities':'bolt', 'Insurance':'shield', 'Childcare':'heart',
-  'TCG Investing':'cards', 'ETF Investing':'chart', 'Forex Investing':'chart', 'Funds':'chart' };
-var CAT_ICON = { 'Family Infrastructure':'house', 'Personal Cash':'wallet', 'Retirement 3a':'pillar', 'Financial Investing':'chart', 'Collectibles':'cards' };
-var ACCT_ICON = { current_account:'bank', savings_account:'vault', investment_account:'chart', third_pillar:'pillar', private_pension:'pillar', tcg_investments:'cards',
-  real_estate:'house', vehicle:'car', loan:'minus', mortgage:'house', credit_card_debt:'minus', other_liability:'minus' };
+// Line icons as in Base44 (Lucide set, same subcategory mapping), coloured by category, no background
+var SUB_ICON = { 'Mortgage':'house', 'Utilities':'zap', 'Groceries':'shopping-cart', 'Insurance':'shield', 'Transportation':'car', 'Childcare':'baby',
+  'Activities':'trophy', 'Vacations':'plane', 'General Household':'wrench', 'Lunches':'salad', 'Dinners':'utensils', 'Drinks':'beer', 'Coffees':'coffee',
+  'Snacks':'popcorn', 'Hobbies':'palette', 'Subscriptions':'smartphone', 'Entertainment':'clapperboard', 'Presents':'gift', 'Cash':'banknote',
+  'Extras':'shopping-bag', 'ETF Investing':'trending-up', 'Forex Investing':'arrow-left-right', 'TCG Investing':'layers', 'Funds':'wallet' };
+var CAT_ICON = { 'Family Infrastructure':'house', 'Personal Cash':'wallet', 'Retirement 3a':'landmark', 'Financial Investing':'trending-up', 'Collectibles':'layers' };
+var CAT_TINT = { 'Family Infrastructure':'#2563EB', 'Personal Cash':'#D97706', 'Retirement 3a':'#7C3AED', 'Financial Investing':'#059669', 'Collectibles':'#E11D48' };
+var ACCT_ICON = { current_account:'landmark', savings_account:'piggy-bank', investment_account:'trending-up', third_pillar:'landmark', private_pension:'user', tcg_investments:'layers',
+  real_estate:'house', vehicle:'car', loan:'credit-card', mortgage:'house', credit_card_debt:'credit-card', other_liability:'credit-card' };
 var TYPES = [['expense','Expense'],['income','Income'],['refund','Refund'],['investment','Investment']];
 var ACCOUNTS = [['credit_card','Credit card'],['debit_card','Debit card']];
 var NAV = [
@@ -462,7 +467,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '06.11.2026 · 3';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '06.11.2026 · 4';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
@@ -1396,7 +1401,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       '<button class="navlink" data-nav="subscriptions">All recurring</button></div><div class="upstrip">' +
       u.map(function (x) {
         var i = x.late ? UI.upLate.push(x) - 1 : -1;
-        return '<div class="up' + (x.inflow ? ' in' : '') + (x.late ? ' late' : '') + '"><span class="ud">' + periodDay(x.d) + '</span><span class="un">' + (x.r ? catIco(x.r.category, x.r.subcategory) : ico('cal')) + ' ' + esc(x.name) + '</span>' +
+        return '<div class="up' + (x.inflow ? ' in' : '') + (x.late ? ' late' : '') + '"><span class="ud">' + periodDay(x.d) + '</span><span class="un">' + (x.r ? catIco(x.r.category, x.r.subcategory) : ico('calendar')) + ' ' + esc(x.name) + '</span>' +
           '<span class="ua num">' + (x.inflow ? '+' : '') + (x.approx ? '~' : '') + sw(x.amount) + '</span><span class="uk">' + x.kind + '</span>' +
           (x.late ? '<span class="uq"><button class="navlink" data-act="uppaid" data-i="' + i + '">' + (x.inflow ? 'Received' : 'Paid') + '</button><button class="navlink" data-act="upskip" data-i="' + i + '">Not this time</button></span>' : '') + '</div>';
       }).join('') + '</div></section>';
@@ -1661,7 +1666,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
           var v = Math.abs(cur.per[e.id]), foreign = e.currency && e.currency !== 'CHF';
           var ch = prev ? Math.abs(cur.per[e.id]) - Math.abs(prev.per[e.id] || 0) : null, upd = cur.updated[e.id];
           var inv = isInv(e) ? (+e.total_invested || 0) * (foreign ? (+e.exchange_rate || 1) : 1) : 0, gn = v - inv;
-          return '<div class="drill" data-act="weditacct" data-id="' + esc(e.id) + '" tabindex="0" role="button"><span><b>' + ico(ACCT_ICON[e.account_type] || 'dots') + ' ' + esc(e.name) + '</b><small>' + esc(acctType(e.account_type)[0]) + (e.institution ? ' · ' + esc(e.institution) : '') +
+          return '<div class="drill" data-act="weditacct" data-id="' + esc(e.id) + '" tabindex="0" role="button"><span><b>' + ico(ACCT_ICON[e.account_type] || 'tag', e.color || '') + ' ' + esc(e.name) + '</b><small>' + esc(acctType(e.account_type)[0]) + (e.institution ? ' · ' + esc(e.institution) : '') +
             (foreign ? ' · ' + fmt0.format(Math.round(+e.current_value || 0)) + ' ' + esc(e.currency) : '') +
             ' · ' + (upd ? 'updated ' + periodDay(pd(e.last_updated)) : '<span class="stale">' + (e.last_updated ? 'last ' + periodDay(pd(e.last_updated)) : 'not updated') + '</span>') + '</small></span>' +
             '<span class="num">' + sw0(v) + '</span>' +
@@ -2437,10 +2442,10 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
 
   // ─── Transactions ─────────────────────────────────────────────────────────
   // ─── Tags, rules and foreign currency helpers ─────────────────────────────
-  function ico(name, cls) { return '<svg class="ic' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + (name || 'dots') + '"/></svg>'; }
-  function catIco(cat, sub) { return ico(SUB_ICON[sub] || CAT_ICON[cat] || 'dots'); }
-  function txIco(tx) { return tx.type === 'refund' ? ico('refund') : tx.type === 'income' && tx.subcategory !== 'Cash' ? ico('in') : catIco(tx.category, tx.subcategory); }
-  function goalIco(g) { var f = goalFund(g); return ico(f.mode === 'category' && /3a/.test(f.category) ? 'pillar' : /porsch|porch|car|auto/i.test(g.name) ? 'car' : 'target'); }
+  function ico(name, color) { return '<svg class="ic" aria-hidden="true"' + (color ? ' style="color:' + color + '"' : '') + '><use href="#i-' + (name || 'tag') + '"/></svg>'; }
+  function catIco(cat, sub) { return ico(SUB_ICON[sub] || CAT_ICON[cat] || 'tag', CAT_TINT[cat]); }
+  function txIco(tx) { return tx.type === 'refund' ? ico('undo-2', 'var(--good)') : tx.type === 'income' && tx.subcategory !== 'Cash' ? ico('arrow-down-to-line', 'var(--good)') : catIco(tx.category, tx.subcategory); }
+  function goalIco(g) { var f = goalFund(g); return f.mode === 'category' && /3a/.test(f.category) ? ico('landmark', CAT_TINT['Retirement 3a']) : /porsch|porch|car|auto/i.test(g.name) ? ico('car', '#D97706') : ico('target', '#D97706'); }
   function tagsOf(tx) { return String(tx.tags || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean); }
   function allTags() {
     var m = {};

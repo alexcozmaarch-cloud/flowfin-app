@@ -609,7 +609,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     setSync('busy');
     var send = Object.assign({}, row); if (isNew) delete send.id;
     var p = post({ action:'upsert', table:table, row:send }).then(function (j) {
-      var i = arr.findIndex(function (r) { return r.id === tmpId; });
+      if (!j || !j.row) throw new Error('the backend did not return the saved row');
+      var i = arr.findIndex(function (r) { return r && r.id === tmpId; });
       if (i > -1) arr[i] = j.row; else arr.push(j.row);
       if (isNew && oldId && /^tmp-/.test(oldId)) deleteRow(table, oldId, true);   // a stale temporary row from an old bug
       delete PENDING[tmpId];
@@ -617,7 +618,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       return j.row;
     }).catch(function (e) {
       // put things back the way the Sheet has them, so the screen never shows a change that wasn't saved
-      var i = arr.findIndex(function (r) { return r.id === tmpId; });
+      var i = arr.findIndex(function (r) { return r && r.id === tmpId; });
       if (i > -1) { if (before) arr[i] = before; else arr.splice(i, 1); }
       delete PENDING[tmpId];
       setSync('err', e.message); draw();
@@ -1823,7 +1824,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
         notes:'Maximum 3a contribution for 2027 with a pension fund (CHF 7’373). Pay in by mid-December; the money must reach finpension within the calendar year.' });
     }).then(function (row) {
       return saveSetting('goal_fund_' + row.id, JSON.stringify({ mode:'category', category:'Retirement 3a', from:'2027-01-01' }));
-    }).then(function () { toast('Goal added: Pillar 3a 2027'); });
+    }).then(function () { toast('Goal added: Pillar 3a 2027'); })
+      .catch(function () { saveSetting('seed_3a_2027', '').catch(function () {}); });   // try again next time
   }
   function goalFund(g) {
     var v = {}; try { v = JSON.parse(setting('goal_fund_' + g.id, '') || '{}') || {}; } catch (e) { v = {}; }

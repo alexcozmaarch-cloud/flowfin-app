@@ -149,9 +149,17 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .sumbar{display:flex;flex-wrap:wrap;gap:20px;font-size:13px;color:var(--muted)}
 .sumbar b{font-family:var(--f-mono);font-weight:500;color:var(--ink);margin-left:6px}
 .daygroup h4{margin:22px 0 0;padding-bottom:6px;font-size:12px;color:var(--muted);font-weight:500;font-family:var(--f-mono);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--ink)}
-.tx{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule);cursor:pointer}
+.tx{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule);cursor:pointer}
 .tx:hover{background:var(--paper)}
 .tx .sw{display:none}
+.atable.chk>div{grid-template-columns:minmax(170px,2fr) repeat(3,minmax(70px,1fr)) minmax(90px,1.1fr);min-width:560px}
+.atable.chk2>div{grid-template-columns:minmax(0,3fr) minmax(70px,1fr) minmax(90px,1fr)}
+.atable.chk2 small{white-space:normal}
+.ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:-3.5px}
+.tx .ti{width:36px;height:36px;border:1px solid var(--rule);display:grid;place-items:center;color:var(--ink);background:var(--paper)}
+.tx .ti.in{color:var(--good)}
+h3 .ic{width:20px;height:20px;margin-right:4px;vertical-align:-4px}
+.up .un .ic{width:15px;height:15px;vertical-align:-3px}
 .tx .d{min-width:0}
 .tx .d b{display:block;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tx .d small{color:var(--muted);font-size:12px}
@@ -373,6 +381,38 @@ details.fold>summary:hover h3{color:var(--muted)}
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-house" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7M5 9.5V20h14V9.5M10 20v-6h4v6"/></symbol>
+<symbol id="i-basket" viewBox="0 0 24 24"><path d="M3.5 9h17l-1.6 10.2a1 1 0 0 1-1 .8H6.1a1 1 0 0 1-1-.8zM8 9l3-5M16 9l-3-5M9 13v4M15 13v4"/></symbol>
+<symbol id="i-meal" viewBox="0 0 24 24"><path d="M6 3v6a2 2 0 0 0 4 0V3M8 3v18M16 21V3c-2.2 1.2-3 4-3 7 0 1.7 1.3 3 3 3"/></symbol>
+<symbol id="i-cup" viewBox="0 0 24 24"><path d="M4 9h12v5a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5zM16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8 3.5v2.5M12 3.5v2.5"/></symbol>
+<symbol id="i-glass" viewBox="0 0 24 24"><path d="M6 3h12l-1.2 7.5a4.9 4.9 0 0 1-9.6 0zM12 15.5V21M8 21h8M6.6 7h10.8"/></symbol>
+<symbol id="i-apple" viewBox="0 0 24 24"><path d="M12 8c-3-2.2-7.5-.4-7.5 4.6 0 4.2 2.8 8.4 5 8.4 1.2 0 1.6-.6 2.5-.6s1.3.6 2.5.6c2.2 0 5-4.2 5-8.4C19.5 7.6 15 5.8 12 8zM12 8c0-2.2 1-3.6 3-4.5"/></symbol>
+<symbol id="i-tram" viewBox="0 0 24 24"><rect x="5" y="4" width="14" height="13" rx="2"/><path d="M5 11h14M8.5 14h.01M15.5 14h.01M8 17l-2 4M16 17l2 4M10 4l1-2h2l1 2"/></symbol>
+<symbol id="i-repeat" viewBox="0 0 24 24"><path d="M4.5 11A7.5 7.5 0 0 1 17.6 6.4L19.5 8M19.5 3.5V8H15M19.5 13a7.5 7.5 0 0 1-13.1 4.6L4.5 16M4.5 20.5V16H9"/></symbol>
+<symbol id="i-play" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M10 8.5l5.5 3.5-5.5 3.5z"/></symbol>
+<symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z"/></symbol>
+<symbol id="i-gift" viewBox="0 0 24 24"><rect x="3.5" y="8.5" width="17" height="4" rx=".5"/><path d="M5 12.5V20h14v-7.5M12 8.5V20M12 8.5C10.5 5 7 4.5 7 6.7 7 8 9 8.5 12 8.5c3 0 5-.5 5-1.8 0-2.2-3.5-1.7-5 1.8"/></symbol>
+<symbol id="i-dots" viewBox="0 0 24 24"><path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="3"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1"/><circle cx="12" cy="12" r="2.6"/><path d="M6.5 9.5h.01M17.5 14.5h.01"/></symbol>
+<symbol id="i-plane" viewBox="0 0 24 24"><path d="M3 11.5L21 4l-5.5 16-4-6.5zM11.5 13.5L21 4"/></symbol>
+<symbol id="i-cards" viewBox="0 0 24 24"><rect x="4" y="7" width="11" height="14" rx="1.5"/><path d="M8.5 4H18.5A1.5 1.5 0 0 1 20 5.5V17"/></symbol>
+<symbol id="i-chart" viewBox="0 0 24 24"><path d="M3.5 20.5h17M5 16l4.5-4.5 3.5 3 6.5-7M15 7.5h4v4"/></symbol>
+<symbol id="i-pillar" viewBox="0 0 24 24"><path d="M12 2.5L4.5 6h15zM6.5 8.5h11M8 8.5v9.5M12 8.5v9.5M16 8.5v9.5M6 18h12M4.5 21h15"/></symbol>
+<symbol id="i-bank" viewBox="0 0 24 24"><path d="M3.5 9.5L12 4l8.5 5.5zM5.5 10v7.5M9.5 10v7.5M14.5 10v7.5M18.5 10v7.5M3.5 20.5h17"/></symbol>
+<symbol id="i-vault" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="1.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 8.8V7M6 19v2M18 19v2"/></symbol>
+<symbol id="i-wallet" viewBox="0 0 24 24"><path d="M4 7.5h15a1.5 1.5 0 0 1 1.5 1.5v9.5A1.5 1.5 0 0 1 19 20H5.5A1.5 1.5 0 0 1 4 18.5zM4 7.5L15.5 4v3.5M16 13.8h1.5"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12h.01" stroke-width="2.5"/></symbol>
+<symbol id="i-refund" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></symbol>
+<symbol id="i-in" viewBox="0 0 24 24"><path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5M4.5 16v3.5h15V16"/></symbol>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></symbol>
+<symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7.5 3v5.5c0 4.7-3.2 8-7.5 9.5-4.3-1.5-7.5-4.8-7.5-9.5V6z"/></symbol>
+<symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7a4.3 4.3 0 0 1 7.5 2.8C19.5 15.4 12 20 12 20z"/></symbol>
+<symbol id="i-car" viewBox="0 0 24 24"><path d="M3.5 16.5V12l2-5h13l2 5v4.5zM3.5 12h17M7 16.5V19M17 16.5V19M7 14h.01M17 14h.01"/></symbol>
+<symbol id="i-minus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12h8"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="1"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+</defs></svg>
+
 <div class="shell">
   <header class="topnav" id="side"></header>
   <div class="wrap" id="view"></div>
@@ -405,6 +445,14 @@ var CATEGORIES = {
   'Collectibles':['TCG Investing']
 };
 var CAT_COLOR = { 'Family Infrastructure':'var(--c-infra)', 'Personal Cash':'var(--c-personal)', 'Retirement 3a':'var(--c-3a)', 'Financial Investing':'var(--c-fin)', 'Collectibles':'var(--c-coll)' };
+// Simple line icons: one per subcategory, falling back to the category
+var SUB_ICON = { 'Groceries':'basket', 'Lunches':'meal', 'Dinners':'meal', 'Eating out':'meal', 'Coffees':'cup', 'Drinks':'glass', 'Snacks':'apple',
+  'Transportation':'tram', 'Subscriptions':'repeat', 'Entertainment':'play', 'Hobbies':'star', 'Activities':'star', 'Presents':'gift', 'Extras':'dots', 'Cash':'note',
+  'Vacations':'plane', 'General Household':'house', 'Mortgage':'house', 'Utilities':'bolt', 'Insurance':'shield', 'Childcare':'heart',
+  'TCG Investing':'cards', 'ETF Investing':'chart', 'Forex Investing':'chart', 'Funds':'chart' };
+var CAT_ICON = { 'Family Infrastructure':'house', 'Personal Cash':'wallet', 'Retirement 3a':'pillar', 'Financial Investing':'chart', 'Collectibles':'cards' };
+var ACCT_ICON = { current_account:'bank', savings_account:'vault', investment_account:'chart', third_pillar:'pillar', private_pension:'pillar', tcg_investments:'cards',
+  real_estate:'house', vehicle:'car', loan:'minus', mortgage:'house', credit_card_debt:'minus', other_liability:'minus' };
 var TYPES = [['expense','Expense'],['income','Income'],['refund','Refund'],['investment','Investment']];
 var ACCOUNTS = [['credit_card','Credit card'],['debit_card','Debit card']];
 var NAV = [
@@ -574,8 +622,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       draw();
       repairDuplicates();
       repairContribs();
-      seedGoals();
-      seedBudgets2027();
+      runJobs();
     }).catch(function (e) {
       setSync('err', /access key/i.test(e.message) ? 'Add your access key in Settings' : 'Could not reach the Sheet: ' + e.message);
       if (/access key/i.test(e.message) && UI.page !== 'settings') { UI.page = 'settings'; draw(); }
@@ -916,7 +963,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       if (r.carry) note.push('+' + sw0(r.carry) + ' rolled over');
       if (r.sched) note.push('incl. ' + sw0(r.sched) + ' scheduled');
       if (!r.dayToDay) note.push('fixed, no forecast');
-      h += '<div class="fcrow drill"' + drill({ category:r.cat }) + '><div class="fct"><span>' + esc(r.cat) + tag + '</span><span class="num">' + nums + '</span></div>' +
+      h += '<div class="fcrow drill"' + drill({ category:r.cat }) + '><div class="fct"><span>' + catIco(r.cat) + ' ' + esc(r.cat) + tag + '</span><span class="num">' + nums + '</span></div>' +
         '<div class="bar fcbar">' + (r.fc !== null ? '<b style="width:' + Math.min(100, r.fc / scale * 100) + '%"></b>' : '') +
         '<i class="' + (r.over || r.willOver ? 'over' : '') + '" style="width:' + Math.min(100, Math.max(0, r.spent / scale * 100)) + '%"></i>' +
         (r.limit ? '<em class="budget" style="left:' + Math.min(100, r.limit / scale * 100) + '%"></em>' : '') + '</div>' +
@@ -1348,7 +1395,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       '<button class="navlink" data-nav="subscriptions">All recurring</button></div><div class="upstrip">' +
       u.map(function (x) {
         var i = x.late ? UI.upLate.push(x) - 1 : -1;
-        return '<div class="up' + (x.inflow ? ' in' : '') + (x.late ? ' late' : '') + '"><span class="ud">' + periodDay(x.d) + '</span><span class="un">' + esc(x.name) + '</span>' +
+        return '<div class="up' + (x.inflow ? ' in' : '') + (x.late ? ' late' : '') + '"><span class="ud">' + periodDay(x.d) + '</span><span class="un">' + (x.r ? catIco(x.r.category, x.r.subcategory) : ico('cal')) + ' ' + esc(x.name) + '</span>' +
           '<span class="ua num">' + (x.inflow ? '+' : '') + (x.approx ? '~' : '') + sw(x.amount) + '</span><span class="uk">' + x.kind + '</span>' +
           (x.late ? '<span class="uq"><button class="navlink" data-act="uppaid" data-i="' + i + '">' + (x.inflow ? 'Received' : 'Paid') + '</button><button class="navlink" data-act="upskip" data-i="' + i + '">Not this time</button></span>' : '') + '</div>';
       }).join('') + '</div></section>';
@@ -1374,7 +1421,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
         var status = r.tracked
           ? '<select data-act="rstatus" data-id="' + esc(r.tracked.id) + '" aria-label="Status for ' + esc(r.name) + '">' + opt('active','Active',r.status) + opt('paused','Paused',r.status) + opt('cancelled','Cancelled',r.status) + '</select>'
           : '<button class="navlink" data-act="rtrack" data-i="' + i + '">Track</button>';
-        return '<div class="' + (r.status && r.status !== 'active' ? 'off' : '') + '"><span><b>' + esc(r.name) + '</b><small>' + esc(r.subcategory || r.category || '') + ' · ' + r.frequency +
+        return '<div class="' + (r.status && r.status !== 'active' ? 'off' : '') + '"><span><b>' + catIco(r.category, r.subcategory) + ' ' + esc(r.name) + '</b><small>' + esc(r.subcategory || r.category || '') + ' · ' + r.frequency +
           (r.n ? ' · seen ' + r.n + '×' : '') + (r.conf === 'medium' ? ' · likely' : '') + '</small></span>' +
           '<span class="num">' + (r.next ? periodDay(r.next) + (r.overdue ? ' <span class="tag sch">any day</span>' : '') : '—') + '</span>' +
           '<span class="num ' + (inflow ? 'inflow' : '') + '">' + (inflow ? '+' : '') + sw(r.amount) + '</span>' +
@@ -1613,7 +1660,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
           var v = Math.abs(cur.per[e.id]), foreign = e.currency && e.currency !== 'CHF';
           var ch = prev ? Math.abs(cur.per[e.id]) - Math.abs(prev.per[e.id] || 0) : null, upd = cur.updated[e.id];
           var inv = isInv(e) ? (+e.total_invested || 0) * (foreign ? (+e.exchange_rate || 1) : 1) : 0, gn = v - inv;
-          return '<div class="drill" data-act="weditacct" data-id="' + esc(e.id) + '" tabindex="0" role="button"><span><b>' + esc(e.name) + '</b><small>' + esc(acctType(e.account_type)[0]) + (e.institution ? ' · ' + esc(e.institution) : '') +
+          return '<div class="drill" data-act="weditacct" data-id="' + esc(e.id) + '" tabindex="0" role="button"><span><b>' + ico(ACCT_ICON[e.account_type] || 'dots') + ' ' + esc(e.name) + '</b><small>' + esc(acctType(e.account_type)[0]) + (e.institution ? ' · ' + esc(e.institution) : '') +
             (foreign ? ' · ' + fmt0.format(Math.round(+e.current_value || 0)) + ' ' + esc(e.currency) : '') +
             ' · ' + (upd ? 'updated ' + periodDay(pd(e.last_updated)) : '<span class="stale">' + (e.last_updated ? 'last ' + periodDay(pd(e.last_updated)) : 'not updated') + '</span>') + '</small></span>' +
             '<span class="num">' + sw0(v) + '</span>' +
@@ -1816,30 +1863,61 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   // How a goal is funded: pct = share of each period's net saved (Base44 rule), fixed = an amount you put in each month,
   // account = the goal follows the balance of an account on Wealth.
   // One-time goals Alex asked for. Each runs once (a Settings flag), and never if a goal with that name exists.
-  // Budgets agreed on 06.11.2026 for 2027 (after the 3a), starting with the period from 10.01.2027
-  function seedBudgets2027() {
-    if (setting('seed_budgets_2027', '') || !txs().length) return;
-    var from = '2027-01-10', plan = [['Family Infrastructure', 6950], ['Retirement 3a', 615], ['Personal Cash', 480], ['Collectibles', 550]];
-    var have = (DATA.Budget || []).filter(function (b) { return String(b.period || '').slice(0, 10) === from; }).map(function (b) { return b.category; });
-    var rows = plan.filter(function (x) { return have.indexOf(x[0]) < 0; }).map(function (x) {
-      var cur = budgetMapFor(periodAt(0))[x[0]];
-      return { category:x[0], monthly_limit:x[1], period:from, is_default:false, rollover_enabled:cur ? truthy(cur.rollover_enabled) : false };
+  // ─── One-time data jobs ──────────────────────────────────────────────────
+  // Each job checks what already exists, saves one row at a time, and only marks itself done once every save worked,
+  // so a dropped connection just means it tries again on the next open. Jobs run one after another, once per visit.
+  var JOBS_RAN = false;
+  function runJobs() {
+    if (JOBS_RAN || !txs().length) return;
+    JOBS_RAN = true;
+    var chain = Promise.resolve();
+    [jobRestorePorsche, jobGoal3a2027, jobBudgets2027].forEach(function (job) {
+      chain = chain.then(function () { return job(); }).catch(function (e) { toast('Setup step not saved yet (' + e.message + '); it will try again next time.'); });
     });
-    saveSetting('seed_budgets_2027', '1').then(function () { return rows.length ? saveMany('Budget', rows) : null; })
-      .then(function () { if (rows.length) toast('2027 budgets set, from 10.01.2027'); })
-      .catch(function () { saveSetting('seed_budgets_2027', '').catch(function () {}); });
+    return chain;
   }
-  function seedGoals() {
-    if (setting('seed_3a_2027', '') || !txs().length) return;
-    var name = 'Pillar 3a 2027';
-    if ((DATA.FinancialGoal || []).some(function (g) { return g.name === name; })) return saveSetting('seed_3a_2027', '1');
-    saveSetting('seed_3a_2027', '1').then(function () {
-      return saveRow('FinancialGoal', { name:name, target_amount:7373, current_amount:0, saving_pct:0, deadline:'2027-12-31', icon:'🏛️', color:'', fund_bucket:'',
-        notes:'Maximum 3a contribution for 2027 with a pension fund (CHF 7’373). Pay in by mid-December; the money must reach finpension within the calendar year.' });
-    }).then(function (row) {
-      return saveSetting('goal_fund_' + row.id, JSON.stringify({ mode:'category', category:'Retirement 3a', from:'2027-01-01' }));
-    }).then(function () { toast('Goal added: Pillar 3a 2027'); })
-      .catch(function () { saveSetting('seed_3a_2027', '').catch(function () {}); });   // try again next time
+  function seq(items, fn) { var c = Promise.resolve(); items.forEach(function (x) { c = c.then(function () { return fn(x); }); }); return c; }
+  function done(key) { return setting(key, '') === '1'; }
+  // Black Porsche and its 4 contributions disappeared on 06.11.2026; put them back exactly as imported from Base44
+  function jobRestorePorsche() {
+    var key = 'job_restore_porsche';
+    if (done(key)) return;
+    var gid = '6abcdd8dc07aa2a0e69e164a', goals = DATA.FinancialGoal || [];
+    var have = goals.some(function (g) { return g.id === gid || /porsche|porche/i.test(g.name || ''); });
+    var contribs = [['6ae46bc6057ff301d4e8247b','2026-04-10',48.67,486.73], ['6ae46bc6057ff301d4e8247c','2026-05-10',86.18,861.78],
+      ['6ae46bc6057ff301d4e8247d','2026-07-10',81.32,813.19], ['6ae46bc6057ff301d4e8247e','2026-09-10',50.79,507.9]];
+    return (have ? Promise.resolve() : saveRow('FinancialGoal', { id:gid, name:'Black Porche', target_amount:80000, current_amount:5335.25, saving_pct:10, deadline:'2036-08-28', icon:'🚗', color:'amber', fund_bucket:'savings',
+        notes:'1980 911 SC 3.0 Weissach €74,900 106,700 km 1 of 400 Black Metallic Matching numbers Munich, Germany', created_date:'2026-09-30 09:59:41' }))
+      .then(function () {
+        if (have) return;
+        return seq(contribs.filter(function (c) { return !(DATA.GoalContribution || []).some(function (x) { return x.goal_id === gid && String(x.period).slice(0, 10) === c[1]; }); }),
+          function (c) { return saveRow('GoalContribution', { id:c[0], goal_id:gid, period:c[1], amount:c[2], pct:10, net:c[3], created_date:'2026-10-30 10:04:54' }); });
+      })
+      .then(function () { return saveSetting(key, '1'); })
+      .then(function () { if (!have) toast('Black Porche goal restored'); });
+  }
+  function jobGoal3a2027() {
+    var key = 'job_goal_3a_2027', name = 'Pillar 3a 2027';
+    if (done(key)) return;
+    var g = (DATA.FinancialGoal || []).filter(function (x) { return x.name === name; })[0];
+    var made = !g;
+    return (g ? Promise.resolve(g) : saveRow('FinancialGoal', { name:name, target_amount:7373, current_amount:0, saving_pct:0, deadline:'2027-12-31', icon:'', color:'', fund_bucket:'',
+        notes:'Maximum 3a contribution for 2027 with a pension fund (CHF 7’373). Pay in by mid-December; the money must reach finpension within the calendar year.' }))
+      .then(function (row) { return goalFund(row).mode === 'category' ? null : saveSetting('goal_fund_' + row.id, JSON.stringify({ mode:'category', category:'Retirement 3a', from:'2027-01-01' })); })
+      .then(function () { return saveSetting(key, '1'); })
+      .then(function () { if (made) toast('Goal added: Pillar 3a 2027'); });
+  }
+  // Budgets agreed on 06.11.2026 for 2027 (after the 3a), from the period starting 10.01.2027
+  function jobBudgets2027() {
+    var key = 'job_budgets_2027';
+    if (done(key)) return;
+    var from = '2027-01-10', plan = [['Family Infrastructure', 6950], ['Retirement 3a', 615], ['Personal Cash', 480], ['Collectibles', 550]];
+    var todo = plan.filter(function (x) { return !(DATA.Budget || []).some(function (b) { return b.category === x[0] && String(b.period || '').slice(0, 10) === from; }); });
+    return seq(todo, function (x) {
+      var cur = budgetMapFor(periodAt(0))[x[0]];
+      return saveRow('Budget', { category:x[0], monthly_limit:x[1], period:from, is_default:false, rollover_enabled:cur ? truthy(cur.rollover_enabled) : false });
+    }).then(function () { return saveSetting(key, '1'); })
+      .then(function () { if (todo.length) toast('2027 budgets set, from 10.01.2027'); });
   }
   function goalFund(g) {
     var v = {}; try { v = JSON.parse(setting('goal_fund_' + g.id, '') || '{}') || {}; } catch (e) { v = {}; }
@@ -1903,7 +1981,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       if (v.cg) { var remM = v.cg.months.filter(function (k) { return k >= mkey(ymd(today())); }).length; need = remM ? left / remM : null; }
       var etaDate = v.eta, late = dl && etaDate && etaDate > dl;
       var per = goalPeriods(g), missing = per.filter(function (x) { return x.suggested > 0 && (!x.rec || Math.abs((+x.rec.amount || 0) - x.suggested) > 0.004); });
-      h += '<section class="card"><h3>' + esc(g.name) + '<span class="r"><button class="navlink" data-act="gedit" data-id="' + esc(g.id) + '">Edit</button></span></h3>' +
+      h += '<section class="card"><h3>' + goalIco(g) + ' ' + esc(g.name) + '<span class="r"><button class="navlink" data-act="gedit" data-id="' + esc(g.id) + '">Edit</button></span></h3>' +
         '<div class="bhead"><span class="num" style="font-size:28px">' + sw0(cur) + ' <span class="soon" style="font-size:18px">/ ' + sw0(target) + '</span></span><span class="num">' + (pct * 100).toFixed(1) + '%</span></div>' +
         '<div class="bar bbar"><i style="width:' + Math.min(100, pct * 100) + '%"></i></div>' +
         (g.notes ? '<p class="soon" style="margin:0;font-size:13px">' + esc(g.notes) + '</p>' : '') +
@@ -2090,7 +2168,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     shown.forEach(function (x) {
       var tx = x.tx, s = st(x), inflow = tx.type === 'income';
       h += '<div class="anrow"><div class="and"><span class="num soon">' + periodDay(pd(tx.date)) + String(pd(tx.date).getFullYear()).slice(2) + '</span>' +
-        '<span><b>' + esc(tx.description) + '</b><small>' + esc(tx.category) + (tx.subcategory ? ' › ' + esc(tx.subcategory) : '') + ' · ' + x.why + '</small></span>' +
+        '<span><b>' + txIco(tx) + ' ' + esc(tx.description) + '</b><small>' + esc(tx.category) + (tx.subcategory ? ' › ' + esc(tx.subcategory) : '') + ' · ' + x.why + '</small></span>' +
         '<span class="num ' + (inflow ? 'inflow' : '') + '">' + (inflow ? '+' : '') + sw(+tx.amount) + '</span></div>' +
         '<div class="anb"><div class="seg2">' +
         '<button class="' + (s === 'confirmed' ? 'on' : '') + '" data-act="anset" data-id="' + esc(tx.id) + '" data-v="confirmed">Keep</button>' +
@@ -2233,6 +2311,74 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     return out;
   }
 
+  // ─── Budget check ─────────────────────────────────────────────────────────
+  // Budgets against what you actually earn and spend (last 6 finished periods, one-offs left out), plus a few
+  // market prices for things you pay for regularly. Recomputed from your data every time.
+  var MARKET = [
+    { re:/swisscom|sunrise|\bsalt\b|yallo|wingo|mobile/i, label:'Mobile plan', market:15, note:'unlimited Swiss mobile plans start around CHF 11–15 a month (moneyland, January 2026)' },
+    { re:/base44/i, label:'Base44', market:0, note:'replaced by FlowFin; cancel once the two weeks side by side are over' }
+  ];
+  var BFS_SAVE_PCT = 15.6;   // average Swiss household saves 15.6% of gross income (BFS household budget survey 2022)
+  function finishedPeriods(n) {
+    var first = txs().reduce(function (m, tx) { return !m || tx.date < m ? tx.date : m; }, '');
+    var out = []; for (var i = 1; i <= n; i++) { var p = periodAt(UI.periodOffset - i); if (first && ymd(p.end) >= first) out.push(p); }
+    return out;
+  }
+  function median(a) { var b = a.slice().sort(function (x, y) { return x - y; }), m = Math.floor(b.length / 2); return b.length ? (b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2) : 0; }
+  function budgetCheckHTML() {
+    var ps = finishedPeriods(6); if (ps.length < 2) return '';
+    var r = roles();
+    var salary = ps.map(function (p) { return sumBy(txs().filter(function (tx) { return inPeriod(tx, p) && tx.anomaly_status !== 'excluded' && isSalary(tx, r); }), function (tx) { return +tx.amount || 0; }); });
+    var inc = sumBy(salary, function (x) { return x; }) / ps.length;
+    var cur = periodAt(UI.periodOffset), map = budgetMapFor(cur);
+    var cats = Object.keys(CATEGORIES).filter(function (c) { return map[c] && +map[c].monthly_limit > 0 || ps.some(function (p) { return catSpend(c, p, true).spent > 5; }); });
+    var rows = cats.map(function (c) {
+      var spend = ps.map(function (p) { return Math.max(0, catSpend(c, p, true).spent); });
+      var nb = nextBudget(c, cur);
+      return { cat:c, budget:map[c] ? +map[c].monthly_limit || 0 : 0, avg:sumBy(spend, function (x) { return x; }) / ps.length, med:median(spend), next:nb };
+    });
+    var totB = sumBy(rows, function (x) { return x.budget; }), totA = sumBy(rows, function (x) { return x.avg; });
+    var nextDate = rows.filter(function (x) { return x.next; }).map(function (x) { return String(x.next.period).slice(0, 10); }).sort()[0];
+    var totN = nextDate ? sumBy(rows, function (x) { var b = budgetMapFor({ start:pd(nextDate) })[x.cat]; return b ? +b.monthly_limit || 0 : 0; }) : null;
+    var gapNow = inc - totB, gapNext = totN === null ? null : inc - totN;
+    var h = '<p class="soon" style="margin:0 0 14px;max-width:62rem">Your budgets against your salary and what you actually spent over the last ' + ps.length + ' finished periods (' + periodDay(ps[ps.length - 1].start) + ' – ' + periodDay(ps[0].end) + String(ps[0].end.getFullYear()) + '), one-offs left out.</p>';
+    h += '<section class="kpis" style="grid-template-columns:repeat(' + (totN === null ? 3 : 4) + ',minmax(0,1fr));margin-bottom:18px">' +
+      kpi('Salary', sw0(inc), 'a period, average') +
+      kpi('Budgeted now', sw0(totB), '<span class="' + (gapNow < 0 ? 'neg' : '') + '">' + (gapNow < 0 ? sw0(-gapNow) + ' more than salary' : sw0(gapNow) + ' not budgeted') + '</span>') +
+      (totN === null ? '' : kpi('From ' + periodDay(pd(nextDate)) + nextDate.slice(0, 4), sw0(totN), '<span class="' + (gapNext < -1 ? 'neg' : '') + '">' + (gapNext < -1 ? sw0(-gapNext) + ' more than salary' : sw0(gapNext) + ' not budgeted') + '</span>')) +
+      kpi('Spent, usual period', sw0(totA), '<span class="' + (inc - totA < 0 ? 'neg' : '') + '">' + (inc - totA >= 0 ? sw0(inc - totA) + ' left' : sw0(totA - inc) + ' short') + '</span> on average') + '</section>';
+    h += '<div class="atable chk"><div class="ah"><span>Category</span><span>Budget</span><span>Usual spend</span><span>' + (nextDate ? 'From ' + periodDay(pd(nextDate)) : '') + '</span><span>Fits?</span></div>' +
+      rows.map(function (x) {
+        var lim = x.next ? +x.next.monthly_limit || 0 : x.budget, diff = lim - x.avg;
+        var verdict = !lim ? '<span class="soon">no budget</span>' : Math.abs(diff) < lim * 0.05 ? 'about right' : diff > 0 ? '<span class="soon">' + sw0(diff) + ' spare</span>' : '<span class="neg">' + sw0(-diff) + ' over</span>';
+        return '<div><span><b>' + catIco(x.cat) + ' ' + esc(x.cat) + '</b><small>typical period ' + sw0(x.med) + '</small></span><span class="num">' + (x.budget ? sw0(x.budget) : '—') + '</span>' +
+          '<span class="num">' + sw0(x.avg) + '</span><span class="num">' + (x.next ? sw0(+x.next.monthly_limit || 0) : '') + '</span><span>' + verdict + '</span></div>';
+      }).join('') + '</div>';
+    // regular costs above market price
+    var last3 = ps.slice(0, 3), finds = [];
+    MARKET.forEach(function (m) {
+      var amt = sumBy(txs().filter(function (tx) { return m.re.test(tx.description || '') && (tx.type === 'expense') && last3.some(function (p) { return inPeriod(tx, p); }); }), function (tx) { return +tx.amount || 0; }) / last3.length;
+      if (amt > m.market + 5) finds.push({ label:m.label, amt:amt, save:amt - m.market, note:m.note });
+    });
+    // lumpy costs worth a monthly set-aside
+    var vac = ps.map(function (p) { return sumBy(txs().filter(function (tx) { return inPeriod(tx, p) && tx.subcategory === 'Vacations' && tx.type === 'expense'; }), function (tx) { return +tx.amount || 0; }); });
+    var vacAvg = sumBy(vac, function (x) { return x; }) / ps.length;
+    h += '<div class="subhead" style="margin-top:22px"><b>Where money could come from</b><span>regular costs compared with market prices</span></div>';
+    h += finds.length ? '<div class="atable chk2">' + finds.map(function (f) {
+      return '<div><span><b>' + esc(f.label) + '</b><small>' + esc(f.note) + '</small></span><span class="num">' + sw0(f.amt) + '</span><span class="num pos">−' + sw0(f.save) + '</span></div>';
+    }).join('') + '<div><span><b>Together</b></span><span></span><span class="num pos">−' + sw0(sumBy(finds, function (f) { return f.save; })) + ' a period</span></div></div>' : '<p class="soon" style="margin:6px 0 0">Nothing above market price right now.</p>';
+    // what you put aside
+    var aside = ['Retirement 3a', 'Financial Investing', 'Collectibles'].map(function (c) { var x = rows.filter(function (y) { return y.cat === c; })[0]; return [c, x ? x.avg : 0]; });
+    var spentLife = sumBy(rows.filter(function (x) { return !/Retirement 3a|Financial Investing|Collectibles/.test(x.cat); }), function (x) { return x.avg; });
+    var asidePct = inc ? sumBy(aside, function (a) { return a[1]; }) / inc * 100 : 0, cashLeft = inc - totA;
+    h += '<div class="subhead" style="margin-top:22px"><b>Put aside</b><span>money that stays yours</span></div>' +
+      '<p class="soon" style="margin:6px 0 0;max-width:62rem;font-size:13px">' +
+      aside.filter(function (a) { return a[1] > 1; }).map(function (a) { return esc(a[0]) + ' ' + sw0(a[1]); }).join(' · ') + (aside.some(function (a) { return a[1] > 1; }) ? ' a period' : 'Nothing moved into 3a, investing or collectibles') +
+      ', plus ' + (cashLeft >= 0 ? sw0(cashLeft) + ' cash left over' : sw0(-cashLeft) + ' taken from savings') + '. That is ' + asidePct.toFixed(0) + '% of your salary in assets' +
+      ' (the average Swiss household saves ' + BFS_SAVE_PCT + '% of gross income, BFS 2022). ' +
+      (vacAvg > 20 ? 'Holidays averaged ' + sw0(vacAvg) + ' a period but came in lumps' + (vac.some(function (v) { return v > vacAvg * 2; }) ? ' (up to ' + sw0(Math.max.apply(null, vac)) + ')' : '') + ': budgeting a fixed amount each period smooths that out.' : '') + '</p>';
+    return fold('check', 'Budget check', gapNext !== null ? (gapNext < -1 ? sw0(-gapNext) + ' over salary from ' + periodDay(pd(nextDate)) : 'balanced from ' + periodDay(pd(nextDate))) : (gapNow < 0 ? sw0(-gapNow) + ' over salary' : sw0(gapNow) + ' not budgeted'), h, true);
+  }
   function budgetsHTML() {
     var rows = budgetRows(UI.periodOffset), isCur = UI.periodOffset === 0;
     var withLimit = rows.filter(function (r) { return r.limit > 0; });
@@ -2248,11 +2394,12 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       '</section>';
     h += '<p class="soon" style="margin:-16px 0 0;font-size:13px">Spending counts expenses and investments minus refunds in the same category, scheduled entries included. ' +
       'With rollover on, last period’s unspent amount is added to this period’s limit; overspending never carries forward.</p>';
+    h += budgetCheckHTML();
 
     rows.forEach(function (r, i) {
       var status = !r.limit ? 'No limit set' : r.pct > 1.0001 ? sw(-r.left) + ' over' : r.pct >= 0.8 ? 'Near the limit · ' + sw(r.left) + ' left' : sw(r.left) + ' left';
       h += '<section class="card bcard">' +
-        '<div class="bhead"><h3 style="margin:0">' + esc(r.cat) + '</h3><span class="num ' + (r.pct > 1.0001 ? 'neg' : '') + '" style="font-size:22px">' + sw(r.spent) +
+        '<div class="bhead"><h3 style="margin:0">' + catIco(r.cat) + ' ' + esc(r.cat) + '</h3><span class="num ' + (r.pct > 1.0001 ? 'neg' : '') + '" style="font-size:22px">' + sw(r.spent) +
         (r.limit ? ' <span class="soon">/ ' + sw0(r.limit) + '</span>' : '') + '</span></div>';
       if (r.limit) {
         h += '<div class="bar bbar"><i class="' + (r.pct > 1.0001 ? 'over' : '') + '" style="width:' + Math.min(100, Math.max(0, r.pct * 100)) + '%"></i>' +
@@ -2289,6 +2436,10 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
 
   // ─── Transactions ─────────────────────────────────────────────────────────
   // ─── Tags, rules and foreign currency helpers ─────────────────────────────
+  function ico(name, cls) { return '<svg class="ic' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><use href="#i-' + (name || 'dots') + '"/></svg>'; }
+  function catIco(cat, sub) { return ico(SUB_ICON[sub] || CAT_ICON[cat] || 'dots'); }
+  function txIco(tx) { return tx.type === 'refund' ? ico('refund') : tx.type === 'income' && tx.subcategory !== 'Cash' ? ico('in') : catIco(tx.category, tx.subcategory); }
+  function goalIco(g) { var f = goalFund(g); return ico(f.mode === 'category' && /3a/.test(f.category) ? 'pillar' : /porsch|porch|car|auto/i.test(g.name) ? 'car' : 'target'); }
   function tagsOf(tx) { return String(tx.tags || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean); }
   function allTags() {
     var m = {};
@@ -2448,7 +2599,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       if (tx.type === 'investment') tags += ' <span class="tag">investment</span>';
       if (tx.anomaly_status === 'excluded') tags += ' <span class="tag ex">one-off</span>';
       var fx = tx.orig_currency && tx.orig_currency !== 'CHF' ? ' · ' + fmtCHF.format(+tx.orig_amount || 0) + ' ' + esc(tx.orig_currency) + (+tx.fx_fee ? ' + ' + tx.fx_fee + '% fee' : '') : '';
-      h += '<div class="tx" data-tx="' + esc(tx.id) + '" tabindex="0" role="button"><span class="sw"></span>' +
+      h += '<div class="tx" data-tx="' + esc(tx.id) + '" tabindex="0" role="button"><span class="ti' + (cls ? ' ' + cls : '') + '">' + txIco(tx) + '</span>' +
         '<span class="d"><b>' + esc(tx.description) + tags + '</b><small>' + esc(tx.subcategory || tx.category) + ' · ' + (tx.account === 'credit_card' ? 'Credit card' : 'Debit card') + fx +
         tagsOf(tx).map(function (g) { return ' <span class="hash">#' + esc(g) + '</span>'; }).join('') + '</small></span>' +
         '<span class="a ' + cls + '">' + sign + ' ' + fmtCHF.format(a) + '</span></div>';

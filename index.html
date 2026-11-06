@@ -462,6 +462,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
+var APP_VERSION = '06.11.2026 · 3';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
@@ -2754,6 +2755,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   // ─── Settings ─────────────────────────────────────────────────────────────
   function settingsHTML() {
     var h = topbar('Settings', false);
+    var jobs = ['job_restore_porsche', 'job_goal_3a_2027', 'job_budgets_2027'].filter(done).length;
+    h += '<p class="soon" style="margin:-16px 0 16px;font-size:12px">App version ' + APP_VERSION + ' · setup steps done: ' + jobs + ' of 3</p>';
     // on a phone this is the "More" tab, so it lists every page the bottom bar doesn't have
     var inBar = MOBILE_NAV.map(function (x) { return x[0]; }), more = [];
     NAV.forEach(function (g) { g.items.forEach(function (it) { if (inBar.indexOf(it[0]) < 0 && it[0] !== 'settings') more.push(it); }); });
@@ -2991,7 +2994,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   if (wantAdd) openTx(null);
   loadAll();
 
-  if ('serviceWorker' in navigator && location.protocol === 'https:') { try { navigator.serviceWorker.register('sw.js'); } catch (e) {} }
+  if ('serviceWorker' in navigator && location.protocol === 'https:') { try { navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }).then(function (r) { r.update(); }); } catch (e) {} }
 
   // exposed for the diagnostic check only
   window.FF = { periodModel:periodModel, calcTotals:calcTotals, periodAt:periodAt, applyData:applyData, DATA:DATA };

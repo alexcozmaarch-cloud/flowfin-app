@@ -488,7 +488,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '06.11.2026 · 6';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '06.11.2026 · 7';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
@@ -1914,15 +1914,14 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     var have = goals.some(function (g) { return g.id === gid || /porsche|porche/i.test(g.name || ''); });
     var contribs = [['6ae46bc6057ff301d4e8247b','2026-04-10',48.67,486.73], ['6ae46bc6057ff301d4e8247c','2026-05-10',86.18,861.78],
       ['6ae46bc6057ff301d4e8247d','2026-07-10',81.32,813.19], ['6ae46bc6057ff301d4e8247e','2026-09-10',50.79,507.9]];
-    return (have ? Promise.resolve() : saveRow('FinancialGoal', { id:gid, name:'Black Porche', target_amount:80000, current_amount:5335.25, saving_pct:10, deadline:'2036-08-28', icon:'🚗', color:'amber', fund_bucket:'savings',
-        notes:'1980 911 SC 3.0 Weissach €74,900 106,700 km 1 of 400 Black Metallic Matching numbers Munich, Germany', created_date:'2026-09-30 09:59:41' }))
+    if (have) return saveSetting(key, '1');
+    return saveSetting(key, '1').then(function () { return saveRow('FinancialGoal', { id:gid, name:'Black Porche', target_amount:80000, current_amount:5335.25, saving_pct:10, deadline:'2036-08-28', icon:'🚗', color:'amber', fund_bucket:'savings',
+        notes:'1980 911 SC 3.0 Weissach €74,900 106,700 km 1 of 400 Black Metallic Matching numbers Munich, Germany', created_date:'2026-09-30 09:59:41' }); })
       .then(function () {
-        if (have) return;
         return seq(contribs.filter(function (c) { return !(DATA.GoalContribution || []).some(function (x) { return x.goal_id === gid && String(x.period).slice(0, 10) === c[1]; }); }),
           function (c) { return saveRow('GoalContribution', { id:c[0], goal_id:gid, period:c[1], amount:c[2], pct:10, net:c[3], created_date:'2026-10-30 10:04:54' }); });
       })
-      .then(function () { return saveSetting(key, '1'); })
-      .then(function () { if (!have) toast('Black Porche goal restored'); });
+      .then(function () { toast('Black Porche goal restored'); });
   }
   // Family Infrastructure stays 6'700 in 2027 (holidays get their own budget if needed)
   function jobFamily2027() {
@@ -2144,9 +2143,11 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     }).then(function () { toast(isNew ? 'Goal added' : 'Goal saved'); });
   }
   function deleteGoal() {
-    var id = GFORM.g.id, cs = (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === id; });
+    var id = GFORM.g.id, name = GFORM.g.name, cs = (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === id; });
     closeGForm();
-    var chain = deleteRow('FinancialGoal', id);
+    var chain = (id === '6abcdd8dc07aa2a0e69e164a' && !done('job_restore_porsche') ? saveSetting('job_restore_porsche', '1') : Promise.resolve())
+      .then(function () { return name === 'Pillar 3a 2027' && !done('job_goal_3a_2027') ? saveSetting('job_goal_3a_2027', '1') : null; })
+      .then(function () { return deleteRow('FinancialGoal', id); });
     cs.forEach(function (c) { chain = chain.then(function () { return deleteRow('GoalContribution', c.id, true); }); });
     chain.then(function () { toast('Goal deleted'); });
   }

@@ -152,6 +152,24 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .tx{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule);cursor:pointer}
 .tx:hover{background:var(--paper)}
 .tx .sw{display:none}
+.plsum{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border-top:2px solid var(--ink);margin-top:4px}
+.plsum>div{padding:12px 14px 12px 0;border-right:1px solid var(--rule);display:grid;gap:3px}
+.plsum>div+div{padding-left:14px}.plsum>div:last-child{border-right:0}
+.plsum label{font:500 11px var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.plsum b{font-size:24px;font-weight:400}.plsum small{color:var(--muted);font-size:12px}
+.plsum input{font:400 22px var(--f-mono);width:100%;max-width:150px;border:0;border-bottom:1px solid var(--ink);background:none;color:var(--ink);padding:0}
+.plbar{display:flex;height:12px;background:var(--rule);margin:6px 0 4px}.plbar i{display:block;height:100%}
+.plbar i:nth-child(1){background:var(--ink)}.plbar i:nth-child(2){background:#3A3E3B}.plbar i:nth-child(3){background:#6B706C}.plbar i:nth-child(4){background:#9A9F9B}.plbar i:nth-child(5){background:#BFC3BF}
+.plrows{border-top:2px solid var(--ink)}
+.plrow{display:grid;grid-template-columns:minmax(0,1fr) 120px 42px;gap:4px 12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule)}
+.plrow .nm{display:grid;gap:2px;min-width:0}.plrow .nm small{color:var(--muted);font-size:12px}
+.plrow input[type=number]{font:400 17px var(--f-mono);width:100%;text-align:right;border:0;border-bottom:1px solid var(--ink);background:none;color:var(--ink);padding:2px 0}
+.plrow input[type=range]{grid-column:1/-1;width:100%;accent-color:var(--ink)}
+.plrow.locked input[type=number]{color:var(--muted);border-bottom-color:var(--rule)}
+.pllock{width:40px;height:34px;border:1px solid var(--rule);background:none;color:var(--muted);cursor:pointer;display:grid;place-items:center}
+.pllock.on{border-color:var(--ink)}
+.plfoot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 0 8px;font-family:var(--f-mono);font-size:14px}
+@media (max-width:560px){.plsum{grid-template-columns:1fr}.plsum>div{border-right:0;border-bottom:1px solid var(--rule);padding:10px 0!important}.plrow{grid-template-columns:minmax(0,1fr) 104px 42px}}
 .atable.chk>div{grid-template-columns:minmax(170px,2fr) repeat(3,minmax(70px,1fr)) minmax(90px,1.1fr);min-width:560px}
 .atable.chk2>div{grid-template-columns:minmax(0,3fr) minmax(70px,1fr) minmax(90px,1fr)}
 .atable.chk2 small{white-space:normal}
@@ -414,6 +432,8 @@ details.fold>summary:hover h3{color:var(--muted)}
 <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></symbol>
 <symbol id="i-undo-2" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
 <symbol id="i-arrow-down-to-line" viewBox="0 0 24 24"><path d="M12 17V3"/><path d="m6 11 6 6 6-6"/><path d="M19 21H5"/></symbol>
+<symbol id="i-lock" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+<symbol id="i-lock-open" viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
 <symbol id="i-calendar" viewBox="0 0 24 24"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></symbol>
 <symbol id="i-tag" viewBox="0 0 24 24"><path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
 </defs></svg>
@@ -455,7 +475,7 @@ var SUB_ICON = { 'Mortgage':'house', 'Utilities':'zap', 'Groceries':'shopping-ca
   'Activities':'trophy', 'Vacations':'plane', 'General Household':'wrench', 'Lunches':'salad', 'Dinners':'utensils', 'Drinks':'beer', 'Coffees':'coffee',
   'Snacks':'popcorn', 'Hobbies':'palette', 'Subscriptions':'smartphone', 'Entertainment':'clapperboard', 'Presents':'gift', 'Cash':'banknote',
   'Extras':'shopping-bag', 'ETF Investing':'trending-up', 'Forex Investing':'arrow-left-right', 'TCG Investing':'layers', 'Funds':'wallet' };
-var CAT_ICON = { 'Family Infrastructure':'house', 'Personal Cash':'wallet', 'Retirement 3a':'landmark', 'Financial Investing':'trending-up', 'Collectibles':'layers' };
+var CAT_ICON = { 'Holidays':'plane', 'Family Infrastructure':'house', 'Personal Cash':'wallet', 'Retirement 3a':'landmark', 'Financial Investing':'trending-up', 'Collectibles':'layers' };
 var CAT_TINT = { 'Family Infrastructure':'#2563EB', 'Personal Cash':'#D97706', 'Retirement 3a':'#7C3AED', 'Financial Investing':'#059669', 'Collectibles':'#E11D48' };
 var ACCT_ICON = { current_account:'landmark', savings_account:'piggy-bank', investment_account:'trending-up', third_pillar:'landmark', private_pension:'user', tcg_investments:'layers',
   real_estate:'house', vehicle:'car', loan:'credit-card', mortgage:'house', credit_card_debt:'credit-card', other_liability:'credit-card' };
@@ -468,7 +488,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '06.11.2026 · 5';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '06.11.2026 · 6';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
@@ -771,6 +791,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       var wc = function () { if (UI.page === 'wealth') wealthChart(); };
       if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(wc); else wc();
     }
+    if (UI.page === 'budgets') planPaint();
     if (UI.jump) { var jt = $(UI.jump); UI.jump = ''; if (jt) setTimeout(function () { jt.scrollIntoView({ block:'start' }); }, 0); }
     if (UI.page === 'goals') {
       var gc = function () { if (UI.page === 'goals') savingsChart(); };
@@ -924,7 +945,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     return (w * ad + (1 - w) * vd) * daysInPeriod;
   }
   // Day-to-day categories get a forecast; fixed household and investing are lump sums, so they don't
-  function isDayToDay(cat) { var r = roles(); var inf = r.infra.length ? r.infra : ['Family Infrastructure']; return inf.indexOf(cat) < 0 && cat !== 'Financial Investing' && cat !== 'Retirement 3a'; }
+  function isDayToDay(cat) { if (cat === 'Holidays') return false; var r = roles(); var inf = r.infra.length ? r.infra : ['Family Infrastructure']; return inf.indexOf(cat) < 0 && cat !== 'Financial Investing' && cat !== 'Retirement 3a'; }
   var PROJ_KEY = 'ff_proj_v1';
   function projBasis() { return lsGet(PROJ_KEY) === 'pace' ? 'pace' : 'usual'; }
   function budgetForecastRows(m) {
@@ -1878,7 +1899,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     if (JOBS_RAN || !txs().length) return;
     JOBS_RAN = true;
     var chain = Promise.resolve();
-    [jobRestorePorsche, jobGoal3a2027, jobBudgets2027].forEach(function (job) {
+    [jobRestorePorsche, jobGoal3a2027, jobBudgets2027, jobFamily2027].forEach(function (job) {
       chain = chain.then(function () { return job(); }).catch(function (e) { toast('Setup step not saved yet (' + e.message + '); it will try again next time.'); });
     });
     return chain;
@@ -1903,6 +1924,13 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       .then(function () { return saveSetting(key, '1'); })
       .then(function () { if (!have) toast('Black Porche goal restored'); });
   }
+  // Family Infrastructure stays 6'700 in 2027 (holidays get their own budget if needed)
+  function jobFamily2027() {
+    var key = 'job_family_6700_2027';
+    if (done(key)) return;
+    var b = (DATA.Budget || []).filter(function (x) { return x.category === 'Family Infrastructure' && String(x.period || '').slice(0, 10) === '2027-01-10'; })[0];
+    return (b && +b.monthly_limit !== 6700 ? saveRow('Budget', Object.assign({}, b, { monthly_limit:6700 })) : Promise.resolve()).then(function () { return saveSetting(key, '1'); });
+  }
   function jobGoal3a2027() {
     var key = 'job_goal_3a_2027', name = 'Pillar 3a 2027';
     if (done(key)) return;
@@ -1918,7 +1946,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   function jobBudgets2027() {
     var key = 'job_budgets_2027';
     if (done(key)) return;
-    var from = '2027-01-10', plan = [['Family Infrastructure', 6950], ['Retirement 3a', 615], ['Personal Cash', 480], ['Collectibles', 550]];
+    var from = '2027-01-10', plan = [['Family Infrastructure', 6700], ['Retirement 3a', 615], ['Personal Cash', 480], ['Collectibles', 550]];
     var todo = plan.filter(function (x) { return !(DATA.Budget || []).some(function (b) { return b.category === x[0] && String(b.period || '').slice(0, 10) === from; }); });
     return seq(todo, function (x) {
       var cur = budgetMapFor(periodAt(0))[x[0]];
@@ -2270,10 +2298,13 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   // ─── Budgets (shared by the Budgets page and the dashboard gauges) ────────
   // Spend = expense + investment rows in the category minus refunds in it, whole period (scheduled included).
   // Rollover: effective limit = base + last period's unspent amount (never a deficit).
+  // "Holidays" is its own budget for Vacations spending; while it has a limit, Vacations no longer counts in Family Infrastructure
+  function holidaysBudgeted(p) { var b = budgetMapFor(p)['Holidays']; return !!(b && +b.monthly_limit > 0); }
   function catSpend(cat, p, skipOneOffs) {
-    var spent = 0, sched = 0, t = today();
+    var spent = 0, sched = 0, t = today(), hol = cat === 'Family Infrastructure' && holidaysBudgeted(p);
     txs().forEach(function (tx) {
-      if (tx.category !== cat || !inPeriod(tx, p)) return;
+      if (!inPeriod(tx, p)) return;
+      if (cat === 'Holidays' ? tx.subcategory !== 'Vacations' : (tx.category !== cat || (hol && tx.subcategory === 'Vacations'))) return;
       if (skipOneOffs && tx.anomaly_status === 'excluded') return;
       var a = +tx.amount || 0;
       if (tx.type === 'expense' || tx.type === 'investment') { spent += a; if (pd(tx.date) > t) sched += a; }
@@ -2386,6 +2417,94 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       (vacAvg > 20 ? 'Holidays averaged ' + sw0(vacAvg) + ' a period but came in lumps' + (vac.some(function (v) { return v > vacAvg * 2; }) ? ' (up to ' + sw0(Math.max.apply(null, vac)) + ')' : '') + ': budgeting a fixed amount each period smooths that out.' : '') + '</p>';
     return fold('check', 'Budget check', gapNext !== null ? (gapNext < -1 ? sw0(-gapNext) + ' over salary from ' + periodDay(pd(nextDate)) : 'balanced from ' + periodDay(pd(nextDate))) : (gapNow < 0 ? sw0(-gapNow) + ' over salary' : sw0(gapNow) + ' not budgeted'), h, true);
   }
+  // ─── Plan your allowance ──────────────────────────────────────────────────
+  // Budgets add up to what's left of the salary after Family Infrastructure (the joint-account transfer).
+  // Changing one budget moves the other unlocked ones, in proportion to their size, so the total keeps fitting.
+  var PLAN_CATS = ['Retirement 3a', 'Personal Cash', 'Collectibles', 'Financial Investing', 'Holidays'];
+  var LOCK_KEY = 'ff_lock_v1';
+  function planLocks() { try { return JSON.parse(lsGet(LOCK_KEY) || '') || { 'Retirement 3a':true }; } catch (e) { return { 'Retirement 3a':true }; } }
+  function lastSalary() {
+    var r = roles(), t = today(), best = null;
+    txs().forEach(function (tx) { if (isSalary(tx, r) && tx.anomaly_status !== 'excluded' && tx.date && pd(tx.date) <= t && (+tx.amount || 0) > 1000 && (!best || tx.date > best.date)) best = tx; });
+    return best ? { amount:+best.amount, date:best.date } : { amount:0, date:'' };
+  }
+  function planInit() {
+    var p = periodAt(UI.periodOffset), start = ymd(p.start);
+    if (UI.plan && UI.plan.start === start && UI.plan.dirty) return UI.plan;   // keep your unsaved changes; otherwise follow the saved budgets
+    var map = budgetMapFor(p), vals = {};
+    PLAN_CATS.forEach(function (c) { vals[c] = map[c] ? +map[c].monthly_limit || 0 : 0; });
+    var fam = map['Family Infrastructure'] ? +map['Family Infrastructure'].monthly_limit || 0 : EXPECTED_HOUSEHOLD_EXPENSE;
+    UI.plan = { start:start, fam:fam, vals:vals, locks:UI.plan ? UI.plan.locks : planLocks(), dirty:false };
+    return UI.plan;
+  }
+  function planAllowance() { return Math.max(0, lastSalary().amount - UI.plan.fam); }
+  function planTotal() { var v = UI.plan.vals; return PLAN_CATS.reduce(function (a, c) { return a + (v[c] || 0); }, 0); }
+  function planSpread(diff, except) {
+    var P = UI.plan, keys = PLAN_CATS.filter(function (c) { return c !== except && !P.locks[c]; });
+    if (!keys.length) return;
+    var base = keys.reduce(function (a, c) { return a + P.vals[c]; }, 0);
+    keys.forEach(function (c) { P.vals[c] = Math.max(0, P.vals[c] + diff * (base > 0 ? P.vals[c] / base : 1 / keys.length)); });
+  }
+  function planRound() {
+    var P = UI.plan; PLAN_CATS.forEach(function (c) { P.vals[c] = Math.round(P.vals[c] * 20) / 20; });
+    var d = Math.round((planAllowance() - planTotal()) * 100) / 100;
+    var k = PLAN_CATS.filter(function (c) { return !P.locks[c] && P.vals[c] + d >= 0 && P.vals[c] > 0; })[0];
+    if (k && Math.abs(d) < 1) P.vals[k] = Math.round((P.vals[k] + d) * 100) / 100;
+  }
+  function planFit() { for (var i = 0; i < 3; i++) { var left = planAllowance() - planTotal(); if (Math.abs(left) < 0.005) break; planSpread(left, null); } planRound(); UI.plan.dirty = true; }
+  function planChange(c, v) {
+    var P = UI.plan; v = Math.max(0, Math.min(planAllowance(), isNaN(v) ? 0 : v));
+    var diff = P.vals[c] - v; P.vals[c] = v; planSpread(diff, c); planRound(); P.dirty = true;
+  }
+  function planHTML() {
+    var P = planInit(), sal = lastSalary(), A = planAllowance(), p = periodAt(UI.periodOffset);
+    if (!sal.amount) return '';
+    var usual = {}; finishedPeriods(6).forEach(function (q, i, all) { PLAN_CATS.forEach(function (c) { usual[c] = (usual[c] || 0) + Math.max(0, catSpend(c, q, true).spent) / all.length; }); });
+    var h = '<div class="plsum">' +
+      '<div><label>Salary</label><b class="num">' + sw(sal.amount) + '</b><small>last paid ' + periodDay(pd(sal.date)) + '</small></div>' +
+      '<div><label for="pl_fam">Family Infrastructure</label><input id="pl_fam" class="num" type="number" inputmode="decimal" step="50" min="0" value="' + P.fam + '"><small>joint account</small></div>' +
+      '<div><label>Allowance</label><b class="num" id="pl_allow">' + sw(A) + '</b><small>split between the budgets below</small></div></div>' +
+      '<div class="plbar" id="pl_bar">' + PLAN_CATS.map(function () { return '<i></i>'; }).join('') + '</div><div class="plrows">' +
+      PLAN_CATS.map(function (c, i) {
+        var lk = !!P.locks[c];
+        return '<div class="plrow' + (lk ? ' locked' : '') + '" data-k="' + esc(c) + '"><span class="nm"><b>' + catIco(c) + ' ' + esc(c) + '</b><small>usual spend ' + sw0(usual[c] || 0) + ' · <span id="pl_p' + i + '"></span>' +
+          (c === 'Holidays' ? ' · Vacations spending counts here instead of Family Infrastructure' : '') + '</small></span>' +
+          '<input id="pl_v' + i + '" class="num" type="number" inputmode="decimal" step="5" min="0" aria-label="' + esc(c) + ' budget"' + (lk ? ' disabled' : '') + '>' +
+          '<button class="pllock' + (lk ? ' on' : '') + '" data-act="pllock" data-k="' + esc(c) + '" aria-pressed="' + lk + '" aria-label="' + (lk ? 'Unlock ' : 'Lock ') + esc(c) + '">' + ico(lk ? 'lock' : 'lock-open') + '</button>' +
+          '<input id="pl_r' + i + '" type="range" min="0" step="5" aria-label="' + esc(c) + ' slider"' + (lk ? ' disabled' : '') + '></div>';
+      }).join('') + '</div>' +
+      '<div class="plfoot"><span id="pl_status"></span><span class="plbtns"><button class="btn" data-act="plreset">Reset</button> <button class="btn primary" data-act="plsave">Save budgets</button></span></div>' +
+      '<p class="soon" style="margin:0;font-size:12px">Change one amount and the other unlocked budgets move so the total still fits. The lock keeps a budget where it is. Saving applies from this period (' + periodDay(p.start) + String(p.start.getFullYear()) + ') onwards' + (nextBudget('Personal Cash', p) || nextBudget('Family Infrastructure', p) ? '; budgets already planned for later periods stay as they are' : '') + '.</p>';
+    var d = A - planTotal();
+    return fold('plan', 'Plan your allowance', Math.abs(d) < 0.01 ? 'adds up' : d < 0 ? sw0(-d) + ' over the allowance' : sw0(d) + ' not budgeted', h, true);
+  }
+  function planPaint() {
+    if (!UI.plan || !$('pl_allow')) return;
+    var P = UI.plan, A = planAllowance(), bar = $('pl_bar').children;
+    $('pl_allow').textContent = sw(A);
+    PLAN_CATS.forEach(function (c, i) {
+      var n = $('pl_v' + i), r = $('pl_r' + i), v = P.vals[c];
+      if (document.activeElement !== n) n.value = v.toFixed(2);
+      r.max = Math.ceil(A); if (document.activeElement !== r) r.value = v;
+      $('pl_p' + i).textContent = (A ? Math.round(v / A * 100) : 0) + '% of allowance';
+      bar[i].style.width = (A ? Math.min(100, v / A * 100) : 0) + '%';
+    });
+    var d = Math.round((A - planTotal()) * 100) / 100;
+    $('pl_status').innerHTML = Math.abs(d) < 0.01 ? '<span class="pos">Budgets add up to the allowance: ' + sw(planTotal()) + '</span>'
+      : (d < 0 ? '<span class="neg">' + sw(-d) + ' more than the allowance</span>' : '<span>' + sw(d) + ' not budgeted</span>') + ' <button class="btn" data-act="plfit">' + (d < 0 ? 'Fit to allowance' : 'Spread it') + '</button>';
+  }
+  function planSave() {
+    var P = UI.plan, p = periodAt(UI.periodOffset), start = ymd(p.start), map = budgetMapFor(p), jobs = [];
+    var want = [['Family Infrastructure', P.fam]].concat(PLAN_CATS.map(function (c) { return [c, P.vals[c]]; }));
+    want.forEach(function (w) {
+      var c = w[0], v = Math.round(w[1] * 100) / 100, eff = map[c];
+      if (eff && String(eff.period || '').slice(0, 10) === start) { if (+eff.monthly_limit !== v) jobs.push(Object.assign({}, eff, { monthly_limit:v })); }
+      else if ((eff ? +eff.monthly_limit || 0 : 0) !== v) jobs.push({ category:c, monthly_limit:v, period:start, is_default:false, rollover_enabled:eff ? truthy(eff.rollover_enabled) : false });
+    });
+    if (!jobs.length) { toast('Nothing changed'); return; }
+    seq(jobs, function (row) { return saveRow('Budget', row); }).then(function () { UI.plan = null; toast('Budgets saved from ' + periodDay(p.start)); draw(); })
+      .catch(function () {});
+  }
   function budgetsHTML() {
     var rows = budgetRows(UI.periodOffset), isCur = UI.periodOffset === 0;
     var withLimit = rows.filter(function (r) { return r.limit > 0; });
@@ -2401,6 +2520,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       '</section>';
     h += '<p class="soon" style="margin:-16px 0 0;font-size:13px">Spending counts expenses and investments minus refunds in the same category, scheduled entries included. ' +
       'With rollover on, last period’s unspent amount is added to this period’s limit; overspending never carries forward.</p>';
+    h += planHTML();
     h += budgetCheckHTML();
 
     rows.forEach(function (r, i) {
@@ -2415,10 +2535,9 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       h += '<div class="bmeta"><span class="' + (r.pct > 1.0001 ? 'neg' : '') + '">' + status + '</span>' +
         (r.sched ? '<span>incl. ' + sw(r.sched) + ' scheduled</span>' : '') +
         (r.carry ? '<span>' + sw0(r.base) + ' base + ' + sw(r.carry) + ' rolled over</span>' : '') +
-        (function () { var nb = nextBudget(r.cat, periodAt(UI.periodOffset)); return nb ? '<span>→ ' + sw0(+nb.monthly_limit || 0) + ' from ' + periodDay(pd(String(nb.period).slice(0, 10))) + String(nb.period).slice(0, 4) + '</span>' : ''; })() + '</div>';
+        (function () { var nb = nextBudget(r.cat, periodAt(UI.periodOffset)); return nb && +nb.monthly_limit !== r.base ? '<span>→ ' + sw0(+nb.monthly_limit || 0) + ' from ' + periodDay(pd(String(nb.period).slice(0, 10))) + String(nb.period).slice(0, 4) + '</span>' : ''; })() + '</div>';
       h += '<div class="bedit">' +
-        '<div class="field"><label for="blim' + i + '">Monthly limit (CHF)</label><input id="blim' + i + '" type="number" inputmode="decimal" min="0" step="10" value="' + (r.base || '') + '" placeholder="0"></div>' +
-        '<button class="btn" data-act="bsave" data-i="' + i + '" data-cat="' + esc(r.cat) + '">Save limit</button>' +
+
         '<label class="switch"><input type="checkbox" data-act="broll" data-cat="' + esc(r.cat) + '"' + (r.roll ? ' checked' : '') + (r.b && r.base > 0 ? '' : ' disabled') + '><span>Roll over unspent budget</span></label>' +
         '</div>';
       if (r.roll && r.base > 0) {
@@ -2870,6 +2989,10 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       var arc = isArchived(ae); if (act === 'warch') closeWForm();
       return saveSetting('acct_archived_' + aid, arc ? '' : '1').then(function () { toast(ae.name + (arc ? ' restored' : ' archived')); });
     }
+    if (act === 'pllock') { var lk = a.getAttribute('data-k'); UI.plan.locks[lk] = !UI.plan.locks[lk]; try { lsSet(LOCK_KEY, JSON.stringify(UI.plan.locks)); } catch (e) {} return draw(); }
+    if (act === 'plfit') { planFit(); return planPaint(); }
+    if (act === 'plreset') { UI.plan = null; return draw(); }
+    if (act === 'plsave') return planSave();
     if (act === 'ftoggle') { UI.fOpen = !UI.fOpen; return draw(); }
     if (act === 'txtab') { UI.txTab = a.getAttribute('data-v'); window.scrollTo(0, 0); return draw(); }
     if (act === 'anset') return setAnomaly(a.getAttribute('data-id'), a.getAttribute('data-v'));
@@ -2963,6 +3086,9 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-tx]')) openTx(e.target.getAttribute('data-tx'));
   });
   document.addEventListener('input', function (e) {
+    var pid = e.target.id || '';
+    if (/^pl_[vr]\d$/.test(pid) && UI.plan) { planChange(PLAN_CATS[+pid.slice(4)], parseFloat(String(e.target.value).replace(',', '.'))); return planPaint(); }
+    if (pid === 'pl_fam' && UI.plan) { UI.plan.fam = Math.max(0, parseFloat(e.target.value) || 0); planFit(); return planPaint(); }
     var id = e.target.id;
     if (id === 'morig' && FORM) { recalcFx(); return; }
     if (id.indexOf('wr_') === 0) e.target.dataset.touched = '1';

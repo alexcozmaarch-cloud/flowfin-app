@@ -575,6 +575,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       repairDuplicates();
       repairContribs();
       seedGoals();
+      seedBudgets2027();
     }).catch(function (e) {
       setSync('err', /access key/i.test(e.message) ? 'Add your access key in Settings' : 'Could not reach the Sheet: ' + e.message);
       if (/access key/i.test(e.message) && UI.page !== 'settings') { UI.page = 'settings'; draw(); }
@@ -631,14 +632,14 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
 
   // Clean up duplicate rows left by the old quick-edit bug (temporary ids written to the Sheet).
   // For each natural key the newest row wins; it is kept under a proper id and the others are removed.
-  var NATURAL_KEY = { Budget:'category', Rule:'match', Subscription:'name', Settings:'key' };
+  var NATURAL_KEY = { Budget:function (r) { return r.category ? r.category + '|' + String(r.period || '').slice(0, 10) : ''; }, Rule:'match', Subscription:'name', Settings:'key' };
   var REPAIRING = false;
   function repairDuplicates() {
     if (REPAIRING) return;
     var jobs = [];
     Object.keys(NATURAL_KEY).forEach(function (t) {
       var k = NATURAL_KEY[t], groups = {};
-      (DATA[t] || []).forEach(function (r) { var v = String(r[k] || '').trim().toLowerCase(); if (v) (groups[v] = groups[v] || []).push(r); });
+      (DATA[t] || []).forEach(function (r) { var v = String((typeof k === 'function' ? k(r) : r[k]) || '').trim().toLowerCase(); if (v) (groups[v] = groups[v] || []).push(r); });
       Object.keys(groups).forEach(function (v) {
         var g = groups[v];
         if (g.length < 2 && !/^tmp-/.test(g[0].id)) return;
@@ -1815,6 +1816,19 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   // How a goal is funded: pct = share of each period's net saved (Base44 rule), fixed = an amount you put in each month,
   // account = the goal follows the balance of an account on Wealth.
   // One-time goals Alex asked for. Each runs once (a Settings flag), and never if a goal with that name exists.
+  // Budgets agreed on 06.11.2026 for 2027 (after the 3a), starting with the period from 10.01.2027
+  function seedBudgets2027() {
+    if (setting('seed_budgets_2027', '') || !txs().length) return;
+    var from = '2027-01-10', plan = [['Family Infrastructure', 6950], ['Retirement 3a', 615], ['Personal Cash', 480], ['Collectibles', 550]];
+    var have = (DATA.Budget || []).filter(function (b) { return String(b.period || '').slice(0, 10) === from; }).map(function (b) { return b.category; });
+    var rows = plan.filter(function (x) { return have.indexOf(x[0]) < 0; }).map(function (x) {
+      var cur = budgetMapFor(periodAt(0))[x[0]];
+      return { category:x[0], monthly_limit:x[1], period:from, is_default:false, rollover_enabled:cur ? truthy(cur.rollover_enabled) : false };
+    });
+    saveSetting('seed_budgets_2027', '1').then(function () { return rows.length ? saveMany('Budget', rows) : null; })
+      .then(function () { if (rows.length) toast('2027 budgets set, from 10.01.2027'); })
+      .catch(function () { saveSetting('seed_budgets_2027', '').catch(function () {}); });
+  }
   function seedGoals() {
     if (setting('seed_3a_2027', '') || !txs().length) return;
     var name = 'Pillar 3a 2027';
@@ -2182,15 +2196,27 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     });
     return { spent:spent, sched:sched };
   }
+  // Budgets can change over time: a row's "period" is the first billing period it applies to (empty = from the start).
+  // For any period, each category uses its latest row that has started by then.
+  function budgetMapFor(p) {
+    var start = ymd(p.start), map = {};
+    (DATA.Budget || []).slice().sort(function (a, b) { return String(a.period || '') < String(b.period || '') ? -1 : 1; })
+      .forEach(function (b) { if (!b.period || String(b.period).slice(0, 10) <= start) map[b.category] = b; });
+    return map;
+  }
+  function nextBudget(cat, p) {          // the next change scheduled after period p, if any
+    var start = ymd(p.start), n = null;
+    (DATA.Budget || []).forEach(function (b) { var bp = String(b.period || '').slice(0, 10); if (b.category === cat && bp > start && (!n || bp < String(n.period))) n = b; });
+    return n;
+  }
   function budgetRows(offset) {
-    var p = periodAt(offset), prev = periodAt(offset - 1), map = {};
-    (DATA.Budget || []).forEach(function (b) { map[b.category] = b; });
+    var p = periodAt(offset), prev = periodAt(offset - 1), map = budgetMapFor(p);
     var cats = Object.keys(CATEGORIES);
     Object.keys(map).forEach(function (c) { if (cats.indexOf(c) < 0) cats.push(c); });
     return cats.map(function (c) {
       var b = map[c] || null, base = b ? +b.monthly_limit || 0 : 0, roll = b && truthy(b.rollover_enabled);
-      var carry = 0;
-      if (roll && base > 0) carry = Math.max(0, base - catSpend(c, prev).spent);
+      var carry = 0, pb = budgetMapFor(prev)[c], pbase = pb ? +pb.monthly_limit || 0 : 0;
+      if (roll && base > 0 && pbase > 0) carry = Math.max(0, pbase - catSpend(c, prev).spent);
       var s = catSpend(c, p), limit = base + carry;
       return { cat:c, b:b, base:base, roll:roll, carry:carry, limit:limit, spent:s.spent, sched:s.sched,
         pct: limit > 0 ? s.spent / limit : 0, left: limit - s.spent };
@@ -2234,7 +2260,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       }
       h += '<div class="bmeta"><span class="' + (r.pct > 1.0001 ? 'neg' : '') + '">' + status + '</span>' +
         (r.sched ? '<span>incl. ' + sw(r.sched) + ' scheduled</span>' : '') +
-        (r.carry ? '<span>' + sw0(r.base) + ' base + ' + sw(r.carry) + ' rolled over</span>' : '') + '</div>';
+        (r.carry ? '<span>' + sw0(r.base) + ' base + ' + sw(r.carry) + ' rolled over</span>' : '') +
+        (function () { var nb = nextBudget(r.cat, periodAt(UI.periodOffset)); return nb ? '<span>→ ' + sw0(+nb.monthly_limit || 0) + ' from ' + periodDay(pd(String(nb.period).slice(0, 10))) + String(nb.period).slice(0, 4) + '</span>' : ''; })() + '</div>';
       h += '<div class="bedit">' +
         '<div class="field"><label for="blim' + i + '">Monthly limit (CHF)</label><input id="blim' + i + '" type="number" inputmode="decimal" min="0" step="10" value="' + (r.base || '') + '" placeholder="0"></div>' +
         '<button class="btn" data-act="bsave" data-i="' + i + '" data-cat="' + esc(r.cat) + '">Save limit</button>' +
@@ -2255,7 +2282,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   }
 
   function saveBudget(cat, patch) {
-    var b = (DATA.Budget || []).filter(function (x) { return x.category === cat; })[0];
+    var b = budgetMapFor(periodAt(UI.periodOffset))[cat];
     var row = b ? Object.assign({}, b, patch) : Object.assign({ category:cat, monthly_limit:0, period:'', is_default:true, rollover_enabled:false }, patch);
     return saveRow('Budget', row);
   }

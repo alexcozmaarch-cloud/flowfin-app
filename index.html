@@ -156,7 +156,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .atable.chk2>div{grid-template-columns:minmax(0,3fr) minmax(70px,1fr) minmax(90px,1fr)}
 .atable.chk2 small{white-space:normal}
 .ic{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex:none;vertical-align:-3.5px}
-.tx .ti{width:22px;display:grid;place-items:center}
+.tx .ti{width:22px;display:grid;place-items:center;color:var(--ink)}
+.ic{color:var(--ink)}
 .tx .ti .ic{width:20px;height:20px}
 h3 .ic{width:20px;height:20px;margin-right:4px;vertical-align:-4px}
 .up .un .ic{width:15px;height:15px;vertical-align:-3px}
@@ -467,7 +468,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '06.11.2026 · 4';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '06.11.2026 · 5';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
@@ -2442,7 +2443,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
 
   // ─── Transactions ─────────────────────────────────────────────────────────
   // ─── Tags, rules and foreign currency helpers ─────────────────────────────
-  function ico(name, color) { return '<svg class="ic" aria-hidden="true"' + (color ? ' style="color:' + color + '"' : '') + '><use href="#i-' + (name || 'tag') + '"/></svg>'; }
+  // Icons are drawn in ink only (Alex's choice A, 06.11.2026): Base44 shapes, no colour, no background
+  function ico(name) { return '<svg class="ic" aria-hidden="true"><use href="#i-' + (name || 'tag') + '"/></svg>'; }
   function catIco(cat, sub) { return ico(SUB_ICON[sub] || CAT_ICON[cat] || 'tag', CAT_TINT[cat]); }
   function txIco(tx) { return tx.type === 'refund' ? ico('undo-2', 'var(--good)') : tx.type === 'income' && tx.subcategory !== 'Cash' ? ico('arrow-down-to-line', 'var(--good)') : catIco(tx.category, tx.subcategory); }
   function goalIco(g) { var f = goalFund(g); return f.mode === 'category' && /3a/.test(f.category) ? ico('landmark', CAT_TINT['Retirement 3a']) : /porsch|porch|car|auto/i.test(g.name) ? ico('car', '#D97706') : ico('target', '#D97706'); }

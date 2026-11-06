@@ -574,6 +574,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       draw();
       repairDuplicates();
       repairContribs();
+      seedGoals();
     }).catch(function (e) {
       setSync('err', /access key/i.test(e.message) ? 'Add your access key in Settings' : 'Could not reach the Sheet: ' + e.message);
       if (/access key/i.test(e.message) && UI.page !== 'settings') { UI.page = 'settings'; draw(); }
@@ -1812,9 +1813,21 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   function monthsUntil(d) { var t = today(); return (d.getFullYear() - t.getFullYear()) * 12 + (d.getMonth() - t.getMonth()) + (d.getDate() >= t.getDate() ? 0 : -1); }
   // How a goal is funded: pct = share of each period's net saved (Base44 rule), fixed = an amount you put in each month,
   // account = the goal follows the balance of an account on Wealth.
+  // One-time goals Alex asked for. Each runs once (a Settings flag), and never if a goal with that name exists.
+  function seedGoals() {
+    if (setting('seed_3a_2027', '') || !txs().length) return;
+    var name = 'Pillar 3a 2027';
+    if ((DATA.FinancialGoal || []).some(function (g) { return g.name === name; })) return saveSetting('seed_3a_2027', '1');
+    saveSetting('seed_3a_2027', '1').then(function () {
+      return saveRow('FinancialGoal', { name:name, target_amount:7373, current_amount:0, saving_pct:0, deadline:'2027-12-31', icon:'🏛️', color:'', fund_bucket:'',
+        notes:'Maximum 3a contribution for 2027 with a pension fund (CHF 7’373). Pay in by mid-December; the money must reach finpension within the calendar year.' });
+    }).then(function (row) {
+      return saveSetting('goal_fund_' + row.id, JSON.stringify({ mode:'category', category:'Retirement 3a', from:'2027-01-01' }));
+    }).then(function () { toast('Goal added: Pillar 3a 2027'); });
+  }
   function goalFund(g) {
     var v = {}; try { v = JSON.parse(setting('goal_fund_' + g.id, '') || '{}') || {}; } catch (e) { v = {}; }
-    return { mode:v.mode || 'pct', amount:+v.amount || 0, account:v.account || '' };
+    return { mode:v.mode || 'pct', amount:+v.amount || 0, account:v.account || '', category:v.category || '', from:v.from || '' };
   }
   function acctCHF(e) { if (!e) return 0; return (+e.current_value || 0) * ((e.currency && e.currency !== 'CHF') ? (+e.exchange_rate || 1) : 1); }
   function acctTrend(id) {           // average change a month over the last up-to-6 months
@@ -1827,10 +1840,32 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     var cur = f.mode === 'account' ? acctCHF(acct) : (+g.current_amount || 0), target = +g.target_amount || 0, left = Math.max(0, target - cur);
     var rate, label, note;
     if (f.mode === 'fixed') { rate = f.amount; label = 'At ' + sw0(f.amount) + ' a month'; note = 'your fixed amount'; }
+    else if (f.mode === 'category') {
+      var cg = catGoal(g, f); cur = cg.cur; left = Math.max(0, target - cur); rate = cg.plan; label = 'Plan: ' + sw0(Math.ceil(cg.plan)) + ' a month';
+      var etaText = left <= 0 ? 'reached' : !cg.started ? 'starts ' + periodDay(pd(cg.from)) + cg.from.slice(0, 4) : cg.behind >= 1 ? sw0(cg.behind) + ' behind plan' : 'on track';
+      return { f:f, cg:cg, cur:cur, target:target, left:left, rate:rate, label:label, etaText:etaText, behind:cg.behind >= 1,
+        note:cg.started ? sw0(cg.cur) + ' paid in so far, ' + sw0(cg.due) + ' due by now' : 'from ' + esc(f.category) + ' transactions, ' + periodDay(pd(cg.from)) + ' – ' + periodDay(pd(cg.to)), eta:null };
+    }
     else if (f.mode === 'account') { var tr = acctTrend(f.account); rate = tr.per; label = 'At the account’s trend'; note = tr.n ? (rate >= 0 ? '+' : '−') + sw0(Math.abs(rate)) + ' a month over ' + tr.n + ' month' + (tr.n === 1 ? '' : 's') : 'needs two months of values'; }
     else { var avgNet = avgNetCashFlow(); rate = (+g.saving_pct || 0) / 100 * Math.max(0, avgNet); label = 'At ' + (+g.saving_pct || 0) + '% of net saved'; note = rate > 0 ? sw(rate) + ' a period on average' : 'average net saved is not positive'; }
     var months = rate >= 1 && left / rate <= 600 ? Math.ceil(left / rate) : null;
     return { f:f, acct:acct, cur:cur, target:target, left:left, rate:rate, label:label, note:note, eta:left <= 0 ? today() : months !== null ? addMonthsD(today(), months) : null };
+  }
+  // category mode: the goal is what you actually move into a category (e.g. Retirement 3a) between a start date and the deadline,
+  // checked against an even monthly plan
+  function catGoal(g, f) {
+    var from = f.from || ymd(today()), to = g.deadline || from.slice(0, 4) + '-12-31', t = today();
+    var paid = {}, cur = 0;
+    txs().forEach(function (tx) {
+      if (tx.category !== f.category || !tx.date || tx.date < from || tx.date > to || pd(tx.date) > t) return;
+      var a = +tx.amount || 0, sg = tx.type === 'refund' ? -1 : (tx.type === 'expense' || tx.type === 'investment') ? 1 : 0;
+      if (!sg) return; cur += sg * a; paid[mkey(tx.date)] = (paid[mkey(tx.date)] || 0) + sg * a;
+    });
+    var months = []; for (var k = mkey(from); k <= mkey(to); k = mNext(k)) months.push(k);
+    var target = +g.target_amount || 0, plan = months.length ? target / months.length : target;
+    var started = ymd(t) >= from, nowK = mkey(ymd(t));
+    var due = started ? Math.min(target, plan * months.filter(function (k) { return k < nowK; }).length) : 0;   // months already finished
+    return { months:months, paid:paid, cur:cur, plan:plan, due:due, started:started, from:from, to:to, behind:Math.max(0, due - cur) };
   }
   function goalsHTML() {
     var goals = (DATA.FinancialGoal || []).slice().sort(function (a, b) { return String(a.deadline || '9') < String(b.deadline || '9') ? -1 : 1; });
@@ -1849,6 +1884,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       var v = views[gi], target = v.target, cur = v.cur, left = v.left, pct = target ? cur / target : 0;
       var dl = g.deadline ? pd(g.deadline) : null, mLeft = dl ? monthsUntil(dl) : null;
       var need = dl && mLeft > 0 ? left / mLeft : null;
+      if (v.cg) { var remM = v.cg.months.filter(function (k) { return k >= mkey(ymd(today())); }).length; need = remM ? left / remM : null; }
       var etaDate = v.eta, late = dl && etaDate && etaDate > dl;
       var per = goalPeriods(g), missing = per.filter(function (x) { return x.suggested > 0 && (!x.rec || Math.abs((+x.rec.amount || 0) - x.suggested) > 0.004); });
       h += '<section class="card"><h3>' + esc(g.name) + '<span class="r"><button class="navlink" data-act="gedit" data-id="' + esc(g.id) + '">Edit</button></span></h3>' +
@@ -1858,7 +1894,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
         '<div class="trio" style="margin-top:6px">' +
         '<div><label>Deadline</label><span class="num">' + (dl ? monthYear(dl) : '—') + '</span><small>' + (mLeft !== null ? (mLeft > 0 ? mLeft + ' months away' : 'passed') : 'none set') + '</small></div>' +
         '<div><label>Needed a month</label><span class="num">' + (need !== null ? sw(need) : '—') + '</span><small>' + (need !== null ? 'to reach it by the deadline' : '&nbsp;') + '</small></div>' +
-        '<div><label>' + v.label + '</label><span class="num ' + (late || !etaDate ? 'neg' : '') + '">' + (left <= 0 ? 'reached' : etaDate ? monthYear(etaDate) : 'not reached at this pace') + '</span><small>' + v.note + '</small></div></div>';
+        '<div><label>' + v.label + '</label><span class="num ' + (v.etaText ? (v.behind ? 'neg' : '') : (late || !etaDate ? 'neg' : '')) + '">' + (v.etaText || (left <= 0 ? 'reached' : etaDate ? monthYear(etaDate) : 'not reached at this pace')) + '</span><small>' + v.note + '</small></div></div>';
       if (v.f.mode !== 'pct') { h += goalFundBody(g, v) + '</section>'; return; }
       h += '<div class="subhead" style="margin-top:6px"><b>Contributions</b><span>' + (+g.saving_pct || 0) + '% of each finished period’s net saved, when positive</span></div><div class="gtable">' +
         per.map(function (x) {
@@ -1873,6 +1909,14 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     return h;
   }
   function goalFundBody(g, v) {
+    if (v.f.mode === 'category') {
+      var cg = v.cg, nowK = mkey(ymd(today()));
+      return '<div class="subhead" style="margin-top:6px"><b>Month by month</b><span>' + esc(v.f.category) + ' transactions count; log each transfer under that category</span></div><div class="gtable">' +
+        cg.months.map(function (k) {
+          var pdx = cg.paid[k] || 0, past = k < nowK, short = past && pdx < cg.plan - 1;
+          return '<div><span>' + esc(mLong(k)) + '</span><span class="num soon">' + sw(cg.plan) + '</span><span class="num ' + (short ? 'neg' : '') + '">' + (pdx ? sw(pdx) : (past ? '0.00' : '—')) + '</span><span class="soon">' + (pdx >= cg.plan - 1 ? 'paid' : past ? 'missed' : k === nowK ? 'this month' : '') + '</span></div>';
+        }).join('') + '</div>';
+    }
     if (v.f.mode === 'account') {
       return '<div class="subhead" style="margin-top:6px"><b>Funded by an account</b><span>' + (v.acct ? 'follows ' + esc(v.acct.name) + ' on Wealth' : 'the linked account is gone: pick another in Edit') + '</span></div>' +
         '<p class="soon" style="margin:6px 0 0;font-size:13px">The saved amount is the account’s current value' + (v.acct && v.acct.last_updated ? ', last updated ' + periodDay(pd(v.acct.last_updated)) : '') + '. Update it in <button class="navlink" data-nav="wealth">Wealth → Update values</button>.</p>';
@@ -1930,11 +1974,13 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     $('modalRoot').innerHTML = '<div class="scrim" data-act="gscrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="gtitle"><h2 id="gtitle">' + (g.id ? 'Edit goal' : 'New goal') + '</h2><div class="formgrid">' +
       '<div class="field full"><label for="gname">Name</label><input id="gname" value="' + esc(g.name) + '"></div>' +
       '<div class="field"><label for="gtarget">Target (CHF)</label><input id="gtarget" type="number" step="1" min="0" value="' + esc(g.target_amount) + '"></div>' +
-      '<div class="field"><label for="gfund">Funded by</label><select id="gfund">' + opt('pct', 'A share of net saved', GFORM.fund.mode) + opt('fixed', 'A fixed amount a month', GFORM.fund.mode) + opt('account', 'An account on Wealth', GFORM.fund.mode) + '</select></div>' +
+      '<div class="field"><label for="gfund">Funded by</label><select id="gfund">' + opt('pct', 'A share of net saved', GFORM.fund.mode) + opt('fixed', 'A fixed amount a month', GFORM.fund.mode) + opt('account', 'An account on Wealth', GFORM.fund.mode) + opt('category', 'Transactions in a category', GFORM.fund.mode) + '</select></div>' +
       (GFORM.fund.mode === 'pct' ? '<div class="field"><label for="gpct">Share of net saved each period (%)</label><input id="gpct" type="number" step="1" min="0" max="100" value="' + esc(g.saving_pct) + '"></div>'
         : GFORM.fund.mode === 'fixed' ? '<div class="field"><label for="gfix">Amount a month (CHF)</label><input id="gfix" type="number" step="1" min="0" value="' + esc(GFORM.fund.amount || '') + '"></div>'
+        : GFORM.fund.mode === 'category' ? '<div class="field"><label for="gfcat">Category</label><select id="gfcat">' + Object.keys(CATEGORIES).map(function (c) { return opt(c, c, GFORM.fund.category || 'Retirement 3a'); }).join('') + '</select></div>' +
+          '<div class="field"><label for="gffrom">Counting from</label><input id="gffrom" type="date" value="' + esc(GFORM.fund.from || ymd(today())) + '"></div>'
         : '<div class="field"><label for="gacct">Account</label><select id="gacct">' + accounts().filter(function (e) { return !isArchived(e); }).map(function (e) { return opt(e.id, e.name, GFORM.fund.account); }).join('') + '</select></div>') +
-      (GFORM.fund.mode !== 'account' ? '<div class="field"><label for="gcur">Saved so far (CHF)</label><input id="gcur" type="number" step="0.01" min="0" value="' + esc(g.current_amount) + '"></div>' : '') +
+      (GFORM.fund.mode !== 'account' && GFORM.fund.mode !== 'category' ? '<div class="field"><label for="gcur">Saved so far (CHF)</label><input id="gcur" type="number" step="0.01" min="0" value="' + esc(g.current_amount) + '"></div>' : '') +
       '<div class="field"><label for="gdl">Deadline</label><input id="gdl" type="date" value="' + esc(String(g.deadline || '').slice(0, 10)) + '"></div>' +
       '<div class="field full"><label for="gnotes">Notes</label><input id="gnotes" value="' + esc(g.notes) + '"></div>' +
       '</div>' + (GFORM.err ? '<div class="err">' + esc(GFORM.err) + '</div>' : '') +
@@ -1949,6 +1995,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     if ($('gpct')) g.saving_pct = $('gpct').value;
     if ($('gfix')) GFORM.fund.amount = $('gfix').value;
     if ($('gacct')) GFORM.fund.account = $('gacct').value;
+    if ($('gfcat')) GFORM.fund.category = $('gfcat').value;
+    if ($('gffrom')) GFORM.fund.from = $('gffrom').value;
   }
   function saveGoal() {
     readGoal();
@@ -1958,10 +2006,11 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     var F = GFORM.fund, fund = { mode:F.mode };
     if (F.mode === 'fixed') { fund.amount = parseFloat(F.amount); if (!(fund.amount > 0)) { GFORM.err = 'Enter the amount a month.'; return drawGoal(); } }
     if (F.mode === 'account') { fund.account = F.account; if (!fund.account) { GFORM.err = 'Pick the account.'; return drawGoal(); } }
+    if (F.mode === 'category') { fund.category = F.category || 'Retirement 3a'; fund.from = F.from || ymd(today()); }
     var row = Object.assign({}, g, { target_amount:t, current_amount:parseFloat(g.current_amount) || 0, saving_pct:F.mode === 'pct' ? parseFloat(g.saving_pct) || 0 : (+g.saving_pct || 0) });
     var isNew = !g.id, was = g.id ? goalFund(g) : null; closeGForm();
     saveRow('FinancialGoal', row).then(function (saved) {
-      var same = was && JSON.stringify(was) === JSON.stringify({ mode:fund.mode, amount:fund.amount || 0, account:fund.account || '' });
+      var same = was && JSON.stringify(was) === JSON.stringify({ mode:fund.mode, amount:fund.amount || 0, account:fund.account || '', category:fund.category || '', from:fund.from || '' });
       return same || (!was && fund.mode === 'pct') ? null : saveSetting('goal_fund_' + saved.id, JSON.stringify(fund));
     }).then(function () { toast(isNew ? 'Goal added' : 'Goal saved'); });
   }

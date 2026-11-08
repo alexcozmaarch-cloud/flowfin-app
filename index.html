@@ -152,6 +152,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .tx{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule);cursor:pointer}
 .tx:hover{background:var(--paper)}
 .tx .sw{display:none}
+.sugwrap{position:relative}
+.sugg{position:absolute;left:0;right:0;top:100%;z-index:5;border:1px solid var(--ink);background:var(--paper);display:grid;max-height:300px;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.sugg button{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 10px;align-items:center;text-align:left;font:inherit;font-size:15px;background:none;border:0;border-bottom:1px solid var(--rule);padding:9px 10px;color:var(--ink);cursor:pointer}
+.sugg button:hover,.sugg button.hl{background:var(--bg)}
+.sugg .ic{grid-row:1/3}.sugg .st{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sugg .num{grid-row:1/3;grid-column:3}
+.sugg small{grid-column:2;color:var(--muted);font-size:12px}.sugg mark{background:none;color:inherit;font-weight:700}
+.newsub .nsrow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px}
 .hero .side .num.pos{color:var(--good)}.hero .side .num.neg{color:var(--signal)}
 .dseg{display:inline-grid;grid-auto-flow:column;max-width:none;margin:0}.dseg button{padding:4px 10px;font-size:12px}
 .wfbar{display:flex;height:14px;margin:4px 0 6px;background:var(--rule)}.wfbar i{display:block;height:100%}
@@ -502,7 +509,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '08.11.2026 · 1';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '08.11.2026 · 2';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
@@ -2861,8 +2868,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       '<h2 id="mtitle">' + (FORM.id ? 'Edit transaction' : 'New transaction') + '</h2>' +
       '<div class="seg" id="mtype">' + TYPES.map(function (x) { return '<button type="button" data-type="' + x[0] + '" class="' + (FORM.type === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>' +
       '<div class="formgrid">' +
-      '<div class="field full"><label for="mdesc">Description</label><input id="mdesc" list="descList" autocomplete="off" value="' + esc(FORM.description) + '"></div>' +
-      '<datalist id="descList">' + Object.keys(descs).sort().map(function (d) { return '<option value="' + esc(d) + '">'; }).join('') + '</datalist>' +
+      '<div class="field full sugwrap"><label for="mdesc">Description</label><input id="mdesc" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="msugg" value="' + esc(FORM.description) + '">' +
+      '<div class="sugg" id="msugg" role="listbox" hidden></div></div>' +
       (FORM._note ? '<div class="field full rulenote">' + FORM._note + '</div>' : '') +
       '<div class="field"><label for="mcur">Currency</label><select id="mcur">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select></div>' +
       (foreign
@@ -2873,7 +2880,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       '<div class="field"><label for="mamt">Amount (CHF)' + (foreign ? ' · calculated, editable' : '') + '</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>' +
       '<div class="field"><label for="mdate">Date</label><input id="mdate" type="date" value="' + esc(FORM.date) + '"></div>' +
       '<div class="field"><label for="mcat">Category</label><select id="mcat">' + Object.keys(CATEGORIES).map(function (c) { return opt(c, c, FORM.category); }).join('') + '</select></div>' +
-      '<div class="field"><label for="msub">Subcategory</label><select id="msub">' + (subs.length ? subs : ['—']).map(function (s) { return opt(s === '—' ? '' : s, s, FORM.subcategory || ''); }).join('') + '</select></div>' +
+      '<div class="field"><label for="msub">Subcategory</label><select id="msub">' + (subs.length ? subs : ['—']).map(function (s) { return opt(s === '—' ? '' : s, s, FORM.subcategory || ''); }).join('') + '<option value="__new">+ New subcategory…</option></select></div>' +
+      (FORM._newsub ? '<div class="field full newsub"><label for="mnewsub">New subcategory in ' + esc(FORM.category) + '</label><div class="nsrow"><input id="mnewsub" autocomplete="off" placeholder="e.g. Car wash"><button class="btn primary" data-act="newsubadd">Add</button><button class="btn" data-act="newsubx">Cancel</button></div></div>' : '') +
       '<div class="field"><label for="macct">Account</label><select id="macct">' + ACCOUNTS.map(function (x) { return opt(x[0], x[1], FORM.account); }).join('') + '</select></div>' +
       '<div class="field"><label for="mtags">Tags (comma separated)</label><input id="mtags" list="mtagList" autocomplete="off" placeholder="e.g. Singapore 2026" value="' + esc(FORM.tags || '') + '"></div>' +
       '<datalist id="mtagList">' + tagList.map(function (x) { return '<option value="' + esc(x.tag) + '">'; }).join('') + '</datalist>' +
@@ -2896,7 +2904,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   }
   function readForm() {
     FORM.description = $('mdesc').value; FORM.amount = $('mamt').value; FORM.date = $('mdate').value;
-    FORM.category = $('mcat').value; FORM.subcategory = $('msub').value; FORM.account = $('macct').value; FORM.anomaly_status = $('manom').value;
+    FORM.category = $('mcat').value; if ($('msub').value !== '__new') FORM.subcategory = $('msub').value; FORM.account = $('macct').value; FORM.anomaly_status = $('manom').value;
     FORM.tags = $('mtags').value; FORM.orig_currency = $('mcur').value;
     if ($('morig')) FORM.orig_amount = $('morig').value;
     if ($('mfee')) FORM._fee = $('mfee').checked;
@@ -2937,27 +2945,69 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   }
   // A matching rule fills the form; otherwise the last transaction with the same description does
   // Subcategories per category: the built-in list plus any used in your transactions or rules, so nothing gets dropped
+  function customSubs() { try { return JSON.parse(setting('custom_subs', '') || '{}') || {}; } catch (e) { return {}; } }
   function subsOf(cat) {
     var out = (CATEGORIES[cat] || []).slice();
+    (customSubs()[cat] || []).forEach(function (sub) { if (out.indexOf(sub) < 0) out.push(sub); });
     (txs()).concat(DATA.Rule || []).forEach(function (r) { var sub = String(r.subcategory || '').trim(); if (r.category === cat && sub && out.indexOf(sub) < 0) out.push(sub); });
     return out;
   }
+  // Leaving the description: fill from your last transaction with the same description (any capitals); a matching rule decides the category
   function autofill() {
-    if (FORM.id) return;
+    if (FORM.id || FORM._picked) return;
     readForm();
-    var d = FORM.description, r = matchRule(d), last = null;
-    if (r) {
-      FORM.category = r.category || FORM.category; FORM.subcategory = r.subcategory || ''; if (r.type) FORM.type = r.type; if (r.account) FORM.account = r.account;
-      if (r.tags && !FORM.tags) FORM.tags = r.tags;
-      FORM._note = 'Rule “' + esc(r.match) + '” applied: ' + ruleText(r);
-    } else {
-      txs().forEach(function (t) { if (t.description === d && (!last || t.date > last.date)) last = t; });
-      if (!last) { FORM._note = ''; return; }
-      FORM.category = last.category; FORM.subcategory = last.subcategory; FORM.type = last.type; FORM.account = last.account;
-      FORM._note = 'Filled from your last “' + esc(d) + '” on ' + periodDay(pd(last.date));
-      if (!FORM.amount) FORM.amount = last.amount;
-    }
-    drawModal(); var a = $(FORM.orig_currency !== 'CHF' ? 'morig' : 'mamt'); if (a) a.focus();
+    var d = FORM.description.trim(), k = d.toLowerCase(), r = matchRule(d), last = null;
+    if (!d) return;
+    txs().forEach(function (t) { if (String(t.description || '').trim().toLowerCase() === k && (!last || t.date > last.date)) last = t; });
+    if (!r && !last) { FORM._note = ''; return; }
+    if (last) { FORM.category = last.category; FORM.subcategory = last.subcategory || ''; FORM.type = last.type; FORM.account = last.account || FORM.account; if (!FORM.amount) FORM.amount = last.amount; }
+    if (r) { FORM.category = r.category || FORM.category; FORM.subcategory = r.subcategory || ''; if (r.type) FORM.type = r.type; if (r.account) FORM.account = r.account; if (r.tags && !FORM.tags) FORM.tags = r.tags; }
+    FORM._note = (last ? 'Filled from your last “' + esc(last.description) + '” on ' + periodDay(pd(last.date)) : '') + (r ? (last ? '; ' : '') + 'rule “' + esc(r.match) + '” applied: ' + ruleText(r) : '') + (last ? '; change the amount if it’s different.' : '.');
+    drawModal(); var a = $(FORM.orig_currency !== 'CHF' ? 'morig' : 'mamt'); if (a) { a.focus(); if (a.select) a.select(); }
+  }
+  // Suggestions while typing: past descriptions containing the text, those starting with it first, then most used
+  function descSuggestions(q) {
+    q = String(q || '').trim().toLowerCase(); if (q.length < 2) return [];
+    var by = {};
+    txs().forEach(function (t) {
+      var d = String(t.description || '').trim(), k = d.toLowerCase(); if (!d || k.indexOf(q) < 0) return;
+      var x = by[k] || (by[k] = { d:d, n:0, last:null }); x.n++; if (!x.last || t.date > x.last.date) x.last = t;
+    });
+    return Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) {
+      var as = a.d.toLowerCase().indexOf(q) === 0 ? 1 : 0, bs = b.d.toLowerCase().indexOf(q) === 0 ? 1 : 0; return (bs - as) || (b.n - a.n);
+    }).slice(0, 6);
+  }
+  function paintSugg() {
+    var box = $('msugg'), inp = $('mdesc'); if (!box || !inp || !FORM || FORM.id) return;
+    var q = inp.value, list = descSuggestions(q), ql = q.trim().toLowerCase(); UI.sugg = list; UI.suggHl = -1;
+    if (!list.length) { box.hidden = true; inp.setAttribute('aria-expanded', 'false'); return; }
+    box.innerHTML = list.map(function (x, i) {
+      var k = x.d.toLowerCase().indexOf(ql), l = x.last, t = esc(x.d.slice(0, k)) + '<mark>' + esc(x.d.slice(k, k + ql.length)) + '</mark>' + esc(x.d.slice(k + ql.length));
+      return '<button type="button" role="option" id="msg' + i + '" data-act="sugg" data-i="' + i + '">' + txIco(l) + '<span class="st">' + t + '</span><span class="num">' + sw(+l.amount) + '</span>' +
+        '<small>' + esc(l.category) + (l.subcategory ? ' › ' + esc(l.subcategory) : '') + ' · ' + x.n + '×</small></button>';
+    }).join('');
+    box.hidden = false; inp.setAttribute('aria-expanded', 'true');
+  }
+  function pickSugg(i) {
+    var x = (UI.sugg || [])[i]; if (!x || !FORM) return;
+    readForm();
+    var l = x.last, r = matchRule(x.d);
+    FORM.description = x.d; FORM.type = l.type || FORM.type; FORM.account = l.account || FORM.account; FORM.amount = l.amount;
+    FORM.category = l.category; FORM.subcategory = l.subcategory || '';
+    if (r) { FORM.category = r.category || FORM.category; FORM.subcategory = r.subcategory || ''; if (r.type) FORM.type = r.type; if (r.account) FORM.account = r.account; if (r.tags && !FORM.tags) FORM.tags = r.tags; }
+    FORM.orig_currency = 'CHF';
+    FORM._picked = true;
+    FORM._note = 'Filled from your last “' + esc(x.d) + '” on ' + periodDay(pd(l.date)) + (r ? '; category from rule “' + esc(r.match) + '”' : '') + '; change the amount if it’s different.';
+    drawModal(); var a = $('mamt'); if (a) { a.focus(); a.select(); }
+  }
+  function addCustomSub() {
+    var inp = $('mnewsub'), v = inp ? inp.value.trim() : ''; if (!v) { if (inp) inp.focus(); return; }
+    readForm();
+    var all = customSubs(), cat = FORM.category; all[cat] = all[cat] || [];
+    if (subsOf(cat).indexOf(v) < 0) all[cat].push(v);
+    FORM.subcategory = v; FORM._newsub = false;
+    saveSetting('custom_subs', JSON.stringify(all)).then(function () { toast('Subcategory added: ' + cat + ' › ' + v); });
+    drawModal();
   }
   function ruleFromForm() {
     readForm();
@@ -3086,6 +3136,9 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     if (act === 'plreset') { UI.plan = null; return draw(); }
     if (act === 'plsave') return planSave();
     if (act === 'dchart') { try { lsSet(DCHART_KEY, a.getAttribute('data-v')); } catch (e) {} if (CHARTS.daily) { CHARTS.daily.destroy(); delete CHARTS.daily; } return draw(); }
+    if (act === 'sugg') return pickSugg(+a.getAttribute('data-i'));
+    if (act === 'newsubadd') return addCustomSub();
+    if (act === 'newsubx') { readForm(); FORM._newsub = false; return drawModal(); }
     if (act === 'ftoggle') { UI.fOpen = !UI.fOpen; return draw(); }
     if (act === 'txtab') { UI.txTab = a.getAttribute('data-v'); window.scrollTo(0, 0); return draw(); }
     if (act === 'anset') return setAnomaly(a.getAttribute('data-id'), a.getAttribute('data-v'));
@@ -3170,7 +3223,16 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     var st = foldState(); st[d.getAttribute('data-fold')] = d.open; lsSet(FOLD_KEY, JSON.stringify(st));
     if (d.open) { savingsChart(); netSavingsChart(); }
   }, true);
+  document.addEventListener('pointerdown', function (e) { if (e.target.closest && e.target.closest('#msugg')) e.preventDefault(); });   // keep focus in the description while picking
   document.addEventListener('keydown', function (e) {
+    if (e.target.id === 'mdesc' && $('msugg') && !$('msugg').hidden && UI.sugg && UI.sugg.length) {
+      var nb = UI.sugg.length;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); UI.suggHl = ((UI.suggHl == null ? -1 : UI.suggHl) + (e.key === 'ArrowDown' ? 1 : -1) + nb) % nb;
+        Array.prototype.forEach.call($('msugg').children, function (b, i) { b.classList.toggle('hl', i === UI.suggHl); }); $('mdesc').setAttribute('aria-activedescendant', 'msg' + UI.suggHl); return; }
+      if (e.key === 'Enter' && UI.suggHl > -1) { e.preventDefault(); return pickSugg(UI.suggHl); }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); $('msugg').hidden = true; return; }
+    }
+    if (e.target.id === 'mnewsub' && e.key === 'Enter') { e.preventDefault(); return addCustomSub(); }
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-drill]')) openDrill(e.target);
     if (e.key === 'Escape' && FORM) closeModal();
     if (e.key === 'Escape' && WFORM) closeWForm();
@@ -3180,6 +3242,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   });
   document.addEventListener('input', function (e) {
     var pid = e.target.id || '';
+    if (pid === 'mdesc' && FORM && !FORM.id) { FORM._picked = false; return paintSugg(); }
     if (/^pl_[vr]\d$/.test(pid) && UI.plan) { planChange(PLAN_CATS[+pid.slice(4)], parseFloat(String(e.target.value).replace(',', '.'))); return planPaint(); }
     if (pid === 'pl_fam' && UI.plan) { UI.plan.fam = Math.max(0, parseFloat(e.target.value) || 0); planFit(); return planPaint(); }
     var id = e.target.id;
@@ -3205,7 +3268,8 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       var bc = e.target.getAttribute('data-cat'), on = e.target.checked;
       saveBudget(bc, { rollover_enabled: on }).then(function () { toast('Rollover ' + (on ? 'on' : 'off') + ' for ' + bc); });
     }
-    if (id === 'mcat' && FORM) { readForm(); FORM.subcategory = subsOf(FORM.category)[0] || ''; drawModal(); }
+    if (id === 'mcat' && FORM) { readForm(); FORM.subcategory = subsOf(FORM.category)[0] || ''; FORM._newsub = false; drawModal(); }
+    if (id === 'msub' && FORM && e.target.value === '__new') { readForm(); FORM._newsub = true; drawModal(); var ns = $('mnewsub'); if (ns) ns.focus(); return; }
     if (id === 'mdesc' && FORM) autofill();
   });
   window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h === 'add') { try { history.replaceState(null, '', '#' + UI.page); } catch (e) {} return openTx(null); } if (h && h !== UI.page) { UI.page = h; draw(); } });

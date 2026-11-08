@@ -478,7 +478,7 @@ var HIST_MONTHS = 6;
 var WEALTH_CATS = { 'Financial Investing':1, 'Collectibles':1, 'Retirement 3a':1 };
 var CATEGORIES = {
   'Family Infrastructure':['Mortgage','Utilities','Groceries','Insurance','Transportation','Childcare','Activities','Vacations','General Household'],
-  'Personal Cash':['Lunches','Dinners','Drinks','Coffees','Snacks','Hobbies','Subscriptions','Entertainment','Presents','Cash','Extras'],
+  'Personal Cash':['Lunches','Dinners','Drinks','Coffees','Snacks','Transportation','Hobbies','Subscriptions','Entertainment','Presents','Cash','Extras'],
   'Retirement 3a':[],
   'Financial Investing':['ETF Investing','Forex Investing','Funds'],
   'Collectibles':['TCG Investing']
@@ -502,7 +502,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '06.11.2026 · 9';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '08.11.2026 · 1';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
@@ -2856,7 +2856,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   function drawModalNow() {
     var descs = {}, tagList = allTags();
     txs().forEach(function (t) { if (t.description) descs[t.description] = 1; });
-    var subs = CATEGORIES[FORM.category] || [], foreign = FORM.orig_currency && FORM.orig_currency !== 'CHF';
+    var subs = subsOf(FORM.category), foreign = FORM.orig_currency && FORM.orig_currency !== 'CHF';
     var h = '<div class="scrim" data-act="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle">' +
       '<h2 id="mtitle">' + (FORM.id ? 'Edit transaction' : 'New transaction') + '</h2>' +
       '<div class="seg" id="mtype">' + TYPES.map(function (x) { return '<button type="button" data-type="' + x[0] + '" class="' + (FORM.type === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>' +
@@ -2936,6 +2936,12 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     saveRow('Transaction', row).then(function () { toast(isNew ? 'Transaction added' : 'Changes saved'); });
   }
   // A matching rule fills the form; otherwise the last transaction with the same description does
+  // Subcategories per category: the built-in list plus any used in your transactions or rules, so nothing gets dropped
+  function subsOf(cat) {
+    var out = (CATEGORIES[cat] || []).slice();
+    (txs()).concat(DATA.Rule || []).forEach(function (r) { var sub = String(r.subcategory || '').trim(); if (r.category === cat && sub && out.indexOf(sub) < 0) out.push(sub); });
+    return out;
+  }
   function autofill() {
     if (FORM.id) return;
     readForm();
@@ -2995,7 +3001,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   function rulesHTML() {
     var rules = sortedRules(), sugg = suggestedRules();
     var combos = [];
-    Object.keys(CATEGORIES).forEach(function (c) { (CATEGORIES[c].length ? CATEGORIES[c] : ['']).forEach(function (sub) { combos.push([c + '|' + sub, c + (sub ? ' › ' + sub : '')]); }); });
+    Object.keys(CATEGORIES).forEach(function (c) { (subsOf(c).length ? subsOf(c) : ['']).forEach(function (sub) { combos.push([c + '|' + sub, c + (sub ? ' › ' + sub : '')]); }); });
     var h = '<div class="card"><h3>Rules<span class="r">fill in new transactions automatically</span></h3>' +
       '<p class="soon" style="margin:0 0 12px;font-size:13px">When a new description contains the match text, the category, subcategory, type and account are filled in. You can still change them before saving.</p>' +
       '<div class="ruleadd">' +
@@ -3199,7 +3205,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
       var bc = e.target.getAttribute('data-cat'), on = e.target.checked;
       saveBudget(bc, { rollover_enabled: on }).then(function () { toast('Rollover ' + (on ? 'on' : 'off') + ' for ' + bc); });
     }
-    if (id === 'mcat' && FORM) { readForm(); FORM.subcategory = (CATEGORIES[FORM.category] || [''])[0] || ''; drawModal(); }
+    if (id === 'mcat' && FORM) { readForm(); FORM.subcategory = subsOf(FORM.category)[0] || ''; drawModal(); }
     if (id === 'mdesc' && FORM) autofill();
   });
   window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h === 'add') { try { history.replaceState(null, '', '#' + UI.page); } catch (e) {} return openTx(null); } if (h && h !== UI.page) { UI.page = h; draw(); } });

@@ -153,7 +153,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .tx:hover{background:var(--paper)}
 .tx .sw{display:none}
 .sugwrap{position:relative}
-.sugg{position:absolute;left:0;right:0;top:100%;z-index:5;border:1px solid var(--ink);background:var(--paper);display:grid;max-height:300px;overflow:auto;box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.sugg{margin-top:-1px;border:1px solid var(--ink);background:var(--paper);display:grid;max-height:232px;overflow:auto}
+.sugg[hidden]{display:none}
 .sugg button{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 10px;align-items:center;text-align:left;font:inherit;font-size:15px;background:none;border:0;border-bottom:1px solid var(--rule);padding:9px 10px;color:var(--ink);cursor:pointer}
 .sugg button:hover,.sugg button.hl{background:var(--bg)}
 .sugg .ic{grid-row:1/3}.sugg .st{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.sugg .num{grid-row:1/3;grid-column:3}
@@ -208,6 +209,7 @@ h3 .ic{width:20px;height:20px;margin-right:4px;vertical-align:-4px}
 .empty{color:var(--muted);padding:28px 0}
 
 /* modal */
+body:has(.scrim) .bottomnav{display:none}
 .scrim{position:fixed;inset:0;background:rgba(18,20,19,.45);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50}
 .modal{background:var(--bg);border-top:4px solid var(--ink);width:min(500px,100%);max-height:92vh;overflow:auto;padding:22px;display:grid;gap:14px}
 .modal h2{margin:0;font-size:22px;font-weight:800;letter-spacing:-.01em}
@@ -509,7 +511,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '08.11.2026 · 2';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '08.11.2026 · 3';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
@@ -2975,11 +2977,13 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     });
     return Object.keys(by).map(function (k) { return by[k]; }).sort(function (a, b) {
       var as = a.d.toLowerCase().indexOf(q) === 0 ? 1 : 0, bs = b.d.toLowerCase().indexOf(q) === 0 ? 1 : 0; return (bs - as) || (b.n - a.n);
-    }).slice(0, 6);
+    }).slice(0, window.matchMedia('(max-width:700px)').matches ? 4 : 6);
   }
+  function hideSugg() { var b = $('msugg'), i = $('mdesc'); if (b) b.hidden = true; if (i) i.setAttribute('aria-expanded', 'false'); }
   function paintSugg() {
     var box = $('msugg'), inp = $('mdesc'); if (!box || !inp || !FORM || FORM.id) return;
     var q = inp.value, list = descSuggestions(q), ql = q.trim().toLowerCase(); UI.sugg = list; UI.suggHl = -1;
+    if (list.length === 1 && list[0].d.toLowerCase() === ql) list = [];   // already typed in full
     if (!list.length) { box.hidden = true; inp.setAttribute('aria-expanded', 'false'); return; }
     box.innerHTML = list.map(function (x, i) {
       var k = x.d.toLowerCase().indexOf(ql), l = x.last, t = esc(x.d.slice(0, k)) + '<mark>' + esc(x.d.slice(k, k + ql.length)) + '</mark>' + esc(x.d.slice(k + ql.length));
@@ -3224,13 +3228,19 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
     if (d.open) { savingsChart(); netSavingsChart(); }
   }, true);
   document.addEventListener('pointerdown', function (e) { if (e.target.closest && e.target.closest('#msugg')) e.preventDefault(); });   // keep focus in the description while picking
+  // leaving the description (tapping the next field, the keyboard arrows, anywhere else) closes the suggestions
+  document.addEventListener('focusout', function (e) {
+    if (e.target.id !== 'mdesc') return;
+    setTimeout(function () { var a = document.activeElement; if (!(a && a.closest && a.closest('#msugg'))) hideSugg(); }, 180);
+  });
   document.addEventListener('keydown', function (e) {
     if (e.target.id === 'mdesc' && $('msugg') && !$('msugg').hidden && UI.sugg && UI.sugg.length) {
       var nb = UI.sugg.length;
       if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); UI.suggHl = ((UI.suggHl == null ? -1 : UI.suggHl) + (e.key === 'ArrowDown' ? 1 : -1) + nb) % nb;
         Array.prototype.forEach.call($('msugg').children, function (b, i) { b.classList.toggle('hl', i === UI.suggHl); }); $('mdesc').setAttribute('aria-activedescendant', 'msg' + UI.suggHl); return; }
       if (e.key === 'Enter' && UI.suggHl > -1) { e.preventDefault(); return pickSugg(UI.suggHl); }
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); $('msugg').hidden = true; return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hideSugg(); return; }
+      if (e.key === 'Enter') { e.preventDefault(); hideSugg(); return; }   // phone “return”: close the list, keep what was typed
     }
     if (e.target.id === 'mnewsub' && e.key === 'Enter') { e.preventDefault(); return addCustomSub(); }
     if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-drill]')) openDrill(e.target);

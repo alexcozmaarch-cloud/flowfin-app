@@ -6,7 +6,7 @@ var URL_KEY = 'ff_url_v1';
 var CACHE_KEY = 'ff_cache_v1';
 var KEY_KEY = 'ff_key_v1';
 var _cache = null;                         // last good data payload (also in localStorage)
-var TABLES = ['Transaction','Rule','Budget','CategorySettings','FundAllocation','FinancialGoal','GoalContribution','Subscription','NetWorthEntry','AssetSnapshot','Settings'];
+var TABLES = ['Transaction','Rule','Budget','CategorySettings','FundAllocation','FinancialGoal','GoalContribution','Subscription','NetWorthEntry','AssetSnapshot','Settings','Category'];
 var DATA = {};                              // table name → rows
 var UI = { page:'dashboard', periodOffset:0, sync:'idle', syncMsg:'', lastSync:null,
            tx:{ scope:'period', q:'', type:'', category:'', account:'', sub:'', from:'', to:'', tag:'', dayToDay:false } };
@@ -23,6 +23,9 @@ var CATEGORIES = {
   'Financial Investing':['ETF Investing','Forex Investing','Funds'],
   'Collectibles':['TCG Investing']
 };
+// The list above is the starting point. Once the Sheet has a Category tab, the categories come from there
+// (CATEGORIES is refilled in place on every load), and new subcategories are saved there too.
+var BUILTIN_CATEGORIES = JSON.parse(JSON.stringify(CATEGORIES));
 var CAT_COLOR = { 'Family Infrastructure':'var(--c-infra)', 'Personal Cash':'var(--c-personal)', 'Retirement 3a':'var(--c-3a)', 'Financial Investing':'var(--c-fin)', 'Collectibles':'var(--c-coll)' };
 // Line icons as in Base44 (Lucide set, same subcategory mapping), coloured by category, no background
 var SUB_ICON = { 'Mortgage':'house', 'Utilities':'zap', 'Groceries':'shopping-cart', 'Insurance':'shield', 'Transportation':'car', 'Childcare':'baby',
@@ -42,6 +45,6 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '10.11.2026 · 1';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '10.11.2026 · 2';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };

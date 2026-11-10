@@ -3,15 +3,17 @@
  * One tab per table. Row 1 = headers. Column A = id.
  *
  * Setup:
- *   1. Paste your Sheet ID below.
+ *   1. Project Settings → Script properties: SHEET_ID = your Sheet ID, FF_KEY = a long random access key.
+ *      (Or paste the Sheet ID below; the script property wins, so later code updates need no editing.)
  *   2. Run setup() once from the editor (creates any missing tabs + headers).
  *   3. Deploy → New deployment → Web app → Execute as: Me, Access: Anyone.
+ *      To update: Deploy → Manage deployments → pencil → Version: New version → Deploy (same URL).
  *
  * The front end calls this WITHOUT a Content-Type header (same rule as Holotrack),
  * so the body arrives as plain text in e.postData.contents.
  */
 
-var SHEET_ID = 'PASTE_SHEET_ID_HERE';
+var SHEET_ID = PropertiesService.getScriptProperties().getProperty('SHEET_ID') || 'PASTE_SHEET_ID_HERE';
 
 var TABLES = {
   Transaction:      ['id','date','description','category','subcategory','amount','type','account','anomaly_status','created_date','updated_date','tags','orig_amount','orig_currency','fx_rate','fx_fee'],
@@ -24,10 +26,11 @@ var TABLES = {
   Subscription:     ['id','name','amount','frequency','account','category','subcategory','next_renewal','status','notes','auto_detected','created_date','updated_date'],
   NetWorthEntry:    ['id','name','account_type','is_liability','currency','current_value','total_invested','institution','account_number','icon','color','exchange_rate','notes','last_updated','created_date','updated_date'],
   AssetSnapshot:    ['id','entry_id','date','value','total_invested','exchange_rate','created_date','updated_date'],
-  Settings:         ['id','key','value','updated_date']
+  Settings:         ['id','key','value','updated_date'],
+  Category:         ['id','category','subcategory','sort','created_date','updated_date']   // one row per subcategory; an empty subcategory = the category itself
 };
 
-var NUMERIC = ['orig_amount','fx_rate','fx_fee','priority','amount','monthly_limit','pct','target_amount','current_amount','saving_pct','net','current_value','total_invested','exchange_rate','value'];
+var NUMERIC = ['sort','orig_amount','fx_rate','fx_fee','priority','amount','monthly_limit','pct','target_amount','current_amount','saving_pct','net','current_value','total_invested','exchange_rate','value'];
 var BOOLEAN = ['is_default','rollover_enabled','is_liability','auto_detected'];
 
 function ss_() { return SpreadsheetApp.openById(SHEET_ID); }
@@ -72,10 +75,15 @@ function readTable_(name) {
 // ---------- access key ----------
 // Set a Script Property FF_KEY (Project Settings → Script properties).
 // Once set, every read and write must carry the same key. Ping stays open.
+// After 30 wrong keys within 15 minutes everything is refused for 15 minutes, so the key can't be guessed by trying.
 function checkKey_(key) {
   var expected = PropertiesService.getScriptProperties().getProperty('FF_KEY');
-  if (expected && key !== expected) throw new Error('Wrong or missing access key');
+  if (!expected) return;
+  var cache = CacheService.getScriptCache(), bad = Number(cache.get('ff_bad_keys') || 0);
+  if (bad >= 30) throw new Error('Too many wrong access keys: locked for 15 minutes');
+  if (key !== expected) { cache.put('ff_bad_keys', String(bad + 1), 900); throw new Error('Wrong or missing access key'); }
 }
+function readAll_() { var all = {}; Object.keys(TABLES).forEach(function (t) { all[t] = readTable_(t); }); return all; }
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
@@ -88,9 +96,7 @@ function doGet(e) {
     } else if (p.table) {
       out = { ok: true, rows: readTable_(p.table) };
     } else {
-      var all = {};
-      Object.keys(TABLES).forEach(function (t) { all[t] = readTable_(t); });
-      out = { ok: true, data: all };
+      out = { ok: true, data: readAll_() };
     }
   } catch (err) {
     out = { ok: false, error: String(err) };
@@ -103,6 +109,7 @@ function doGet(e) {
 //   { "action": "upsert", "table": "Transaction", "row": {...} }       → returns row with id
 //   { "action": "upsertMany", "table": "Transaction", "rows": [...] }
 //   { "action": "delete", "table": "Transaction", "id": "..." }
+//   { "action": "readAll" }   → same as a plain GET, but the key travels in the body instead of the address
 function doPost(e) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -110,6 +117,7 @@ function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     checkKey_(body.key);
+    if (body.action === 'readAll') { lock.releaseLock(); lock = null; return json_({ ok: true, data: readAll_() }); }
     if (body.action === 'syncBase44') { lock.releaseLock(); lock = null; return json_({ ok: true, result: syncFromBase44() }); }
     if (!TABLES[body.table]) throw new Error('Unknown table: ' + body.table);
     if (body.action === 'upsert') out = { ok: true, row: upsert_(body.table, body.row) };

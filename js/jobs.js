@@ -1,11 +1,12 @@
 // FlowFin · One-time data jobs (run once per Sheet, flag set only after every save worked).
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
-import { saveRow } from './api.js';
+import { applyCategories, persistCache, post, saveRow } from './api.js';
 import { budgetMapFor, truthy } from './budgets.js';
 import { periodAt, toast, txs } from './core.js';
 import { goalFund } from './goals.js';
 import { saveSetting } from './settings.js';
-import { setting } from './transactions.js';
+import { customSubs, setting } from './transactions.js';
+import { draw } from './nav.js';
 
 // How a goal is funded: pct = share of each period's net saved (Base44 rule), fixed = an amount you put in each month,
 // account = the goal follows the balance of an account on Wealth.
@@ -18,10 +19,26 @@ function runJobs() {
   if (JOBS_RAN || !txs().length) return;
   JOBS_RAN = true;
   var chain = Promise.resolve();
-  [jobRestorePorsche, jobGoal3a2027, jobBudgets2027, jobFamily2027].forEach(function (job) {
+  [jobRestorePorsche, jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories].forEach(function (job) {
     chain = chain.then(function () { return job(); }).catch(function (e) { toast('Setup step not saved yet (' + e.message + '); it will try again next time.'); });
   });
   return chain;
+}
+// Once the Sheet has a Category tab: fill it with the built-in list plus the subcategories you added (custom_subs)
+function jobCategories() {
+  var key = 'job_categories_sheet';
+  if (!UI.catTable || done(key)) return;
+  if ((DATA.Category || []).length) return saveSetting(key, '1');
+  var custom = customSubs(), rows = [], n = 0;
+  Object.keys(BUILTIN_CATEGORIES).forEach(function (c) {
+    rows.push({ category:c, subcategory:'', sort:++n });
+    var subs = BUILTIN_CATEGORIES[c].slice(); (custom[c] || []).forEach(function (x) { if (subs.indexOf(x) < 0) subs.push(x); });
+    subs.forEach(function (x) { rows.push({ category:c, subcategory:x, sort:++n }); });
+  });
+  return post({ action:'upsertMany', table:'Category', rows:rows }).then(function (j) {
+    DATA.Category = j.rows || rows; applyCategories(); persistCache();
+    return saveSetting(key, '1');
+  }).then(function () { toast('Categories moved to the Sheet (Category tab)'); draw(); });
 }
 function seq(items, fn) { var c = Promise.resolve(); items.forEach(function (x) { c = c.then(function () { return fn(x); }); }); return c; }
 function done(key) { return setting(key, '') === '1'; }
@@ -73,4 +90,4 @@ function jobBudgets2027() {
     .then(function () { if (todo.length) toast('2027 budgets set, from 10.01.2027'); });
 }
 
-export { JOBS_RAN, runJobs, seq, done, jobRestorePorsche, jobFamily2027, jobGoal3a2027, jobBudgets2027 };
+export { JOBS_RAN, runJobs, jobCategories, seq, done, jobRestorePorsche, jobFamily2027, jobGoal3a2027, jobBudgets2027 };

@@ -59,5 +59,82 @@ module.exports = async function () {
     files.forEach(function (f) { h.assert(sw.indexOf("'./js/" + f + "'") > -1, 'sw.js does not cache js/' + f); });
     h.assert(sw.indexOf("'./css/app.css'") > -1, 'sw.js does not cache css/app.css');
   });
+  console.log('\nNo signal');
+  await h.test('a transaction added offline waits on the phone, survives a reload and is sent once', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    app.state.offline = true;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    await pg.fill('#mdesc', 'Offline coffee'); await pg.fill('#mamt', '4.2'); await pg.click('[data-act=save]'); await pg.waitForTimeout(500);
+    h.eq(await pg.evaluate(function () { return JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; }), 1, 'waiting items');
+    h.assert(/1 waiting to sync/.test(await pg.innerText('#syncState')), 'sync label should say 1 waiting');
+    // edit it while still offline: must stay one waiting item
+    await pg.evaluate(function () { location.hash = 'transactions'; }); await pg.waitForTimeout(300);
+    await pg.locator('.tx', { hasText: 'Offline coffee' }).first().click(); await pg.waitForTimeout(250);
+    await pg.fill('#mamt', '4.8'); await pg.click('[data-act=save]'); await pg.waitForTimeout(400);
+    h.eq(await pg.evaluate(function () { return JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; }), 1, 'still one waiting item after the edit');
+    await pg.reload(); await pg.waitForTimeout(1200);
+    await pg.evaluate(function () { location.hash = 'transactions'; }); await pg.waitForTimeout(300);
+    h.assert(await pg.locator('.tx', { hasText: 'Offline coffee' }).count() === 1, 'lost after reload');
+    h.assert(!Object.values(app.store.Transaction).some(function (t) { return t.description === 'Offline coffee'; }), 'should not be in the Sheet yet');
+    app.state.offline = false;
+    await pg.evaluate(function () { window.dispatchEvent(new Event('online')); }); await pg.waitForTimeout(1000);
+    var rows = Object.values(app.store.Transaction).filter(function (t) { return t.description === 'Offline coffee'; });
+    h.eq(rows.length, 1, 'rows in the Sheet'); h.eq(+rows[0].amount, 4.8, 'edited amount sent');
+    h.assert(!/^tmp-/.test(rows[0].id), 'temporary id reached the Sheet');
+    h.eq(await pg.evaluate(function () { return JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; }), 0, 'waiting list emptied');
+    await pg.reload(); await pg.waitForTimeout(1200); await pg.evaluate(function () { location.hash = 'transactions'; }); await pg.waitForTimeout(300);
+    h.eq(await pg.locator('.tx', { hasText: 'Offline coffee' }).count(), 1, 'duplicate on screen after sync');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('a backend error (not lost signal) still says “Not saved” and keeps nothing', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    await pg.route('**/script.google.com/**', function (r) { return r.request().method() === 'POST' ? r.fulfill({ body: JSON.stringify({ ok: false, error: 'Sheet is locked' }), contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' } }) : r.fallback(); });
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    await pg.fill('#mdesc', 'Will fail'); await pg.fill('#mamt', '1'); await pg.click('[data-act=save]'); await pg.waitForTimeout(500);
+    h.eq(await pg.evaluate(function () { return JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; }), 0, 'should not wait');
+    h.assert(/Not saved/.test(await pg.innerText('body')), 'no “Not saved” message');
+    await app.ctx.close();
+  });
+  console.log('\nCategories in the Sheet');
+  await h.test('first load with the new backend fills the Category tab (incl. your own subcategories)', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.Settings.push({ id: 'cs', key: 'custom_subs', value: JSON.stringify({ 'Personal Cash': ['Car wash'] }) });
+    var app = await h.openApp({ data: data }); await app.page.waitForTimeout(800);
+    var rows = Object.values(app.store.Category || {});
+    h.assert(rows.length > 30, 'only ' + rows.length + ' category rows');
+    h.assert(rows.some(function (r) { return r.category === 'Personal Cash' && r.subcategory === 'Car wash'; }), 'your own subcategory was not moved');
+    h.assert(rows.some(function (r) { return r.category === 'Family Infrastructure' && r.subcategory === 'Mortgage'; }), 'built-in subcategory missing');
+    h.assert(Object.values(app.store.Settings).some(function (r) { return r.key === 'job_categories_sheet' && r.value === '1'; }), 'done-flag not set');
+    h.eq(app.state.urlKeyReads || 0, 0, 'the key should not travel in the address');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('categories come from the Sheet; a new subcategory is saved there', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.Category = [{ id: 'c1', category: 'Personal Cash', subcategory: '', sort: 1 }, { id: 'c2', category: 'Personal Cash', subcategory: 'Lunches', sort: 2 },
+      { id: 'c3', category: 'Personal Cash', subcategory: 'Transportation', sort: 3 }, { id: 'c4', category: 'Family Infrastructure', subcategory: 'Mortgage', sort: 4 },
+      { id: 'c5', category: 'Pets', subcategory: 'Vet', sort: 5 }];
+    data.Settings.push({ id: 'jc', key: 'job_categories_sheet', value: '1' });
+    var app = await h.openApp({ data: data, phone: true }), pg = app.page;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    var cats = await pg.locator('#mcat option').allInnerTexts();
+    h.assert(cats.indexOf('Pets') > -1, 'a category added in the Sheet should be offered: ' + cats.join(', '));
+    await pg.fill('#mdesc', 'Dog food'); await pg.fill('#mamt', '30');
+    await pg.selectOption('#mcat', 'Pets'); await pg.waitForTimeout(150);
+    await pg.selectOption('#msub', '__new'); await pg.waitForTimeout(150); await pg.fill('#mnewsub', 'Food'); await pg.press('#mnewsub', 'Enter'); await pg.waitForTimeout(500);
+    h.assert(Object.values(app.store.Category).some(function (r) { return r.category === 'Pets' && r.subcategory === 'Food'; }), 'new subcategory not saved to the Category tab');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('an older backend (before this update) still works the old way', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data)); delete data.Category;
+    var app = await h.openApp({ data: data, phone: true, oldBackend: true }), pg = app.page;
+    h.assert(await pg.evaluate(function () { return FF.periodModel(-1).list.length; }) > 10, 'data not loaded');
+    h.eq(Object.keys(app.store).indexOf('Category'), -1, 'must not write a Category tab that does not exist');
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    await pg.fill('#mdesc', 'Car wash'); await pg.fill('#mamt', '12');
+    await pg.selectOption('#msub', '__new'); await pg.waitForTimeout(150); await pg.fill('#mnewsub', 'Car care'); await pg.press('#mnewsub', 'Enter'); await pg.waitForTimeout(500);
+    h.assert(Object.values(app.store.Settings).some(function (r) { return r.key === 'custom_subs' && /Car care/.test(r.value); }), 'should fall back to Settings');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('every module’s imports and names resolve', async function () { require('./lint.js')(h); });
   await (await import('./core.test.mjs')).default(h);
 };

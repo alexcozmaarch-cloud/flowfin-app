@@ -361,10 +361,19 @@ function pickSugg(i) {
 function addCustomSub() {
   var inp = $('mnewsub'), v = inp ? inp.value.trim() : ''; if (!v) { if (inp) inp.focus(); return; }
   readForm();
-  var all = customSubs(), cat = FORM.category; all[cat] = all[cat] || [];
-  if (subsOf(cat).indexOf(v) < 0) all[cat].push(v);
+  var cat = FORM.category, isNew = subsOf(cat).indexOf(v) < 0;
   FORM.subcategory = v; FORM._newsub = false;
-  saveSetting('custom_subs', JSON.stringify(all)).then(function () { toast('Subcategory added: ' + cat + ' › ' + v); });
+  if (UI.catTable && (DATA.Category || []).length) {   // the Sheet has a Category tab: save it there
+    if (isNew) {
+      CATEGORIES[cat] = (CATEGORIES[cat] || []).concat([v]);
+      var top = (DATA.Category || []).reduce(function (m, r) { return Math.max(m, +r.sort || 0); }, 0);
+      saveRow('Category', { category:cat, subcategory:v, sort:top + 1 }).then(function () { toast('Subcategory added: ' + cat + ' › ' + v); }).catch(function () {});
+    }
+  } else {
+    var all = customSubs(); all[cat] = all[cat] || [];
+    if (isNew) all[cat].push(v);
+    saveSetting('custom_subs', JSON.stringify(all)).then(function () { toast('Subcategory added: ' + cat + ' › ' + v); });
+  }
   drawModal();
 }
 function ruleFromForm() {

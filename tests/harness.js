@@ -38,6 +38,13 @@ async function openApp(opts) {
       if (state.offline || state.fail > 0) { if (state.fail > 0) state.fail--; return route.abort('internetdisconnected'); }
       if (req.method() === 'POST') {
         var body = JSON.parse(req.postData() || '{}'); posts.push(body);
+        if (body.action === 'readAll') {
+          if (opts.oldBackend) return route.fulfill({ body: JSON.stringify({ ok: false, error: 'Error: Unknown table: undefined' }), contentType: 'application/json', headers: CORS });
+          if (body.key !== 'test-key') return route.fulfill({ body: JSON.stringify({ ok: false, error: 'Error: Wrong or missing access key' }), contentType: 'application/json', headers: CORS });
+          state.getCount++;
+          var all = {}; Object.keys(store).forEach(function (k) { all[k] = Object.values(store[k]); });
+          return route.fulfill({ body: JSON.stringify({ ok: true, data: all }), contentType: 'application/json', headers: CORS });
+        }
         if (req.headers()['content-type'] && !/text\/plain/.test(req.headers()['content-type'])) errors.push('POST sent a Content-Type header (breaks Apps Script): ' + req.headers()['content-type']);
         var t = store[body.table] = store[body.table] || {};
         var up = function (row) { row = Object.assign({}, row); if (!row.id) row.id = 'new' + (++uid); t[String(row.id)] = row; return row; };
@@ -47,7 +54,7 @@ async function openApp(opts) {
         else out = { ok: true, row: up(body.row) };
         return route.fulfill({ body: JSON.stringify(out), contentType: 'application/json', headers: CORS });
       }
-      state.getCount++;
+      state.getCount++; state.urlKeyReads = (state.urlKeyReads || 0) + (/[?&]key=/.test(u) ? 1 : 0);
       var d = {}; Object.keys(store).forEach(function (k) { d[k] = Object.values(store[k]); });
       return route.fulfill({ body: JSON.stringify({ ok: true, data: d }), contentType: 'application/json', headers: CORS });
     }

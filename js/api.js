@@ -53,7 +53,7 @@ function post(body) {
 // Read everything. The key goes in the request body, not the address; a backend from before 10.11.2026
 // doesn't know "readAll" yet, so then the old way (key in the address) is used.
 function readAll() {
-  return post({ action:'readAll' }).then(function (j) { UI.backend = 'new'; return j; }).catch(function (e) {
+  return post({ action:'readAll' }).then(function (j) { UI.backend = 'new'; UI.api = +j.api || 1; return j; }).catch(function (e) {
     if (e.offline || !/Unknown (table|action)/i.test(e.message)) throw e;
     UI.backend = 'old';
     return fetch(apiUrl() + '?key=' + encodeURIComponent(apiKey())).then(function (r) { return r.json(); });
@@ -201,8 +201,11 @@ window.addEventListener('online', function () { flushOutbox().catch(function () 
 // Categories from the Sheet's Category tab (when it has rows); otherwise the built-in list
 function applyCategories() {
   var rows = (DATA.Category || []).filter(function (r) { return String(r.category || '').trim(); });
-  var next = {};
-  if (rows.length) {
+  var next = {}, moved = (DATA.Settings || []).some(function (s) { return s.key === 'job_categories_sheet' && String(s.value) === '1'; });
+  if (rows.length && !moved) {   // move not finished: built-in list plus anything already in the tab, so nothing goes missing
+    next = JSON.parse(JSON.stringify(BUILTIN_CATEGORIES));
+    rows.forEach(function (r) { var c = String(r.category).trim(), sub = String(r.subcategory || '').trim(); next[c] = next[c] || []; if (sub && next[c].indexOf(sub) < 0) next[c].push(sub); });
+  } else if (rows.length) {
     rows.slice().sort(function (a, b) { return (+a.sort || 0) - (+b.sort || 0); }).forEach(function (r) {
       var c = String(r.category).trim(), sub = String(r.subcategory || '').trim();
       next[c] = next[c] || []; if (sub && next[c].indexOf(sub) < 0) next[c].push(sub);

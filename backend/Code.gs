@@ -33,7 +33,9 @@ var TABLES = {
 var NUMERIC = ['sort','orig_amount','fx_rate','fx_fee','priority','amount','monthly_limit','pct','target_amount','current_amount','saving_pct','net','current_value','total_invested','exchange_rate','value'];
 var BOOLEAN = ['is_default','rollover_enabled','is_liability','auto_detected'];
 
-function ss_() { return SpreadsheetApp.openById(SHEET_ID); }
+var SS_ = null;
+function ss_() { return SS_ || (SS_ = SpreadsheetApp.openById(SHEET_ID)); }   // opened once per request
+var API_VERSION = 2;   // 2: readAll without the lock, upsertMany in one write
 
 function setup() {
   var ss = ss_();
@@ -111,17 +113,18 @@ function doGet(e) {
 //   { "action": "delete", "table": "Transaction", "id": "..." }
 //   { "action": "readAll" }   → same as a plain GET, but the key travels in the body instead of the address
 function doPost(e) {
-  var lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  var out;
+  var lock = null, out;
   try {
     var body = JSON.parse(e.postData.contents);
     checkKey_(body.key);
-    if (body.action === 'readAll') { lock.releaseLock(); lock = null; return json_({ ok: true, data: readAll_() }); }
-    if (body.action === 'syncBase44') { lock.releaseLock(); lock = null; return json_({ ok: true, result: syncFromBase44() }); }
+    // reading never waits for the lock, so a slow save can't block the app from loading
+    if (body.action === 'readAll') return json_({ ok: true, api: API_VERSION, data: readAll_() });
+    if (body.action === 'syncBase44') return json_({ ok: true, result: syncFromBase44() });
+    lock = LockService.getScriptLock();
+    if (!lock.tryLock(20000)) { lock = null; throw new Error('The Sheet is busy with another save; try again in a minute'); }
     if (!TABLES[body.table]) throw new Error('Unknown table: ' + body.table);
     if (body.action === 'upsert') out = { ok: true, row: upsert_(body.table, body.row) };
-    else if (body.action === 'upsertMany') out = { ok: true, rows: (body.rows || []).map(function (r) { return upsert_(body.table, r); }) };
+    else if (body.action === 'upsertMany') out = { ok: true, rows: upsertMany_(body.table, body.rows || []) };
     else if (body.action === 'delete') out = { ok: true, deleted: delete_(body.table, body.id) };
     else throw new Error('Unknown action: ' + body.action);
   } catch (err) {
@@ -243,6 +246,29 @@ function upsert_(table, row) {
     sh.appendRow(values);
   }
   return row;
+}
+
+// Many rows in one go: one read, one write for changed rows, one write for new rows
+function upsertMany_(table, rows) {
+  var sh = ss_().getSheetByName(table);
+  var lastCol = sh.getLastColumn(), lastRow = sh.getLastRow();
+  var headers = sh.getRange(1, 1, 1, lastCol).getValues()[0];
+  var data = lastRow > 1 ? sh.getRange(2, 1, lastRow - 1, lastCol).getValues() : [];
+  var at = {}; data.forEach(function (r, i) { if (r[0] !== '') at[String(r[0])] = i; });
+  var now = new Date().toISOString(), added = [], touched = false, cIdx = headers.indexOf('created_date');
+  rows.forEach(function (row) {
+    if (!row.id) { row.id = Utilities.getUuid(); row.created_date = now; }
+    row.updated_date = now;
+    var values = headers.map(function (h) { return row[h] === undefined ? '' : row[h]; });
+    if (at[String(row.id)] !== undefined) {
+      var i = at[String(row.id)];
+      if (cIdx > -1 && !row.created_date) values[cIdx] = data[i][cIdx];
+      data[i] = values; touched = true;
+    } else { at[String(row.id)] = -1; added.push(values); }
+  });
+  if (touched) sh.getRange(2, 1, data.length, lastCol).setValues(data);
+  if (added.length) sh.getRange(lastRow + 1, 1, added.length, lastCol).setValues(added);
+  return rows;
 }
 
 function delete_(table, id) {

@@ -12,7 +12,7 @@ function settingsHTML() {
   var h = topbar('Settings', false);
   var jobs = ['job_restore_porsche', 'job_goal_3a_2027', 'job_budgets_2027'].filter(done).length;
   h += '<p class="soon" style="margin:-16px 0 16px;font-size:12px">App version ' + APP_VERSION + ' · setup steps done: ' + jobs + ' of 3 · Apps Script: ' +
-    (UI.backend === 'new' ? (UI.catTable ? 'up to date' : 'up to date, but no Category tab yet: run setup in Apps Script') : UI.backend === 'old' ? '<span class="neg">older version still deployed: Deploy → Manage deployments → pencil → New version → Deploy</span>' : 'checking…') + '</p>';
+    (UI.backend === 'new' ? ((UI.api || 1) < 2 ? '<span class="neg">needs the latest Code.gs (paste it, then Deploy → Manage deployments → New version)</span>' : UI.catTable ? 'up to date' : 'up to date, but no Category tab yet: run setup in Apps Script') : UI.backend === 'old' ? '<span class="neg">older version still deployed: Deploy → Manage deployments → pencil → New version → Deploy</span>' : 'checking…') + '</p>';
   // on a phone this is the "More" tab, so it lists every page the bottom bar doesn't have
   var inBar = MOBILE_NAV.map(function (x) { return x[0]; }), more = [];
   NAV.forEach(function (g) { g.items.forEach(function (it) { if (inBar.indexOf(it[0]) < 0 && it[0] !== 'settings') more.push(it); }); });

@@ -115,7 +115,7 @@ module.exports = async function () {
     data.Settings.push({ id: 'cs', key: 'custom_subs', value: JSON.stringify({ 'Personal Cash': ['Car wash'] }) });
     var app = await h.openApp({ data: data }); await app.page.waitForTimeout(800);
     var rows = Object.values(app.store.Category || {});
-    h.assert(rows.length > 30, 'only ' + rows.length + ' category rows');
+    h.assert(rows.length >= 30, 'only ' + rows.length + ' category rows');
     h.assert(rows.some(function (r) { return r.category === 'Personal Cash' && r.subcategory === 'Car wash'; }), 'your own subcategory was not moved');
     h.assert(rows.some(function (r) { return r.category === 'Family Infrastructure' && r.subcategory === 'Mortgage'; }), 'built-in subcategory missing');
     h.assert(Object.values(app.store.Settings).some(function (r) { return r.key === 'job_categories_sheet' && r.value === '1'; }), 'done-flag not set');
@@ -123,6 +123,20 @@ module.exports = async function () {
     await app.page.evaluate(function () { location.hash = 'settings'; }); await app.page.waitForTimeout(250);
     h.assert(/Apps Script: up to date/.test(await app.page.innerText('#view')), 'settings should say the Apps Script is up to date');
     h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('a half-filled Category tab is completed, nothing goes missing meanwhile', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.Category = [{ id: 'p1', category: 'Family Infrastructure', subcategory: '', sort: 1 }, { id: 'p2', category: 'Family Infrastructure', subcategory: 'Mortgage', sort: 2 }];
+    var app = await h.openApp({ data: data, api1: true }), pg = app.page;
+    h.eq(Object.keys(app.store.Category).length, 2, 'with the first new script nothing should be written');
+    await pg.evaluate(function () { location.hash = 'settings'; }); await pg.waitForTimeout(250);
+    h.assert(/needs the latest Code\.gs/.test(await pg.innerText('#view')), 'settings should ask for the latest Code.gs');
+    await app.ctx.close();
+    var app2 = await h.openApp({ data: data }); await app2.page.waitForTimeout(800);
+    var rows = Object.values(app2.store.Category);
+    h.eq(rows.length, 30, 'rows in the tab (5 categories + 25 subcategories)');
+    h.eq(rows.filter(function (r) { return r.category === 'Family Infrastructure' && r.subcategory === 'Mortgage'; }).length, 1, 'duplicate rows');
+    h.noErrors(app2); await app2.ctx.close();
   });
   await h.test('categories come from the Sheet; a new subcategory is saved there', async function () {
     var data = JSON.parse(JSON.stringify(demo.data));

@@ -27,16 +27,18 @@ function runJobs() {
 // Once the Sheet has a Category tab: fill it with the built-in list plus the subcategories you added (custom_subs)
 function jobCategories() {
   var key = 'job_categories_sheet';
-  if (!UI.catTable || done(key)) return;
-  if ((DATA.Category || []).length) return saveSetting(key, '1');
-  var custom = customSubs(), rows = [], n = 0;
-  Object.keys(BUILTIN_CATEGORIES).forEach(function (c) {
-    rows.push({ category:c, subcategory:'', sort:++n });
-    var subs = BUILTIN_CATEGORIES[c].slice(); (custom[c] || []).forEach(function (x) { if (subs.indexOf(x) < 0) subs.push(x); });
-    subs.forEach(function (x) { rows.push({ category:c, subcategory:x, sort:++n }); });
+  // needs the Apps Script from 10.11.2026 (api 2), which writes many rows in one go;
+  // the first version wrote them one by one and could run into Google's 6-minute limit
+  if (!UI.catTable || (UI.api || 1) < 2 || done(key)) return;
+  var custom = customSubs(), rows = [], n = 0, have = {};
+  (DATA.Category || []).forEach(function (r) { have[r.category + '|' + (r.subcategory || '')] = 1; n = Math.max(n, +r.sort || 0); });
+  Object.keys(BUILTIN_CATEGORIES).forEach(function (c) {   // only what's missing, so a half-finished earlier attempt is completed
+    var want = [''].concat(BUILTIN_CATEGORIES[c]); (custom[c] || []).forEach(function (x) { if (want.indexOf(x) < 0) want.push(x); });
+    want.forEach(function (x) { if (!have[c + '|' + x]) rows.push({ category:c, subcategory:x, sort:++n }); });
   });
+  if (!rows.length) return saveSetting(key, '1');
   return post({ action:'upsertMany', table:'Category', rows:rows }).then(function (j) {
-    DATA.Category = j.rows || rows; applyCategories(); persistCache();
+    DATA.Category = (DATA.Category || []).concat(j.rows || rows); applyCategories(); persistCache();
     return saveSetting(key, '1');
   }).then(function () { toast('Categories moved to the Sheet (Category tab)'); draw(); });
 }

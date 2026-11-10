@@ -46,7 +46,7 @@ async function openApp(opts) {
           if (body.key !== 'test-key') return route.fulfill({ body: JSON.stringify({ ok: false, error: 'Error: Wrong or missing access key' }), contentType: 'application/json', headers: CORS });
           state.getCount++;
           var all = {}; Object.keys(store).forEach(function (k) { all[k] = Object.values(store[k]); });
-          return route.fulfill({ body: JSON.stringify({ ok: true, data: all }), contentType: 'application/json', headers: CORS });
+          return route.fulfill({ body: JSON.stringify(opts.api1 ? { ok: true, data: all } : { ok: true, api: 2, data: all }), contentType: 'application/json', headers: CORS });
         }
         if (req.headers()['content-type'] && !/text\/plain/.test(req.headers()['content-type'])) errors.push('POST sent a Content-Type header (breaks Apps Script): ' + req.headers()['content-type']);
         var t = store[body.table] = store[body.table] || {};

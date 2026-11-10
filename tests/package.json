@@ -1,0 +1,7 @@
+{
+  "name": "flowfin-tests",
+  "private": true,
+  "description": "Automated checks for FlowFin. Run: cd tests && npm install && npx playwright install chromium && node run.js",
+  "scripts": { "test": "node run.js" },
+  "devDependencies": { "playwright": "1.63.0", "chart.js": "4.4.1" }
+}

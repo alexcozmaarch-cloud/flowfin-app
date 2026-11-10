@@ -3297,7 +3297,7 @@ var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, 
   if (wantAdd) openTx(null);
   loadAll();
 
-  if ('serviceWorker' in navigator && location.protocol === 'https:') { try { navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }).then(function (r) { r.update(); }); } catch (e) {} }
+  if ('serviceWorker' in navigator && location.protocol === 'https:') { try { navigator.serviceWorker.register('sw.js', { updateViaCache:'none' }).then(function (r) { if (r) r.update(); }).catch(function () {}); } catch (e) {} }
 
   // exposed for the diagnostic check only
   window.FF = { periodModel:periodModel, calcTotals:calcTotals, periodAt:periodAt, applyData:applyData, DATA:DATA };

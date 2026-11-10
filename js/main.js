@@ -66,6 +66,7 @@ document.addEventListener('click', function (e) {
   if (act === 'dchart') { try { lsSet(DCHART_KEY, a.getAttribute('data-v')); } catch (e) {} if (CHARTS.daily) { CHARTS.daily.destroy(); delete CHARTS.daily; } return draw(); }
   if (act === 'sugg') return pickSugg(+a.getAttribute('data-i'));
   if (act === 'newsubadd') return addCustomSub();
+  if (act === 'qmore' && FORM) { readForm(); FORM._quick = false; drawModal(); var c = $('mcat'); if (c) c.focus(); return; }
   if (act === 'newsubx') { readForm(); FORM._newsub = false; return drawModal(); }
   if (act === 'ftoggle') { UI.fOpen = !UI.fOpen; return draw(); }
   if (act === 'txtab') { UI.txTab = a.getAttribute('data-v'); window.scrollTo(0, 0); return draw(); }

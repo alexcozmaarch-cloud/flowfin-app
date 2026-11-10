@@ -45,6 +45,43 @@ module.exports = async function () {
     h.noErrors(app); await app.ctx.close();
   });
 
+  console.log('\nQuick add (two fields)');
+  await h.test('quick add shows only description and amount, fills the rest from history', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(250);
+    for (var id of ['mdate', 'mcat', 'msub', 'macct', 'mtags', 'manom']) h.eq(await pg.locator('#' + id).count(), 0, id + ' should be hidden in quick add');
+    h.eq(await pg.evaluate(function () { return document.activeElement.id; }), 'mdesc', 'description should have focus');
+    await pg.type('#mdesc', 'Netflix', { delay: 20 }); await pg.press('#mdesc', 'Enter'); await pg.tap('#mamt'); await pg.waitForTimeout(350);
+    h.assert(/Personal Cash › Subscriptions/.test(await pg.innerText('.qsum')), 'summary should show the category from history: ' + await pg.innerText('.qsum'));
+    h.eq(await pg.inputValue('#mamt'), '18.9', 'amount from the last one');
+    await pg.fill('#mamt', '19.9'); await pg.click('[data-act=save]'); await pg.waitForTimeout(600);
+    var today = require('./demo-data').ymd(new Date());
+    var row = Object.values(app.store.Transaction).filter(function (t) { return t.description === 'Netflix' && t.date === today && +t.amount === 19.9; })[0];
+    h.assert(row, 'not saved'); h.eq(row.category, 'Personal Cash'); h.eq(row.subcategory, 'Subscriptions'); h.eq(row.type, 'expense');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('“More” opens the full form and keeps what was typed', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(250);
+    await pg.fill('#mdesc', 'Something new'); await pg.fill('#mamt', '7.5');
+    await pg.click('[data-act=qmore]'); await pg.waitForTimeout(250);
+    h.eq(await pg.inputValue('#mdesc'), 'Something new'); h.eq(await pg.inputValue('#mamt'), '7.5');
+    h.eq(await pg.locator('#mcat').count(), 1, 'full form should show the category');
+    await pg.selectOption('#mcat', 'Family Infrastructure'); await pg.waitForTimeout(150);
+    await pg.click('[data-act=save]'); await pg.waitForTimeout(600);
+    h.assert(Object.values(app.store.Transaction).some(function (t) { return t.description === 'Something new' && t.category === 'Family Infrastructure'; }), 'not saved with the chosen category');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('quick add with another currency', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(250);
+    await pg.fill('#mdesc', 'Hotel Rome'); await pg.selectOption('#mcur', 'EUR'); await pg.waitForTimeout(300);
+    h.eq(await pg.locator('#morig').count(), 1, 'amount paid field'); h.eq(await pg.locator('#mcat').count(), 0, 'still quick');
+    await pg.fill('#morig', '100'); await pg.dispatchEvent('#morig', 'input'); await pg.waitForTimeout(300);
+    h.near(parseFloat(await pg.inputValue('#mamt')), Math.round(100 * 0.8 * 1.0175 * 100) / 100, 'CHF amount');
+    h.noErrors(app); await app.ctx.close();
+  });
+
   console.log('\nAdd form on a phone');
   await h.test('suggestions appear while typing and close when tapping the next field', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;

@@ -2,7 +2,7 @@
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
 import { anomalyBody } from './anomalies.js';
 import { persistCache, post, saveRow, setSync } from './api.js';
-import { $, chf, esc, fmtCHF, inPeriod, isInfra, pd, periodAt, roles, toast, today, txs, ymd } from './core.js';
+import { $, addDays, chf, esc, fmtCHF, inPeriod, isInfra, pd, periodAt, roles, toast, today, txs, ymd } from './core.js';
 import { periodDay, sw, sw0 } from './dashboard.js';
 import { goalFund } from './goals.js';
 import { draw, reviewCount, topbar } from './nav.js';
@@ -200,6 +200,7 @@ function openTx(id) {
   FORM = src ? Object.assign({}, src) : { date:ymd(today()), description:'', category:'Personal Cash', subcategory:'Lunches', amount:'', type:'expense', account:'credit_card', anomaly_status:'', tags:'', orig_currency:'CHF', orig_amount:'', fx_fee:'' };
   if (!FORM.orig_currency) FORM.orig_currency = 'CHF';
   FORM._confirmDelete = false; FORM._err = ''; FORM._note = ''; FORM._rate = +FORM.fx_rate || null;
+  FORM._quick = !src;   // new transactions open as the two-field quick add; “More” shows everything
   FORM._fee = FORM.orig_currency !== 'CHF' ? (+FORM.fx_fee > 0) : true;
   drawModal();
   setTimeout(function () { var d = $('mdesc'); if (d && !id) d.focus(); }, 30);
@@ -218,10 +219,10 @@ function drawModal() {
 function drawModalNow() {
   var descs = {}, tagList = allTags();
   txs().forEach(function (t) { if (t.description) descs[t.description] = 1; });
-  var subs = subsOf(FORM.category), foreign = FORM.orig_currency && FORM.orig_currency !== 'CHF';
-  var h = '<div class="scrim" data-act="scrim"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="mtitle">' +
+  var subs = subsOf(FORM.category), foreign = FORM.orig_currency && FORM.orig_currency !== 'CHF', quick = FORM._quick && !FORM.id;
+  var h = '<div class="scrim" data-act="scrim"><div class="modal' + (quick ? ' quick' : '') + '" role="dialog" aria-modal="true" aria-labelledby="mtitle">' +
     '<h2 id="mtitle">' + (FORM.id ? 'Edit transaction' : 'New transaction') + '</h2>' +
-    '<div class="seg" id="mtype">' + TYPES.map(function (x) { return '<button type="button" data-type="' + x[0] + '" class="' + (FORM.type === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>' +
+    (quick ? '' : '<div class="seg" id="mtype">' + TYPES.map(function (x) { return '<button type="button" data-type="' + x[0] + '" class="' + (FORM.type === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>') +
     '<div class="formgrid">' +
     '<div class="field full sugwrap"><label for="mdesc">Description</label><input id="mdesc" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="msugg" value="' + esc(FORM.description) + '">' +
     '<div class="sugg" id="msugg" role="listbox" hidden></div></div>' +
@@ -234,23 +235,35 @@ function drawModalNow() {
     (foreign
       ? '<div class="field"><label for="mamt">In CHF · calculated, editable</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>'
       : '<div class="field"><label for="mamt">Amount</label><div class="amtrow"><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '">' + '<select id="mcur" aria-label="Currency">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select>' + '</div></div>') +
-    '<div class="field"><label for="mdate">Date</label><input id="mdate" type="date" value="' + esc(FORM.date) + '"></div>' +
+    (quick ? quickSummary() : fullFields(subs, tagList)) +
+    '</div>' + (FORM._err ? '<div class="err">' + esc(FORM._err) + '</div>' : '') +
+    '<div class="actions">' +
+    (FORM.id ? (FORM._confirmDelete
+      ? '<span class="left"><button class="btn danger" data-act="delyes">Yes, delete</button> <button class="btn" data-act="delno">Keep</button></span>'
+      : '<button class="btn danger left" data-act="del">Delete</button>') : '') +
+    (quick ? '' : '<button class="btn" data-act="mkrule" title="Future transactions with this description get the same category, type and account">Save as rule</button>') +
+    '<button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="save">' + (FORM.id ? 'Save changes' : 'Add transaction') + '</button>' +
+    '</div></div></div>';
+  $('modalRoot').innerHTML = h;
+}
+// Quick add: what will be saved besides the two fields, filled from your history and rules; tap to change it
+function quickSummary() {
+  var t = FORM.type !== 'expense' ? (TYPES.filter(function (x) { return x[0] === FORM.type; })[0] || ['', FORM.type])[1] + ' · ' : '';
+  var acct = (ACCOUNTS.filter(function (x) { return x[0] === FORM.account; })[0] || ['', FORM.account])[1];
+  var day = FORM.date === ymd(today()) ? 'Today' : FORM.date === ymd(addDays(today(), -1)) ? 'Yesterday' : periodDay(pd(FORM.date));
+  return '<div class="field full"><button type="button" class="qsum" data-act="qmore" aria-label="Change category, account, date and more">' + txIco(FORM) +
+    '<span class="qs"><b>' + esc(FORM.category) + (FORM.subcategory ? ' › ' + esc(FORM.subcategory) : '') + '</b>' +
+    '<small>' + esc(t) + esc(acct) + ' · ' + esc(day) + (FORM.tags ? ' · ' + esc(FORM.tags) : '') + '</small></span><span class="qm">More</span></button></div>';
+}
+function fullFields(subs, tagList) {
+  return '<div class="field"><label for="mdate">Date</label><input id="mdate" type="date" value="' + esc(FORM.date) + '"></div>' +
     '<div class="field"><label for="mcat">Category</label><select id="mcat">' + Object.keys(CATEGORIES).map(function (c) { return opt(c, c, FORM.category); }).join('') + '</select></div>' +
     '<div class="field"><label for="msub">Subcategory</label><select id="msub">' + (subs.length ? subs : ['—']).map(function (s) { return opt(s === '—' ? '' : s, s, FORM.subcategory || ''); }).join('') + '<option value="__new">+ New subcategory…</option></select></div>' +
     (FORM._newsub ? '<div class="field full newsub"><label for="mnewsub">New subcategory in ' + esc(FORM.category) + '</label><div class="nsrow"><input id="mnewsub" autocomplete="off" placeholder="e.g. Car wash"><button class="btn primary" data-act="newsubadd">Add</button><button class="btn" data-act="newsubx">Cancel</button></div></div>' : '') +
     '<div class="field"><label for="macct">Account</label><select id="macct">' + ACCOUNTS.map(function (x) { return opt(x[0], x[1], FORM.account); }).join('') + '</select></div>' +
     '<div class="field"><label for="mtags">Tags (comma separated)</label><input id="mtags" list="mtagList" autocomplete="off" placeholder="e.g. Singapore 2026" value="' + esc(FORM.tags || '') + '"></div>' +
     '<datalist id="mtagList">' + tagList.map(function (x) { return '<option value="' + esc(x.tag) + '">'; }).join('') + '</datalist>' +
-    '<div class="field full"><label for="manom">Anomaly review</label><select id="manom">' + opt('','Not reviewed',FORM.anomaly_status || '') + opt('confirmed','Confirmed (keep in projections)',FORM.anomaly_status) + opt('excluded','One-off (exclude from projections)',FORM.anomaly_status) + '</select></div>' +
-    '</div>' + (FORM._err ? '<div class="err">' + esc(FORM._err) + '</div>' : '') +
-    '<div class="actions">' +
-    (FORM.id ? (FORM._confirmDelete
-      ? '<span class="left"><button class="btn danger" data-act="delyes">Yes, delete</button> <button class="btn" data-act="delno">Keep</button></span>'
-      : '<button class="btn danger left" data-act="del">Delete</button>') : '') +
-    '<button class="btn" data-act="mkrule" title="Future transactions with this description get the same category, type and account">Save as rule</button>' +
-    '<button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="save">' + (FORM.id ? 'Save changes' : 'Add transaction') + '</button>' +
-    '</div></div></div>';
-  $('modalRoot').innerHTML = h;
+    '<div class="field full"><label for="manom">Anomaly review</label><select id="manom">' + opt('','Not reviewed',FORM.anomaly_status || '') + opt('confirmed','Confirmed (keep in projections)',FORM.anomaly_status) + opt('excluded','One-off (exclude from projections)',FORM.anomaly_status) + '</select></div>';
 }
 function fxInfo() {
   if (!FORM || !FORM.orig_currency || FORM.orig_currency === 'CHF') return '';
@@ -259,9 +272,12 @@ function fxInfo() {
   return '1 ' + esc(FORM.orig_currency) + ' = ' + FORM._rate.toFixed(4) + ' CHF (rate for ' + (FORM.date <= ymd(today()) ? periodDay(pd(FORM.date)) : 'today') + ')' + (FORM._fee ? ' + ' + cardFeePct() + '% fee' : '');
 }
 function readForm() {
-  FORM.description = $('mdesc').value; FORM.amount = $('mamt').value; FORM.date = $('mdate').value;
-  FORM.category = $('mcat').value; if ($('msub').value !== '__new') FORM.subcategory = $('msub').value; FORM.account = $('macct').value; FORM.anomaly_status = $('manom').value;
-  FORM.tags = $('mtags').value; FORM.orig_currency = $('mcur').value;
+  function v(id) { var el = $(id); return el ? el.value : null; }   // quick add has only some of the fields
+  var x;
+  if ((x = v('mdesc')) !== null) FORM.description = x; if ((x = v('mamt')) !== null) FORM.amount = x; if ((x = v('mdate')) !== null) FORM.date = x;
+  if ((x = v('mcat')) !== null) FORM.category = x; if ((x = v('msub')) !== null && x !== '__new') FORM.subcategory = x;
+  if ((x = v('macct')) !== null) FORM.account = x; if ((x = v('manom')) !== null) FORM.anomaly_status = x;
+  if ((x = v('mtags')) !== null) FORM.tags = x; if ((x = v('mcur')) !== null) FORM.orig_currency = x;
   if ($('morig')) FORM.orig_amount = $('morig').value;
   if ($('mfee')) FORM._fee = $('mfee').checked;
 }

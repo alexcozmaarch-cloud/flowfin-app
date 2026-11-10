@@ -135,6 +135,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .tx:hover{background:var(--paper)}
 .tx .sw{display:none}
 .sugwrap{position:relative}
+.qsum{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 12px;align-items:center;text-align:left;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;min-height:52px}
+.qsum:hover{border-color:var(--ink)}.qsum .qs{min-width:0}.qsum b{display:block;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qsum small{display:block;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.qsum .qm{font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.modal.quick .formgrid{grid-template-columns:1fr}
 .amtrow{display:grid;grid-template-columns:minmax(0,1fr) 88px}
 .amtrow select{border-left:0;font-family:'IBM Plex Mono',monospace;font-size:14px;padding-left:10px;padding-right:22px;background-color:var(--bg)}
 .sugg{margin-top:-1px;border:1px solid var(--ink);background:var(--paper);display:grid;max-height:232px;overflow:auto}

@@ -409,3 +409,26 @@ details.fold>summary:hover h3{color:var(--muted)}
 .ctable>div:last-child{font-weight:600;border-top:1px solid var(--ink)}
 @media (max-width:720px){.wf>div{grid-template-columns:110px minmax(0,1fr) 90px 36px;gap:8px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* Home (B, approved 10.11.2026): pill, pace bar, compact income bar, nearest goal, more-detail links */
+.hrow{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{font-family:var(--f-mono);font-size:12px;letter-spacing:0;text-transform:none;padding:2px 8px;border:1px solid currentColor;white-space:nowrap}
+.pill.ok{color:var(--good)}.pill.over{color:var(--signal)}
+.pacebox{background:var(--paper);border:1px solid var(--rule);padding:14px;display:grid;gap:10px;align-self:end}
+.pacebox .lastp{text-transform:none;letter-spacing:0;font-family:var(--f-sans);font-size:12px}
+.pmeter{position:relative;height:10px;background:var(--bg);border:1px solid var(--ink)}
+.pmeter b{position:absolute;inset:0 auto 0 0;background:var(--ink)}.pmeter b.over{background:var(--signal)}
+.pmeter i{position:absolute;top:-5px;bottom:-5px;width:2px;margin-left:-1px;background:var(--signal)}
+.plab{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--muted)}.plab b{color:var(--ink);font-weight:500}
+.wfleg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--muted)}
+.wfleg span{cursor:pointer}.wfleg span.neg{color:var(--signal)}
+.wfleg i{display:inline-block;width:10px;height:10px;margin-right:5px;vertical-align:-1px;border:1px solid var(--ink)}
+.wfleg b{color:var(--ink);font-weight:500}
+.goalrow{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 12px;align-items:center;text-align:left;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--rule);padding:12px 14px;cursor:pointer;margin-bottom:28px}
+.goalrow:hover{border-color:var(--ink)}.goalrow .gt{display:grid;gap:3px;min-width:0}.goalrow small{color:var(--muted);font-size:12px}
+.goalrow .gm{height:4px;background:var(--rule);display:block}.goalrow .gm i{display:block;height:100%;background:var(--ink)}
+.moreh{margin:8px 0 -12px}
+.linkrow{width:100%;display:flex;justify-content:space-between;align-items:baseline;gap:12px;background:none;border:0;border-top:1px solid var(--ink);padding:14px 0;font:inherit;color:var(--ink);cursor:pointer;text-align:left}
+.linkrow h3{margin:0}.linkrow h3::before{content:"→";font-family:var(--f-mono);font-weight:500;width:18px;display:inline-block}
+.linkrow .r{font-size:13px;color:var(--muted)}.linkrow:hover h3{color:var(--muted)}
+.ur.more{border-bottom:0}

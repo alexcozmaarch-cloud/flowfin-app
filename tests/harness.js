@@ -5,8 +5,11 @@ var fs = require('fs'), path = require('path');
 var { chromium, devices } = require('playwright');
 var ROOT = path.resolve(__dirname, '..');
 var TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
-function chartPath() {
-  try { return require.resolve('chart.js/dist/chart.umd.js'); } catch (e) { return null; }
+function chartPath() {   // the package's exports hide dist/, so look for the file directly
+  var f = path.join(__dirname, 'node_modules', 'chart.js', 'dist', 'chart.umd.js');
+  if (fs.existsSync(f)) return f;
+  f = path.join(__dirname, 'node_modules', 'chart.js', 'dist', 'chart.umd.min.js');
+  return fs.existsSync(f) ? f : null;
 }
 var CORS = { 'Access-Control-Allow-Origin': '*' };
 

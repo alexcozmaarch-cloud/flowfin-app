@@ -3,9 +3,11 @@
 import { budgetMapFor, budgetRows, catSpend, holidaysBudgeted } from './budgets.js';
 import { chartColors, netSavingsData } from './charts.js';
 import { $, addDays, calcTotals, daysBetween, esc, fmt0, fmtCHF, inPeriod, isInfra, isSalary, lsGet, pd, periodAt, periodLabel, periodModel, roles, today, txs, ymd } from './core.js';
+import { goalView } from './goals.js';
 import { topbar } from './nav.js';
+import { monthEnds } from './wealth.js';
 import { upcomingHTML } from './recurring.js';
-import { catIco } from './transactions.js';
+import { catIco, ico } from './transactions.js';
 
 // ─── Dashboard ────────────────────────────────────────────────────────────
 function sw(n) { return fmtCHF.format(n || 0); }           // 1’234.50
@@ -68,17 +70,18 @@ function dashboardHTML() {
   var catLine = D.byCat.map(function (c) { var l = c.limit - c.spent; return esc(c.cat) + (l >= 0 ? ' has ' + sw0(l) + ' left' : ' is ' + sw0(-l) + ' over'); }).join('; ');
   h += '<section class="hero">';
   if (D.isCur) {
-    var perDay = D.daysLeft ? D.left / D.daysLeft : 0;
-    h += '<div class="main"><div class="eyebrow">Left to spend · ' + D.daysLeft + ' day' + (D.daysLeft === 1 ? '' : 's') + ' to ' + periodDay(D.p.end) + ', today included</div>' +
+    var perDay = D.daysLeft ? D.left / D.daysLeft : 0, diff = D.pace - D.spent, same = P.days ? P.cum[Math.min(D.elapsed, P.days) - 1] : null;
+    var spentToday = D.elapsed ? D.daily[D.elapsed - 1] || 0 : 0, scale = Math.max(D.budget, D.spent, 1);
+    h += '<div class="main"><div class="eyebrow hrow"><span>Left to spend this period</span>' +
+      (D.budget ? '<span class="pill ' + (diff >= 0 ? 'ok' : 'over') + '">' + sw0(Math.abs(diff)) + (diff >= 0 ? ' under pace' : ' over pace') + '</span>' : '') + '</div>' +
       '<div class="bignum"><span class="cur">CHF</span><span class="val ' + (D.left < 0 ? 'neg' : '') + '">' + sw0(D.left) + '</span></div>' +
-      '<p class="why">' + (D.left >= 0 ? 'About <b class="num">' + sw0(perDay) + '</b> a day. ' : 'Over your day-to-day budgets by ' + sw0(-D.left) + '. ') + catLine + '.' +
-      (D.sched > 0.5 ? ' Includes ' + sw0(D.sched) + ' already scheduled.' : '') + '</p></div>';
-    var diff = D.pace - D.spent, same = P.days ? P.cum[Math.min(D.elapsed, P.days) - 1] : null;
-    h += '<div class="side"><div class="eyebrow" style="margin-bottom:4px">Pace · day ' + D.elapsed + ' of ' + D.days + '</div>' +
-      '<div class="line"><span>Spent so far</span><span class="num">' + sw0(D.spent) + '</span></div>' +
-      '<div class="line"><span>Even pace for today</span><span class="num">' + sw0(D.pace) + '</span></div>' +
-      '<div class="line"><span>Difference</span><span class="num ' + (diff >= 0 ? 'pos' : 'neg') + '">' + sw0(Math.abs(diff)) + (diff >= 0 ? ' under' : ' over') + '</span></div>' +
-      (same !== null && same !== undefined ? '<div class="line"><span>Same day last period</span><span class="num">' + sw0(same) + '</span></div>' : '') + '</div>';
+      '<p class="why">' + (D.left >= 0 ? 'About <b class="num">' + sw0(perDay) + '</b> a day for ' + D.daysLeft + ' day' + (D.daysLeft === 1 ? '' : 's') + ' (today included)' : 'Over your day-to-day budgets by ' + sw0(-D.left)) +
+      ' · spent <b class="num">' + sw0(spentToday) + '</b> today' + (D.sched > 0.5 ? ' · includes ' + sw0(D.sched) + ' already scheduled' : '') + '.</p></div>';
+    h += '<div class="side pacebox"><div class="eyebrow hrow"><span>Pace · day ' + D.elapsed + ' of ' + D.days + '</span>' +
+      (same !== null && same !== undefined ? '<span class="lastp">same day last period <b class="num">' + sw0(same) + '</b></span>' : '') + '</div>' +
+      '<div class="pmeter" role="img" aria-label="Spent ' + sw0(D.spent) + ' of ' + sw0(D.budget) + '; even pace today ' + sw0(D.pace) + '">' +
+      '<b class="' + (D.spent > D.budget ? 'over' : '') + '" style="width:' + Math.min(100, D.spent / scale * 100) + '%"></b><i style="left:' + Math.min(100, D.pace / scale * 100) + '%"></i></div>' +
+      '<div class="plab"><span>Spent <b class="num">' + sw0(D.spent) + '</b></span><span>Even pace <b class="num">' + sw0(D.pace) + '</b></span><span>Budget <b class="num">' + sw0(D.budget) + '</b></span></div></div>';
   } else {
     var res = D.budget - D.spentAll;
     h += '<div class="main"><div class="eyebrow">Day-to-day · ' + periodLabel(D.p) + '</div>' +
@@ -98,12 +101,16 @@ function dashboardHTML() {
       : '<span><i style="border-top:2px solid var(--ink)"></i>This period</span><span><i style="border-top:2px dashed var(--faint)"></i>Last period</span>' + (D.isCur ? '<span><i style="border-top:2px dotted var(--ink)"></i>Projected</span>' : '') + '<span><i style="border-top:2px solid var(--signal)"></i>Below zero</span>') + '</div>' +
     '<p class="chartnote">' + (mode === 'pace' ? 'Day-to-day spending added up. Below the dotted line: under budget.' : 'Each day adds ' + sw0(D.perDay) + ' (day-to-day budgets ÷ ' + D.days + ' days) and takes off what you spent. Above 0: under budget.') + '</p>' +
     '<div class="chartbox"><canvas id="chDaily" role="img" aria-label="' + (mode === 'pace' ? 'Day-to-day spending against an even pace' : 'Allowance balance for the period') + '"></canvas></div></section>';
-  // 4 · where the income went
-  h += waterfallHTML(m);
-  // 5 · budgets you act on
+  // 4 · budgets you act on (all of them, with forecast)
   h += budgetsMiniHTML(m, D);
-  // 6 · upcoming
-  h += upcomingHTML(m);
+  // 5 · where the income went (one bar)
+  h += waterfallHTML(m);
+  // 6 · upcoming: the next three and the total still to pay
+  h += upcomingHTML(m, 3);
+  // 7 · the goal with the nearest deadline
+  h += nearestGoalHTML();
+  // more detail, one tap down
+  h += '<div class="moreh eyebrow">More detail</div>';
   // 7 · weeks
   var w = weeksModel(D), doneW = w.filter(function (x) { return x.state === 'done'; }), good = doneW.filter(function (x) { return x.spent <= x.budget; }).length;
   h += fold('weeks', 'Week by week', doneW.length ? good + ' of ' + doneW.length + ' finished weeks under budget' : sw0(D.perDay * 7) + ' a week', weeksBody(w, D), false);
@@ -114,7 +121,26 @@ function dashboardHTML() {
   var nd = netSavingsData(), pos = nd.filter(function (x) { return x.net >= 0; }).length;
   h += fold('net', 'Saved per period', pos + ' of ' + nd.length + ' periods positive',
     '<p class="chartnote">Income minus spending, cards at cost. Money moved into 3a or investing counts as saved.</p><div class="chartbox" style="height:220px"><canvas id="chNet" role="img" aria-label="Net saved per period for the last ' + nd.length + ' periods"></canvas></div>', false);
+  h += netWorthLink();
   return h;
+}
+// The goal with the nearest deadline that isn't reached yet
+function nearestGoalHTML() {
+  var goals = (DATA.FinancialGoal || []).slice().sort(function (a, b) { return String(a.deadline || '9') < String(b.deadline || '9') ? -1 : 1; });
+  for (var i = 0; i < goals.length; i++) {
+    var v = goalView(goals[i]); if (v.left <= 0) continue;
+    var pct = v.target ? Math.min(100, Math.max(0, v.cur / v.target * 100)) : 0;
+    return '<button class="goalrow" data-nav="goals">' + ico('target') + '<span class="gt"><b>' + esc(goals[i].name) + '</b><small>' + esc(v.etaText || v.label || '') + (goals[i].deadline ? ' · by ' + periodDay(pd(goals[i].deadline)) + String(goals[i].deadline).slice(0, 4) : '') + '</small>' +
+      '<span class="gm"><i style="width:' + pct + '%"></i></span></span><span class="num">' + sw0(v.cur) + ' / ' + sw0(v.target) + '</span></button>';
+  }
+  return '';
+}
+// Net worth, one tap down: this month so far and the change since last month's end
+function netWorthLink() {
+  if (!(DATA.NetWorthEntry || []).length) return '';
+  var ms = monthEnds(), cur = ms[ms.length - 1]; if (!cur) return '';
+  var chg = ms.length > 1 ? cur.net - ms[ms.length - 2].net : 0;
+  return '<button class="linkrow" data-nav="wealth"><h3>Net worth</h3><span class="r">' + sw0(cur.net) + (ms.length > 1 ? ' · ' + (chg >= 0 ? '+' : '−') + sw0(Math.abs(chg)) + ' this month' : '') + ' ›</span></button>';
 }
 var DCHART_KEY = 'ff_dchart_v1';
 function dchartMode() { return lsGet(DCHART_KEY) === 'pace' ? 'pace' : 'balance'; }
@@ -130,16 +156,16 @@ function waterfallHTML(m) {
   var shades = ['var(--ink)', '#3A3E3B', '#5E635F', '#858A86', '#A9ADA9', '#C6C9C6'], base = Math.max(inc, out);
   var bar = rows.map(function (r, i) { return r.v > 0 ? '<i style="width:' + (r.v / base * 100) + '%;background:' + shades[i % shades.length] + '"></i>' : ''; }).join('') +
     (left > 0 ? '<i style="width:' + (left / base * 100) + '%;background:var(--good)"></i>' : '');
-  return '<section class="card"><h3>Where the income went<span class="r">' + (m.isCurrent ? 'so far this period' : periodLabel(p)) + '</span></h3>' +
-    '<div class="wfbar">' + bar + '</div><div class="wf">' +
-    '<div class="wrow"><span>Income</span><span class="num">' + sw0(inc) + '</span></div>' +
-    rows.map(function (r) { return '<div class="wrow drill"' + drill({ category:r.c === 'Holidays' ? 'Family Infrastructure' : r.c, sub:r.c === 'Holidays' ? 'Vacations' : '' }) + '><span>' + catIco(r.c) + ' ' + esc(r.c) + '</span><span class="num">' + (r.v ? '−' + sw0(r.v) : '0') + '</span></div>'; }).join('') +
-    '<div class="wrow tot"><span>' + (left >= 0 ? 'Left over' : 'Short') + (inc > 0 ? ' · ' + (left / inc * 100).toFixed(1) + '% of income' : '') + '</span><span class="num ' + (left < 0 ? 'neg' : '') + '">' + sw0(left) + '</span></div></div></section>';
+  // compact: one bar, a legend you can tap through to the transactions, and what is left
+  return '<section class="card"><h3>Where the income went<span class="r">' + (inc > 0 ? sw0(inc) + ' in ' : '') + (m.isCurrent ? 'so far' : periodLabel(p)) + '</span></h3>' +
+    '<div class="wfbar">' + bar + '</div><div class="wfleg">' +
+    rows.map(function (r, i) { return '<span class="drill"' + drill({ category:r.c === 'Holidays' ? 'Family Infrastructure' : r.c, sub:r.c === 'Holidays' ? 'Vacations' : '' }) + '><i style="background:' + shades[i % shades.length] + '"></i>' + esc(r.c) + ' <b class="num">' + sw0(r.v) + '</b></span>'; }).join('') +
+    '<span class="' + (left < 0 ? 'neg' : '') + '"><i style="background:' + (left >= 0 ? 'var(--good)' : 'var(--signal)') + '"></i>' + (left >= 0 ? 'Left over' : 'Short') + ' <b class="num">' + sw0(left) + '</b>' + (inc > 0 ? ' · ' + (left / inc * 100).toFixed(1) + '%' : '') + '</span></div></section>';
 }
 
 // 5 · day-to-day budgets and 3a, with the usual-spending forecast
 function budgetsMiniHTML(m, D) {
-  var rows = budgetForecastRows(m).filter(function (r) { return r.limit > 0 && D.cats.concat(['Retirement 3a', 'Holidays', 'Financial Investing']).indexOf(r.cat) > -1; });
+  var rows = budgetForecastRows(m).filter(function (r) { return r.limit > 0 && D.cats.concat(['Family Infrastructure', 'Retirement 3a', 'Holidays', 'Financial Investing']).indexOf(r.cat) > -1; });
   if (!rows.length) return '';
   return '<section class="card"><h3>Budgets<span class="r"><button class="navlink" data-nav="budgets">Edit in Budgets</button></span></h3><div class="minib">' +
     rows.map(function (r) {

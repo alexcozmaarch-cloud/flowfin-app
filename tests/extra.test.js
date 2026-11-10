@@ -44,6 +44,20 @@ module.exports = async function () {
     var btns = pg.locator('[data-act=dchart]'); h.assert(await btns.count() === 2, 'chart switch missing');
     await btns.nth(1).click(); await pg.waitForTimeout(300); await pg.locator('[data-act=dchart]').nth(0).click(); await pg.waitForTimeout(300);
     h.assert(await pg.locator('canvas').count() > 0, 'no chart drawn');
+    var painted = await pg.evaluate(function () { var c = document.getElementById('chDaily'); if (!c) return 0; var x = c.getContext('2d').getImageData(0, 0, c.width, c.height).data, n = 0; for (var i = 3; i < x.length; i += 4) if (x[i]) n++; return n; });
+    h.assert(painted > 500, 'the chart is empty');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('home: pace bar, all budgets, compact income bar, next 3 upcoming, nearest goal, net worth link', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    h.assert(await pg.locator('.pill').count() >= 1, 'pace pill missing');
+    h.eq(await pg.locator('.pmeter').count(), 1, 'pace bar');
+    h.assert(/Family Infrastructure/.test(await pg.innerText('.minib')), 'Family Infrastructure budget missing');
+    h.assert(await pg.locator('.wfleg span').count() >= 4, 'income legend');
+    h.assert(await pg.locator('.uplist .ur:not(.more)').count() <= 5, 'too many upcoming rows');
+    h.assert(/Demo car/.test(await pg.innerText('.goalrow')), 'nearest goal missing');
+    await pg.click('.linkrow[data-nav=wealth]'); await pg.waitForTimeout(300);
+    h.assert(/Net worth/.test(await pg.innerText('#view')), 'net worth link did not open Wealth');
     h.noErrors(app); await app.ctx.close();
   });
   await h.test('settings show the app version', async function () {

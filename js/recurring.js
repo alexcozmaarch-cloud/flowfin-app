@@ -91,13 +91,17 @@ function upcomingItems(m) {
   if (payPrev >= t && payPrev <= end && cc.net > 0) out.push({ d:payPrev, name:'Credit card invoice', amount:cc.net, kind:'card' });
   return out.sort(function (a, b) { return a.d - b.d; });
 }
-function upcomingHTML(m) {
+function upcomingHTML(m, limit) {
   UI.upLate = [];
   if (!m.isCurrent) return '';
   var u = upcomingItems(m), t = today();
   var sal = recurringItems().filter(function (r) { return r.type === 'income' && (!r.status || r.status === 'active') && r.next && r.next > m.p.end && (r.subcategory === 'Cash' || /salary/i.test(r.name)); })[0];
   if (!u.length && !sal) return '';
-  var outSum = sumBy(u, function (x) { return x.inflow ? 0 : x.amount; });
+  var outSum = sumBy(u, function (x) { return x.inflow ? 0 : x.amount; }), all = u.length;
+  if (limit && u.length > limit) {   // late ones always show; then the soonest
+    var late = u.filter(function (x) { return x.late; }), rest = u.filter(function (x) { return !x.late; });
+    u = late.concat(rest.slice(0, Math.max(0, limit - late.length)));
+  }
   return '<section class="card"><h3>Upcoming<span class="r">' + (outSum ? 'CHF ' + sw0(outSum) + ' still to pay before ' + periodDay(m.p.end) : 'nothing more to pay before ' + periodDay(m.p.end)) + ' · <button class="navlink" data-nav="subscriptions">All recurring</button></span></h3><div class="uplist">' +
     u.map(function (x) {
       var i = x.late ? UI.upLate.push(x) - 1 : -1;
@@ -107,6 +111,7 @@ function upcomingHTML(m) {
         (x.late ? '<span class="uq"><button class="navlink" data-act="uppaid" data-i="' + i + '">' + (x.inflow ? 'Received' : 'Paid') + '</button><button class="navlink" data-act="upskip" data-i="' + i + '">Not this time</button></span>' : '') + '</span>' +
         '<span class="num ' + (x.inflow ? 'pos' : '') + '">' + (x.inflow ? '+' : '') + (x.approx ? '~' : '') + sw0(x.amount) + '</span></div>';
     }).join('') +
+    (all > u.length ? '<div class="ur more"><span></span><span><button class="navlink" data-nav="subscriptions">' + (all - u.length) + ' more before ' + periodDay(m.p.end) + ' ›</button></span><span></span></div>' : '') +
     (sal ? '<div class="ur">' + ico('banknote') + '<span><b>' + esc(sal.name) + '</b> <small>· next period, about ' + periodDay(sal.next) + '</small></span><span class="num pos">+' + sw0(sal.amount) + '</span></div>' : '') +
     '</div></section>';
 }

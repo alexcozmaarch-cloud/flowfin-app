@@ -11,7 +11,8 @@ import { cardFeePct, opt, ruleText, sortedRules, subsOf, suggestedRules } from '
 function settingsHTML() {
   var h = topbar('Settings', false);
   var jobs = ['job_restore_porsche', 'job_goal_3a_2027', 'job_budgets_2027'].filter(done).length;
-  h += '<p class="soon" style="margin:-16px 0 16px;font-size:12px">App version ' + APP_VERSION + ' · setup steps done: ' + jobs + ' of 3</p>';
+  h += '<p class="soon" style="margin:-16px 0 16px;font-size:12px">App version ' + APP_VERSION + ' · setup steps done: ' + jobs + ' of 3 · Apps Script: ' +
+    (UI.backend === 'new' ? (UI.catTable ? 'up to date' : 'up to date, but no Category tab yet: run setup in Apps Script') : UI.backend === 'old' ? '<span class="neg">older version still deployed: Deploy → Manage deployments → pencil → New version → Deploy</span>' : 'checking…') + '</p>';
   // on a phone this is the "More" tab, so it lists every page the bottom bar doesn't have
   var inBar = MOBILE_NAV.map(function (x) { return x[0]; }), more = [];
   NAV.forEach(function (g) { g.items.forEach(function (it) { if (inBar.indexOf(it[0]) < 0 && it[0] !== 'settings') more.push(it); }); });
@@ -30,7 +31,7 @@ function settingsHTML() {
     '<div class="field"><label for="sfee">Card fee on foreign currency (%)</label><input id="sfee" type="number" step="0.05" min="0" value="' + cardFeePct() + '"></div>' +
     '<button class="btn" data-act="savefee">Save</button></div><p class="soon" style="margin:10px 0 0;font-size:13px">Added to the CHF amount when you enter a foreign-currency payment and tick “Add card fee”. Rates are the ECB reference rates for the transaction date.</p></div>';
   h += '<div class="card"><h3>Data in the Sheet</h3><div>' + TABLES.map(function (t) {
-    return '<div class="rowline"><span>' + t + '</span><span class="num">' + (DATA[t] || []).length + '</span></div>';
+    return '<div class="rowline"><span>' + t + '</span><span class="num">' + (t === 'Category' && !UI.catTable ? 'tab not found' : (DATA[t] || []).length) + '</span></div>';
   }).join('') + '</div><p class="soon" style="margin:12px 0 0">Period runs from day ' + START_DAY + ' to day ' + (START_DAY - 1) + ' of the next month. ' +
     'Free cash uses your average salary and household cost over the last ' + HIST_MONTHS + ' periods.</p></div>';
   return h;

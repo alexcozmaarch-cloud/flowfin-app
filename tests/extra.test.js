@@ -120,6 +120,8 @@ module.exports = async function () {
     h.assert(rows.some(function (r) { return r.category === 'Family Infrastructure' && r.subcategory === 'Mortgage'; }), 'built-in subcategory missing');
     h.assert(Object.values(app.store.Settings).some(function (r) { return r.key === 'job_categories_sheet' && r.value === '1'; }), 'done-flag not set');
     h.eq(app.state.urlKeyReads || 0, 0, 'the key should not travel in the address');
+    await app.page.evaluate(function () { location.hash = 'settings'; }); await app.page.waitForTimeout(250);
+    h.assert(/Apps Script: up to date/.test(await app.page.innerText('#view')), 'settings should say the Apps Script is up to date');
     h.noErrors(app); await app.ctx.close();
   });
   await h.test('categories come from the Sheet; a new subcategory is saved there', async function () {
@@ -143,6 +145,9 @@ module.exports = async function () {
     var app = await h.openApp({ data: data, phone: true, oldBackend: true }), pg = app.page;
     h.assert(await pg.evaluate(function () { return FF.periodModel(-1).list.length; }) > 10, 'data not loaded');
     h.eq(Object.keys(app.store).indexOf('Category'), -1, 'must not write a Category tab that does not exist');
+    await pg.evaluate(function () { location.hash = 'settings'; }); await pg.waitForTimeout(250);
+    h.assert(/older version still deployed/.test(await pg.innerText('#view')), 'settings should flag the old Apps Script');
+    await pg.evaluate(function () { location.hash = 'dashboard'; }); await pg.waitForTimeout(250);
     await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
     await pg.fill('#mdesc', 'Car wash'); await pg.fill('#mamt', '12');
     await pg.selectOption('#msub', '__new'); await pg.waitForTimeout(150); await pg.fill('#mnewsub', 'Car care'); await pg.press('#mnewsub', 'Enter'); await pg.waitForTimeout(500);

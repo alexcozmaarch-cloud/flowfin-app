@@ -53,8 +53,9 @@ function post(body) {
 // Read everything. The key goes in the request body, not the address; a backend from before 10.11.2026
 // doesn't know "readAll" yet, so then the old way (key in the address) is used.
 function readAll() {
-  return post({ action:'readAll' }).catch(function (e) {
+  return post({ action:'readAll' }).then(function (j) { UI.backend = 'new'; return j; }).catch(function (e) {
     if (e.offline || !/Unknown (table|action)/i.test(e.message)) throw e;
+    UI.backend = 'old';
     return fetch(apiUrl() + '?key=' + encodeURIComponent(apiKey())).then(function (r) { return r.json(); });
   });
 }

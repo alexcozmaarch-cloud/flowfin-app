@@ -473,3 +473,18 @@ details.fold>summary:hover h3{color:var(--muted)}
 .wkbars{display:grid;gap:8px}.wkbars div{display:grid;grid-template-columns:90px minmax(0,1fr) 56px;gap:10px;align-items:center;font-size:13px}
 .wkbars .b{height:9px;background:var(--bg);border:1px solid var(--rule)}.wkbars .b i{display:block;height:100%;background:var(--ink)}.wkbars .num{text-align:right}
 .srow .chg,.srow .stag,.srow .still{justify-self:end;width:auto;display:inline-flex;align-items:center}
+
+/* Split a transaction */
+.splitbox{display:grid;gap:6px;border:1px solid var(--rule);background:var(--paper);padding:10px 12px}
+.sprow{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 92px 32px;gap:6px;align-items:center}
+.sprow.first{grid-template-columns:minmax(0,1fr) auto 32px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
+.sprow.first small{display:block;color:var(--muted);font-size:12px}.sprow .num{text-align:right;font-size:15px}
+.sprow.tools{display:flex;justify-content:space-between}
+.sprow select,.sprow input{min-width:0;width:100%}
+@media (max-width:520px){.sprow{grid-template-columns:minmax(0,1fr) 84px 32px}.sprow select[id^=sp_s]{grid-column:1/2;grid-row:2}}
+
+/* What changed (Monthly) */
+.changed ul{margin:0;padding:0;list-style:none;display:grid;border-top:1px solid var(--rule)}
+.changed li{padding:10px 0 10px 22px;border-bottom:1px solid var(--rule);position:relative;font-size:15px;max-width:72ch}
+.changed li::before{content:"→";position:absolute;left:0;font-family:var(--f-mono);color:var(--muted)}
+.changed li b{font-weight:600}

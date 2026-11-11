@@ -262,9 +262,28 @@ function fullFields(subs, tagList) {
     '<div class="field"><label for="msub">Subcategory</label><select id="msub">' + (subs.length ? subs : ['—']).map(function (s) { return opt(s === '—' ? '' : s, s, FORM.subcategory || ''); }).join('') + '<option value="__new">+ New subcategory…</option></select></div>' +
     (FORM._newsub ? '<div class="field full newsub"><label for="mnewsub">New subcategory in ' + esc(FORM.category) + '</label><div class="nsrow"><input id="mnewsub" autocomplete="off" placeholder="e.g. Car wash"><button class="btn primary" data-act="newsubadd">Add</button><button class="btn" data-act="newsubx">Cancel</button></div></div>' : '') +
     '<div class="field"><label for="macct">Account</label><select id="macct">' + ACCOUNTS.map(function (x) { return opt(x[0], x[1], FORM.account); }).join('') + '</select></div>' +
+    splitHTML() +
     '<div class="field"><label for="mtags">Tags (comma separated)</label><input id="mtags" list="mtagList" autocomplete="off" placeholder="e.g. Singapore 2026" value="' + esc(FORM.tags || '') + '"></div>' +
     '<datalist id="mtagList">' + tagList.map(function (x) { return '<option value="' + esc(x.tag) + '">'; }).join('') + '</datalist>' +
     '<div class="field full"><label for="manom">Anomaly review</label><select id="manom">' + opt('','Not reviewed',FORM.anomaly_status || '') + opt('confirmed','Confirmed (keep in projections)',FORM.anomaly_status) + opt('excluded','One-off (exclude from projections)',FORM.anomaly_status) + '</select></div>';
+}
+// Split one receipt across categories: this transaction keeps what's left, each other part is saved as its own transaction
+function splitTotal() { return parseFloat(String(FORM.amount).replace(',', '.')) || 0; }
+function splitRest() { return Math.round((splitTotal() - (FORM._split || []).reduce(function (s, x) { return s + (parseFloat(String(x.amount).replace(',', '.')) || 0); }, 0)) * 100) / 100; }
+function splitHTML() {
+  if (FORM.type !== 'expense' && FORM.type !== 'refund') return '';
+  if (!FORM._split) return '<div class="field full"><button type="button" class="navlink" data-act="splitstart">Split across categories…</button></div>';
+  var rest = splitRest();
+  return '<div class="field full splitbox"><label>Split across categories</label>' +
+    '<div class="sprow first"><span>' + esc(FORM.category) + (FORM.subcategory ? ' › ' + esc(FORM.subcategory) : '') + '<small>this transaction keeps the rest</small></span><span class="num' + (rest < 0 ? ' neg' : '') + '" id="sprest">' + fmtCHF.format(rest) + '</span><span></span></div>' +
+    FORM._split.map(function (x, i) {
+      var subs = subsOf(x.category);
+      return '<div class="sprow"><select id="sp_c' + i + '" aria-label="Category of part ' + (i + 2) + '">' + Object.keys(CATEGORIES).map(function (c) { return opt(c, c, x.category); }).join('') + '</select>' +
+        '<select id="sp_s' + i + '" aria-label="Subcategory of part ' + (i + 2) + '">' + (subs.length ? subs : ['']).map(function (s) { return opt(s, s || '—', x.subcategory || ''); }).join('') + '</select>' +
+        '<input id="sp_a' + i + '" type="number" inputmode="decimal" step="0.01" min="0" placeholder="0.00" aria-label="Amount of part ' + (i + 2) + '" value="' + esc(x.amount) + '">' +
+        '<button type="button" class="iconbtn" data-act="splitdel" data-i="' + i + '" aria-label="Remove part ' + (i + 2) + '">×</button></div>';
+    }).join('') +
+    '<div class="sprow tools"><button type="button" class="navlink" data-act="splitadd">+ Add part</button><button type="button" class="navlink" data-act="splitoff">Don’t split</button></div></div>';
 }
 function fxInfo() {
   if (!FORM || !FORM.orig_currency || FORM.orig_currency === 'CHF') return '';
@@ -279,6 +298,8 @@ function readForm() {
   if ((x = v('mcat')) !== null) FORM.category = x; if ((x = v('msub')) !== null && x !== '__new') FORM.subcategory = x;
   if ((x = v('macct')) !== null) FORM.account = x; if ((x = v('manom')) !== null) FORM.anomaly_status = x;
   if ((x = v('mtags')) !== null) FORM.tags = x; if ((x = v('mcur')) !== null) FORM.orig_currency = x;
+  (FORM._split || []).forEach(function (p, i) { var c = v('sp_c' + i), s = v('sp_s' + i), a = v('sp_a' + i);
+    if (c !== null) { if (c !== p.category) { p.category = c; p.subcategory = (subsOf(c)[0] || ''); } else if (s !== null) p.subcategory = s; } if (a !== null) p.amount = a; });
   if ($('morig')) FORM.orig_amount = $('morig').value;
   if ($('mfee')) FORM._fee = $('mfee').checked;
 }
@@ -313,6 +334,20 @@ function saveForm() {
     orig_amount:foreign ? Math.round(parseFloat(String(FORM.orig_amount).replace(',', '.')) * 100) / 100 || '' : '',
     orig_currency:foreign ? FORM.orig_currency : '', fx_rate:foreign && FORM._rate ? FORM._rate : '', fx_fee:foreign && FORM._fee ? cardFeePct() : '' };
   var isNew = !FORM.id;
+  var parts = (FORM._split || []).map(function (p) { return Object.assign({}, p, { amount:Math.round((parseFloat(String(p.amount).replace(',', '.')) || 0) * 100) / 100 }); }).filter(function (p) { return p.amount > 0; });
+  if (parts.length) {
+    var rest = Math.round((row.amount - parts.reduce(function (s, p) { return s + p.amount; }, 0)) * 100) / 100;
+    if (rest < 0) { FORM._err = 'The parts add up to more than the total (' + fmtCHF.format(row.amount) + ').'; return drawModal(); }
+    var total = row.amount, share = function (a) { return total ? a / total : 0; };
+    var tags = tagsOf({ tags:row.tags }); if (tags.indexOf('split') < 0) tags.push('split');
+    var base = { date:row.date, description:row.description, type:row.type, account:row.account, tags:tags.join(', '), anomaly_status:'', orig_currency:row.orig_currency, fx_rate:row.fx_rate, fx_fee:row.fx_fee };
+    var origOf = function (a) { return foreign && row.orig_amount ? Math.round(row.orig_amount * share(a) * 100) / 100 : ''; };
+    var main = Object.assign({}, row, { amount:rest, tags:tags.join(', '), orig_amount:origOf(rest) });
+    closeModal();
+    var chain = saveRow('Transaction', main);
+    parts.forEach(function (p) { chain = chain.then(function () { return saveRow('Transaction', Object.assign({}, base, { category:p.category, subcategory:p.subcategory, amount:p.amount, orig_amount:origOf(p.amount) })); }); });
+    return chain.then(function () { toast('Saved in ' + (parts.length + 1) + ' parts'); });
+  }
   closeModal();
   saveRow('Transaction', row).then(function () { toast(isNew ? 'Transaction added' : 'Changes saved'); });
 }
@@ -404,4 +439,4 @@ function ruleFromForm() {
 }
 function FORM_cat(r) { return r.category + (r.subcategory ? ' › ' + r.subcategory : ''); }
 
-export { ico, catIco, txIco, goalIco, tagsOf, allTags, setting, cardFeePct, sortedRules, matchRule, suggestedRules, ruleText, CURRENCIES, RATE_CACHE, fxRate, filteredTx, opt, filterChips, transactionsHTML, saveMany, FORM, openTx, closeModal, MODAL_BUSY, MODAL_AGAIN, drawModal, drawModalNow, fxInfo, readForm, recalcFx, saveForm, customSubs, subsOf, autofill, descSuggestions, hideSugg, paintSugg, pickSugg, addCustomSub, ruleFromForm, FORM_cat };
+export { splitRest, splitHTML, ico, catIco, txIco, goalIco, tagsOf, allTags, setting, cardFeePct, sortedRules, matchRule, suggestedRules, ruleText, CURRENCIES, RATE_CACHE, fxRate, filteredTx, opt, filterChips, transactionsHTML, saveMany, FORM, openTx, closeModal, MODAL_BUSY, MODAL_AGAIN, drawModal, drawModalNow, fxInfo, readForm, recalcFx, saveForm, customSubs, subsOf, autofill, descSuggestions, hideSugg, paintSugg, pickSugg, addCustomSub, ruleFromForm, FORM_cat };

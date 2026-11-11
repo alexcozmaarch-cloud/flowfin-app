@@ -81,6 +81,41 @@ module.exports = async function () {
     h.assert(await pg.locator('.wkbars div').count() === 3, 'weekday bars');
     h.noErrors(app); await app.ctx.close();
   });
+  console.log('\nSplit and What changed');
+  await h.test('split a receipt: this transaction keeps the rest, the other part is saved separately', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    await pg.fill('#mdesc', 'Migros big shop'); await pg.fill('#mamt', '120');
+    await pg.selectOption('#mcat', 'Family Infrastructure'); await pg.waitForTimeout(150);
+    await pg.click('[data-act=splitstart]'); await pg.waitForTimeout(200);
+    await pg.selectOption('#sp_c0', 'Personal Cash'); await pg.waitForTimeout(150);
+    await pg.fill('#sp_a0', '30'); await pg.dispatchEvent('#sp_a0', 'input'); await pg.waitForTimeout(100);
+    h.eq((await pg.innerText('#sprest')).trim(), '90.00', 'rest shown');
+    await pg.click('[data-act=save]'); await pg.waitForTimeout(900);
+    var rows = Object.values(app.store.Transaction).filter(function (t) { return t.description === 'Migros big shop'; });
+    h.eq(rows.length, 2, 'parts saved');
+    var fam = rows.filter(function (r) { return r.category === 'Family Infrastructure'; })[0], pc = rows.filter(function (r) { return r.category === 'Personal Cash'; })[0];
+    h.eq(+fam.amount, 90); h.eq(+pc.amount, 30); h.assert(/split/.test(fam.tags) && /split/.test(pc.tags), 'split tag missing');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('split refuses parts larger than the total', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    await pg.fill('#mdesc', 'Too much'); await pg.fill('#mamt', '20');
+    await pg.click('[data-act=splitstart]'); await pg.waitForTimeout(200); await pg.fill('#sp_a0', '25');
+    await pg.click('[data-act=save]'); await pg.waitForTimeout(300);
+    h.assert(/add up to more than the total/.test(await pg.innerText('.modal')), 'no error shown');
+    h.assert(!Object.values(app.store.Transaction).some(function (t) { return t.description === 'Too much'; }), 'should not save');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('Monthly shows What changed for a finished period', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'monthly' }), pg = app.page;
+    await pg.click('[data-act=prev]'); await pg.waitForTimeout(300);
+    var t = await pg.innerText('.changed');
+    h.assert(/Kept -?\d+% of income/.test(t), 'savings sentence missing: ' + t);
+    h.assert(/Biggest single purchase/.test(t), 'biggest purchase missing');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nUndo and Recently deleted');
   await h.test('deleting a transaction can be undone, with the same id', async function () {
     var app = await h.openApp({ data: demo.data, phone: true, hash: 'transactions' }), pg = app.page;

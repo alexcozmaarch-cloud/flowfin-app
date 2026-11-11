@@ -1,7 +1,7 @@
 // FlowFin · Monthly summary and compare.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
 import { chartColors } from './charts.js';
-import { $, esc, inPeriod, pd, periodAt, periodLabel, periodModel, today, txs } from './core.js';
+import { $, daysBetween, esc, inPeriod, pd, periodAt, periodLabel, periodModel, today, txs } from './core.js';
 import { categoryHTML, drill, periodDay, sumBy, sw, sw0 } from './dashboard.js';
 import { topbar } from './nav.js';
 
@@ -10,7 +10,7 @@ import { topbar } from './nav.js';
 var MONTH_BUCKETS = [['household','Household','Family Infrastructure'],['personal','Personal Cash','Personal Cash'],['coll','Collectibles','Collectibles'],['invest','Invested','Financial Investing|Retirement 3a']];
 function monthModel(offset) {
   var p = periodAt(offset), t = today(), cutoff = p.end < t ? p.end : t, list = txs().filter(function (tx) { return inPeriod(tx, p) && pd(tx.date) <= cutoff; });
-  var r = { p:p, partial:p.end >= t, income:0, subs:{}, n:list.length };
+  var r = { p:p, partial:p.end >= t, income:0, subs:{}, n:list.length, list:list };
   MONTH_BUCKETS.forEach(function (b) { r[b[0]] = 0; });
   list.forEach(function (tx) {
     var a = +tx.amount || 0;
@@ -32,6 +32,7 @@ function monthlyHTML() {
   var avg = function (k) { return hist.length ? sumBy(hist, function (x) { return x[k]; }) / hist.length : 0; };
   var h = topbar('Monthly', true);
   if (!m.n) return h + '<div class="empty">No transactions in this period.</div>';
+  h += whatChangedHTML(m, hist);
   // waterfall
   var rows = [['Income', m.income, 'in'], ['Household', -m.household], ['= Free cash flow', m.free, 'sub'], ['Personal Cash', -m.personal], ['Collectibles', -m.coll], ['Invested', -m.invest], ['= Left over', m.left, 'total']];
   var max = Math.max(m.income, 1);
@@ -65,6 +66,54 @@ function monthlyHTML() {
   h += '<section class="card"><h3>Last 7 periods<span class="r legend">' + MONTH_BUCKETS.map(function (b, i) { return '<span><i style="border-top:8px solid ' + MONTH_SHADES[i] + '"></i>' + b[1] + '</span>'; }).join('') +
     '<span><i style="border-top:2px solid var(--signal)"></i>Left over</span></span></h3><div class="chartbox"><canvas id="chMonths" role="img" aria-label="Income split into household, personal, collectibles, invested and left over for the last 7 periods"></canvas></div></section>';
   return h;
+}
+// ─── What changed: plain sentences from the numbers ─────────────────────────
+// Compares with the average of the last periods (scaled to today while a period is still running) and names what drove it.
+function monthName(p) { return p.start.toLocaleDateString('en-GB', { month:'long' }); }
+function whatChanged(m, hist) {
+  var out = [], t = today();
+  var frac = m.partial ? Math.min(1, Math.max(0.05, (daysBetween(m.p.start, t) + 1) / (daysBetween(m.p.start, m.p.end) + 1))) : 1;
+  var avg = function (k) { return hist.length ? sumBy(hist, function (x) { return x[k]; }) / hist.length : 0; };
+  var rateOf = function (x) { return x.income > 0 ? x.left / x.income * 100 : null; };
+  // 1 · share of income kept (finished periods only: mid-period the salary may not be in yet)
+  if (!m.partial && m.income > 0 && hist.length >= 2) {
+    var rate = rateOf(m), rates = hist.map(rateOf), better = -1;
+    for (var i = 0; i < hist.length; i++) if (rates[i] !== null && rates[i] >= rate) { better = i; break; }
+    var ar = sumBy(rates.filter(function (x) { return x !== null; }), function (x) { return x; }) / hist.length;
+    out.push({ w:3, t: better < 0 ? 'Kept <b>' + Math.round(rate) + '%</b> of income, the best of the last ' + (hist.length + 1) + ' periods.'
+      : better >= 1 ? 'Kept <b>' + Math.round(rate) + '%</b> of income, the best since the ' + monthName(hist[better].p) + ' period.'
+      : 'Kept <b>' + Math.round(rate) + '%</b> of income, ' + Math.abs(Math.round(rate - ar)) + ' points ' + (rate >= ar ? 'above' : 'below') + ' your ' + hist.length + '-period average.' });
+  }
+  // 2 · spending areas well away from usual, with what drove them
+  // while a period is running: only after its first week, and not for household or investing, which arrive in lumps
+  var early = m.partial && daysBetween(m.p.start, t) < 7;
+  [['personal', 'Personal Cash', 50], ['coll', 'Collectibles', 50], ['invest', 'Invested', 100], ['household', 'Household', 300]].forEach(function (b) {
+    if (m.partial && (early || b[0] === 'household' || b[0] === 'invest')) return;
+    var a = m[b[0]], base = avg(b[0]) * frac; if (base < 20 && a < 50) return;
+    var d = a - base, pct = base ? d / base * 100 : 100;
+    if (Math.abs(d) < b[2] || Math.abs(pct) < 20) return;
+    var cats = MONTH_BUCKETS.filter(function (x) { return x[0] === b[0]; })[0][2].split('|'), by = {};
+    m.list.forEach(function (tx) { if (tx.type !== 'expense' || cats.indexOf(tx.category) < 0) return; var k = String(tx.description || '').trim(); by[k] = by[k] || { n:0, s:0 }; by[k].n++; by[k].s += +tx.amount || 0; });
+    var top = Object.keys(by).map(function (k) { return { k:k, n:by[k].n, s:by[k].s }; }).sort(function (x, y) { return y.s - x.s; })[0];
+    var why = d > 0 && top && top.s >= Math.abs(d) * 0.3 ? ', mostly ' + (top.n > 1 ? top.n + '× ' : '') + esc(top.k) + ' (' + sw0(top.s) + ')' : '';
+    out.push({ w:Math.abs(d), t:'<b>' + b[1] + '</b> ' + Math.abs(Math.round(pct)) + '% ' + (d > 0 ? 'above' : 'below') + (m.partial ? ' where your average is by now' : ' your ' + hist.length + '-period average') +
+      ' (' + sw0(a) + ' vs ' + sw0(base) + ')' + why + '.' });
+  });
+  // 3 · the biggest single purchase outside the household
+  var big = m.list.filter(function (tx) { return tx.type === 'expense' && tx.category !== 'Family Infrastructure'; }).sort(function (x, y) { return (+y.amount || 0) - (+x.amount || 0); })[0];
+  if (big && +big.amount >= 100) out.push({ w:1, t:'Biggest single purchase: ' + esc(big.description) + ', <b>' + sw(+big.amount) + '</b> on ' + periodDay(pd(big.date)) });
+  // 4 · new places: descriptions never seen before this period, 50 or more in total
+  var seen = {}; txs().forEach(function (tx) { if (pd(tx.date) < m.p.start) seen[String(tx.description || '').trim().toLowerCase()] = 1; });
+  var fresh = {}; m.list.forEach(function (tx) { var k = String(tx.description || '').trim(); if (tx.type === 'expense' && !seen[k.toLowerCase()] && tx.category !== 'Family Infrastructure') fresh[k] = (fresh[k] || 0) + (+tx.amount || 0); });
+  var fr = Object.keys(fresh).filter(function (k) { return fresh[k] >= 50; }).sort(function (x, y) { return fresh[y] - fresh[x]; }).slice(0, 2);
+  if (fr.length) out.push({ w:0.5, t:'New this period: ' + fr.map(function (k) { return esc(k) + ' (' + sw0(fresh[k]) + ')'; }).join(', ') + '.' });
+  return out.slice(0, 1).concat(out.slice(1).sort(function (x, y) { return y.w - x.w; })).slice(0, 5);
+}
+function whatChangedHTML(m, hist) {
+  if (!hist.length) return '';
+  var list = whatChanged(m, hist);
+  return '<section class="card changed"><h3>What changed<span class="r">' + (m.partial ? 'so far, ' : '') + 'vs your ' + hist.length + '-period average</span></h3>' +
+    (list.length ? '<ul>' + list.map(function (x) { return '<li>' + x.t + '</li>'; }).join('') + '</ul>' : '<p class="soon" style="margin:0">Nothing out of the ordinary: every area is within 20% of usual.</p>') + '</section>';
 }
 var MONTH_SHADES = ['#121413', '#5B605C', '#8A8F8B', '#C3C7C3'];
 function monthlyChart() {

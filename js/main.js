@@ -6,13 +6,13 @@ import { setAnomaly } from './anomalies.js';
 import { applyData, deleteRow, loadAll, post, saveRow } from './api.js';
 import { LOCK_KEY, PLAN_CATS, planChange, planFit, planPaint, planSave, saveBudget } from './budgets.js';
 import { netSavingsChart } from './charts.js';
-import { $, apiUrl, calcTotals, esc, lsGet, lsSet, periodAt, periodModel, toast, today, ymd } from './core.js';
+import { $, apiUrl, calcTotals, esc, fmtCHF, lsGet, lsSet, periodAt, periodModel, toast, today, ymd } from './core.js';
 import { COLL_KEY, DCHART_KEY, FOLD_KEY, PROJ_KEY, foldState, periodDay, savingsChart } from './dashboard.js';
 import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoal, readGoal, recordContribs, saveGoal } from './goals.js';
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
-import { FORM, addCustomSub, autofill, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, subsOf, suggestedRules, tagsOf } from './transactions.js';
+import { FORM, addCustomSub, autofill, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
 import { WFORM, accounts, closeWForm, deleteAcct, drawAcct, isArchived, openAcct, openUpdate, readAcct, saveAcct, saveUpdate } from './wealth.js';
 
 // ─── events (delegated) ───────────────────────────────────────────────────
@@ -97,6 +97,10 @@ document.addEventListener('click', function (e) {
   if (act === 'wdelno') { readAcct(); WFORM.confirm = false; return drawAcct(); }
   if (act === 'wdelyes') return deleteAcct();
   if (act === 'projbasis') { lsSet(PROJ_KEY, a.getAttribute('data-v')); return draw(); }
+  if (act === 'splitstart' && FORM) { readForm(); FORM._split = [{ category:FORM.category === 'Family Infrastructure' ? 'Personal Cash' : 'Family Infrastructure', subcategory:'', amount:'' }]; FORM._split[0].subcategory = subsOf(FORM._split[0].category)[0] || ''; drawModal(); var s0 = $('sp_a0'); if (s0) s0.focus(); return; }
+  if (act === 'splitadd' && FORM) { readForm(); FORM._split.push({ category:'Personal Cash', subcategory:subsOf('Personal Cash')[0] || '', amount:'' }); return drawModal(); }
+  if (act === 'splitdel' && FORM) { readForm(); FORM._split.splice(+a.getAttribute('data-i'), 1); if (!FORM._split.length) FORM._split = null; return drawModal(); }
+  if (act === 'splitoff' && FORM) { readForm(); FORM._split = null; return drawModal(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
   if (act === 'priceok' || act === 'priceonce') {
     var pk = a.getAttribute('data-key'), pname = a.getAttribute('data-name');
@@ -199,11 +203,13 @@ document.addEventListener('input', function (e) {
   if (pid === 'pl_fam' && UI.plan) { UI.plan.fam = Math.max(0, parseFloat(e.target.value) || 0); planFit(); return planPaint(); }
   var id = e.target.id;
   if (id === 'morig' && FORM) { recalcFx(); return; }
+  if (FORM && FORM._split && (/^sp_a\d+$/.test(id) || id === 'mamt')) { readForm(); var sr = $('sprest'); if (sr) { var rv = splitRest(); sr.textContent = fmtCHF.format(rv); sr.className = 'num' + (rv < 0 ? ' neg' : ''); } }
   if (id.indexOf('wr_') === 0) e.target.dataset.touched = '1';
   if (id === 'fq') { UI.tx.q = e.target.value; var pos = e.target.selectionStart; draw(); var q = $('fq'); q.focus(); q.setSelectionRange(pos, pos); }
 });
 document.addEventListener('change', function (e) {
   var id = e.target.id;
+  if (FORM && /^sp_c\d+$/.test(id)) { readForm(); return drawModal(); }
   if (id === 'fscope') { UI.tx.scope = e.target.value; draw(); }
   if (id === 'ftype') { UI.tx.type = e.target.value; draw(); }
   if (id === 'fcat') { UI.tx.category = e.target.value; draw(); }

@@ -214,7 +214,10 @@ function drawModal() {
   if (!FORM) return;
   if (MODAL_BUSY) { MODAL_AGAIN = true; return; }
   MODAL_BUSY = true;
+  var ae = document.activeElement, keep = ae && ae.id && ae.closest && ae.closest('.modal') ? ae.id : null, sel = null;
+  try { sel = keep && ae.selectionStart != null ? [ae.selectionStart, ae.selectionEnd] : null; } catch (e) { sel = null; }   // number inputs have no selection
   try { drawModalNow(); } finally { MODAL_BUSY = false; }
+  if (keep) { var el = $(keep); if (el && document.activeElement !== el) { el.focus(); try { if (sel) el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
   if (MODAL_AGAIN) { MODAL_AGAIN = false; drawModal(); }
 }
 function drawModalNow() {
@@ -229,12 +232,12 @@ function drawModalNow() {
     '<div class="sugg" id="msugg" role="listbox" hidden></div></div>' +
     (FORM._note ? '<div class="field full rulenote">' + FORM._note + '</div>' : '') +
     (foreign
-      ? '<div class="field"><label for="morig">Amount paid</label><div class="amtrow"><input id="morig" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.orig_amount) + '">' + '<select id="mcur" aria-label="Currency">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select>' + '</div></div>' +
-        '<div class="field full fxbox"><label class="switch" style="min-height:0"><input type="checkbox" id="mfee"' + (FORM._fee ? ' checked' : '') + '><span>Add card fee (' + cardFeePct() + '%)</span></label>' +
+      ? '<div class="field"><label for="morig">Amount paid in ' + esc(FORM.orig_currency) + '</label><div class="amtrow"><input id="morig" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.orig_amount) + '">' + '<select id="mcur" aria-label="Currency">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select>' + '</div></div>' +
+        '<div class="field full fxbox"><label class="switch" style="min-height:0"><input type="checkbox" id="mfee"' + (FORM._fee ? ' checked' : '') + '><span>Add card fee +' + cardFeePct() + '%</span></label>' +
         '<span id="mfxinfo" class="soon">' + fxInfo() + '</span></div>'
       : '') +
     (foreign
-      ? '<div class="field"><label for="mamt">In CHF · calculated, editable</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>'
+      ? '<div class="field"><label for="mamt">In CHF · ' + (FORM._chfManual ? 'your amount' : 'calculated, or type your bank’s') + '</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>'
       : '<div class="field"><label for="mamt">Amount</label><div class="amtrow"><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '">' + '<select id="mcur" aria-label="Currency">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select>' + '</div></div>') +
     (quick ? quickSummary() : fullFields(subs, tagList)) +
     '</div>' + (FORM._err ? '<div class="err">' + esc(FORM._err) + '</div>' : '') +
@@ -289,7 +292,9 @@ function fxInfo() {
   if (!FORM || !FORM.orig_currency || FORM.orig_currency === 'CHF') return '';
   if (FORM._rateErr) return '<span class="neg">' + esc(FORM._rateErr) + '. Enter the CHF amount yourself.</span>';
   if (!FORM._rate) return 'Getting the ' + esc(FORM.orig_currency) + ' rate for this date…';
-  return '1 ' + esc(FORM.orig_currency) + ' = ' + FORM._rate.toFixed(4) + ' CHF (rate for ' + (FORM.date <= ymd(today()) ? periodDay(pd(FORM.date)) : 'today') + ')' + (FORM._fee ? ' + ' + cardFeePct() + '% fee' : '');
+  var line = '1 ' + esc(FORM.orig_currency) + ' = ' + FORM._rate.toFixed(4) + ' CHF (rate for ' + (FORM.date <= ymd(today()) ? periodDay(pd(FORM.date)) : 'today') + ')' + (FORM._fee ? ' + ' + cardFeePct() + '% fee' : '');
+  if (FORM._chfManual && FORM._calc != null) line += '<br>Keeping your CHF amount; calculated would be ' + FORM._calc.toFixed(2) + '. <button type="button" class="navlink" data-act="fxcalc">Use calculated</button>';
+  return line;
 }
 function readForm() {
   function v(id) { var el = $(id); return el ? el.value : null; }   // quick add has only some of the fields
@@ -315,7 +320,9 @@ function recalcFx() {
     var o = parseFloat(String(FORM.orig_amount).replace(',', '.'));
     if (o >= 0) {
       var chfAmt = Math.round(o * rate * (1 + (FORM._fee ? cardFeePct() / 100 : 0)) * 100) / 100;
-      FORM.amount = chfAmt; if ($('mamt')) $('mamt').value = chfAmt.toFixed(2);
+      FORM._calc = chfAmt;
+      // once you've typed the CHF amount yourself (from your bank), it is never overwritten
+      if (!FORM._chfManual) { FORM.amount = chfAmt; var me = $('mamt'); if (me && document.activeElement !== me) me.value = chfAmt.toFixed(2); }
     }
     if ($('mfxinfo')) $('mfxinfo').innerHTML = fxInfo();
   }).catch(function (e) { if (!FORM) return; FORM._rateErr = e.message; if ($('mfxinfo')) $('mfxinfo').innerHTML = fxInfo(); });

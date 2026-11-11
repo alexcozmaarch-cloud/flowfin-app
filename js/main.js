@@ -12,7 +12,7 @@ import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoa
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
-import { FORM, addCustomSub, autofill, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
+import { FORM, addCustomSub, autofill, fxInfo, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
 import { WFORM, accounts, closeWForm, deleteAcct, drawAcct, isArchived, openAcct, openUpdate, readAcct, saveAcct, saveUpdate } from './wealth.js';
 
 // ─── events (delegated) ───────────────────────────────────────────────────
@@ -102,6 +102,7 @@ document.addEventListener('click', function (e) {
   if (act === 'splitdel' && FORM) { readForm(); FORM._split.splice(+a.getAttribute('data-i'), 1); if (!FORM._split.length) FORM._split = null; return drawModal(); }
   if (act === 'splitoff' && FORM) { readForm(); FORM._split = null; return drawModal(); }
   if (act === 'theme') { try { localStorage.setItem(THEME_KEY, a.getAttribute('data-v')); } catch (e) {} applyTheme(); return draw(); }
+  if (act === 'fxcalc' && FORM) { FORM._chfManual = false; recalcFx(); var mi = $('mamt'); if (mi && FORM._calc != null) mi.value = FORM._calc.toFixed(2); return; }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
   if (act === 'priceok' || act === 'priceonce') {
     var pk = a.getAttribute('data-key'), pname = a.getAttribute('data-name');
@@ -204,6 +205,7 @@ document.addEventListener('input', function (e) {
   if (pid === 'pl_fam' && UI.plan) { UI.plan.fam = Math.max(0, parseFloat(e.target.value) || 0); planFit(); return planPaint(); }
   var id = e.target.id;
   if (id === 'morig' && FORM) { recalcFx(); return; }
+  if (id === 'mamt' && FORM && FORM.orig_currency && FORM.orig_currency !== 'CHF') { FORM._chfManual = String(e.target.value).trim() !== ''; FORM.amount = e.target.value; var fi = $('mfxinfo'); if (fi) fi.innerHTML = fxInfo(); }
   if (FORM && FORM._split && (/^sp_a\d+$/.test(id) || id === 'mamt')) { readForm(); var sr = $('sprest'); if (sr) { var rv = splitRest(); sr.textContent = fmtCHF.format(rv); sr.className = 'num' + (rv < 0 ? ' neg' : ''); } }
   if (id.indexOf('wr_') === 0) e.target.dataset.touched = '1';
   if (id === 'fq') { UI.tx.q = e.target.value; var pos = e.target.selectionStart; draw(); var q = $('fq'); q.focus(); q.setSelectionRange(pos, pos); }
@@ -221,7 +223,17 @@ document.addEventListener('change', function (e) {
     var sid = e.target.getAttribute('data-id'), st = e.target.value, srow = (DATA.Subscription || []).filter(function (x) { return x.id === sid; })[0];
     if (srow) saveRow('Subscription', Object.assign({}, srow, { status:st })).then(function () { toast(srow.name + ': ' + st); });
   }
-  if (id === 'mcur' && FORM) { readForm(); FORM._rate = null; FORM._rateErr = ''; FORM._fee = FORM.account === 'credit_card'; drawModal(); recalcFx(); }
+  if (id === 'mcur' && FORM) {
+    var wasCHF = FORM.orig_currency !== e.target.value && (!FORM.orig_currency || FORM.orig_currency === 'CHF');
+    readForm(); FORM._rate = null; FORM._rateErr = ''; FORM._calc = null;
+    if (wasCHF && FORM.orig_currency !== 'CHF') {          // the number you typed was in the new currency: move it to "Amount paid"
+      if (!(parseFloat(FORM.orig_amount) > 0) && parseFloat(FORM.amount) > 0) FORM.orig_amount = FORM.amount;
+      FORM.amount = ''; FORM._chfManual = false; FORM._fee = false;
+    }
+    if (FORM.orig_currency === 'CHF') { FORM._chfManual = false; FORM.orig_amount = ''; }
+    drawModal(); recalcFx();
+    var oe = $(FORM.orig_currency !== 'CHF' ? 'morig' : 'mamt'); if (oe) oe.focus();
+  }
   if ((id === 'mfee' || id === 'mdate' || id === 'macct') && FORM && FORM.orig_currency !== 'CHF') recalcFx();
   if (e.target.matches && e.target.matches('[data-act=broll]')) {
     var bc = e.target.getAttribute('data-cat'), on = e.target.checked;

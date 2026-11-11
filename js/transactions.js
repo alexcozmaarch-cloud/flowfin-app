@@ -1,5 +1,6 @@
 // FlowFin · Transactions: tags, rules, currency, list and the add/edit form.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { priceAlertHTML, priceAlerts } from './recurring.js';
 import { anomalyBody } from './anomalies.js';
 import { persistCache, post, saveRow, setSync } from './api.js';
 import { $, addDays, chf, esc, fmtCHF, inPeriod, isInfra, pd, periodAt, roles, toast, today, txs, ymd } from './core.js';
@@ -134,7 +135,7 @@ function transactionsHTML() {
   var tabs = '<div class="seg3 txtabs" role="tablist">' +
     '<button role="tab" aria-selected="' + (tab === 'all') + '" class="' + (tab === 'all' ? 'on' : '') + '" data-act="txtab" data-v="all">All</button>' +
     '<button role="tab" aria-selected="' + (tab === 'review') + '" class="' + (tab === 'review' ? 'on' : '') + '" data-act="txtab" data-v="review">To review' + (nRev ? ' <span class="nbadge">' + nRev + '</span>' : '') + '</button></div>';
-  if (tab === 'review') return topbar('Transactions', false, '<button class="btn primary" data-act="addtx">+ Add</button>') + tabs + '<div style="display:grid;gap:14px">' + anomalyBody() + '</div>';
+  if (tab === 'review') return topbar('Transactions', false, '<button class="btn primary" data-act="addtx">+ Add</button>') + tabs + '<div style="display:grid;gap:14px">' + priceAlerts().map(priceAlertHTML).join('') + anomalyBody() + '</div>';
   var h = topbar('Transactions', f.scope === 'period', '<button class="btn primary" data-act="addtx">+ Add</button>') + tabs;
   var nf = (f.scope !== 'period' ? 1 : 0) + (f.type ? 1 : 0) + (f.category ? 1 : 0) + (f.account ? 1 : 0) + (f.tag ? 1 : 0);
   h += '<div style="display:grid;gap:14px"><div class="filters">' +

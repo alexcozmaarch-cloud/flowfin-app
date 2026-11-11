@@ -1,5 +1,6 @@
 // FlowFin · Entry point: delegated events and boot. Loaded by index.html after js/config.js.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { normDesc, recurringItems } from './recurring.js';
 import { forget, removeWithUndo, restore } from './bin.js';
 import { setAnomaly } from './anomalies.js';
 import { applyData, deleteRow, loadAll, post, saveRow } from './api.js';
@@ -10,7 +11,6 @@ import { COLL_KEY, DCHART_KEY, FOLD_KEY, PROJ_KEY, foldState, periodDay, savings
 import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoal, readGoal, recordContribs, saveGoal } from './goals.js';
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
-import { recurringItems } from './recurring.js';
 import { saveSetting } from './settings.js';
 import { FORM, addCustomSub, autofill, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, subsOf, suggestedRules, tagsOf } from './transactions.js';
 import { WFORM, accounts, closeWForm, deleteAcct, drawAcct, isArchived, openAcct, openUpdate, readAcct, saveAcct, saveUpdate } from './wealth.js';
@@ -97,6 +97,20 @@ document.addEventListener('click', function (e) {
   if (act === 'wdelno') { readAcct(); WFORM.confirm = false; return drawAcct(); }
   if (act === 'wdelyes') return deleteAcct();
   if (act === 'projbasis') { lsSet(PROJ_KEY, a.getAttribute('data-v')); return draw(); }
+  if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
+  if (act === 'priceok' || act === 'priceonce') {
+    var pk = a.getAttribute('data-key'), pname = a.getAttribute('data-name');
+    var tr = act === 'priceok' ? (DATA.Subscription || []).filter(function (s) { return normDesc(s.name) === normDesc(pname); })[0] : null;
+    return saveSetting(pk, '1').then(function () { return tr ? saveRow('Subscription', Object.assign({}, tr, { amount:+a.getAttribute('data-amt') })) : null; })
+      .then(function () { toast(act === 'priceok' ? 'New price noted' : 'Treated as a one-off'); });
+  }
+  if (act === 'subkeep') return saveSetting('sub_ok_' + normDesc(a.getAttribute('data-name')), ymd(today())).then(function () { toast('Kept'); });
+  if (act === 'subcancel') {
+    var sname = a.getAttribute('data-name'), ts = (DATA.Subscription || []).filter(function (s) { return normDesc(s.name) === normDesc(sname); })[0];
+    var sri = recurringItems().filter(function (r) { return r.name === sname; })[0] || {};
+    return saveRow('Subscription', ts ? Object.assign({}, ts, { status:'cancelled' }) : { name:sname, amount:sri.amount || 0, frequency:sri.frequency || 'monthly', account:sri.account || '', category:sri.category || '', subcategory:sri.subcategory || '',
+      next_renewal:'', status:'cancelled', notes:'', auto_detected:true }).then(function () { toast(sname + ' marked as cancelled'); });
+  }
   if (act === 'rtrack') {
     var ri = recurringItems()[+a.getAttribute('data-i')]; if (!ri) return;
     return saveRow('Subscription', { name:ri.name, amount:ri.amount, frequency:ri.frequency, account:ri.account, category:ri.category, subcategory:ri.subcategory,

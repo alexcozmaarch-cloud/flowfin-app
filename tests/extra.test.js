@@ -42,6 +42,45 @@ module.exports = async function () {
     h.assert(await app.page.evaluate(function () { return /Archived/i.test(document.getElementById('view').innerText); }), 'archived section missing');
     h.noErrors(app); await app.ctx.close();
   });
+  console.log('\nRecurring costs and calendar');
+  function withGoogleOne(rise) {
+    var data = JSON.parse(JSON.stringify(demo.data)), ymd = require('./demo-data').ymd, t = new Date();
+    for (var k = 5; k >= 0; k--) {
+      var d = new Date(t.getFullYear(), t.getMonth() - k, Math.min(t.getDate(), 27) - (k === 0 ? 1 : 0));
+      data.Transaction.push({ id: 'go' + k, date: ymd(d), description: 'Google One', category: 'Personal Cash', subcategory: 'Subscriptions', amount: k === 0 && rise ? 11.9 : 10.37, type: 'expense', account: 'credit_card' });
+    }
+    return data;
+  }
+  await h.test('a recurring price rise is flagged on Home, Budgets and To review; OK clears it', async function () {
+    var app = await h.openApp({ data: withGoogleOne(true), phone: true }), pg = app.page;
+    h.assert(/Google One/.test(await pg.innerText('#view .palert')), 'no alert on Home');
+    h.assert(/\+15%/.test(await pg.innerText('#view .palert')), 'percentage missing');
+    await pg.evaluate(function () { location.hash = 'transactions'; }); await pg.waitForTimeout(250);
+    h.assert(/To review\s*\d/.test(await pg.innerText('.txtabs')), 'not counted in To review');
+    await pg.evaluate(function () { location.hash = 'budgets'; }); await pg.waitForTimeout(300);
+    h.assert(await pg.locator('#subwatch .palert').count() === 1, 'no alert on Budgets');
+    h.assert(/a year/.test(await pg.innerText('#subwatch')), 'yearly cost missing');
+    await pg.click('#subwatch [data-act=priceok]'); await pg.waitForTimeout(600);
+    h.eq(await pg.locator('.palert').count(), 0, 'alert should be gone');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('no alert when the price stays the same', async function () {
+    var app = await h.openApp({ data: withGoogleOne(false), phone: true });
+    h.eq(await app.page.locator('.palert').count(), 0, 'false alarm');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('calendar: busiest day selected, tap a day to see its transactions', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    await pg.evaluate(function () { location.hash = 'dashboard'; }); await pg.waitForTimeout(200);
+    await pg.click('.linkrow[data-nav=calendar]'); await pg.waitForTimeout(300);
+    var cells = await pg.locator('.cd').count(); h.assert(cells >= 28 && cells <= 31, 'days in grid: ' + cells);
+    h.eq(await pg.locator('.cd.sel').count(), 1, 'busiest day should be selected');
+    await pg.click('[data-act=prev]'); await pg.waitForTimeout(300);
+    var days = pg.locator('.cd:not([disabled])'); await days.nth(3).click(); await pg.waitForTimeout(250);
+    h.eq(await pg.locator('.cd.sel').count(), 1, 'tapped day not selected');
+    h.assert(await pg.locator('.wkbars div').count() === 3, 'weekday bars');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nUndo and Recently deleted');
   await h.test('deleting a transaction can be undone, with the same id', async function () {
     var app = await h.openApp({ data: demo.data, phone: true, hash: 'transactions' }), pg = app.page;

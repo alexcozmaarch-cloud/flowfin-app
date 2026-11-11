@@ -439,3 +439,37 @@ details.fold>summary:hover h3{color:var(--muted)}
 .toast.undo button{background:none;border:1px solid var(--bg);color:var(--bg);font:inherit;font-weight:600;padding:6px 12px;cursor:pointer}
 .binrow{align-items:center;gap:12px}.binrow small{display:block;color:var(--muted);font-size:12px}
 .binrow > span:first-child{min-width:0}.binact{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+
+/* Watch on recurring costs (approved 11.11.2026) */
+.palert{border:1px solid var(--signal);background:var(--paper);padding:12px 14px;display:grid;gap:5px;margin-bottom:16px}
+.palert .eyebrow{color:var(--signal)}.palert small{color:var(--muted);font-size:12.5px}
+.palert .btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.subwatch{display:grid;gap:12px}.subwatch .palert{margin:0}
+.swhead{display:grid;gap:4px}.swhead small{color:var(--muted);font-size:13px}
+.bignum.sm .val{color:var(--ink)}
+.bignum.sm .val{font-size:44px}.bignum.sm .cur{font-size:14px;margin-left:8px;order:2}
+.sublist{display:grid;border-top:1px solid var(--ink)}
+.srow{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--rule)}
+.srow > span:first-child{min-width:0}.srow small{display:block;color:var(--muted);font-size:12px}
+.srow .num{font-size:13px;min-width:72px;text-align:right}
+.stag{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
+.chg{font-family:var(--f-mono);font-size:11px;padding:1px 6px;border:1px solid currentColor}.chg.rise{color:var(--signal)}
+.still{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+
+/* Spending calendar (approved 11.11.2026) */
+.cal3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal .dow{font-family:var(--f-mono);font-size:10px;color:var(--muted);text-align:center;padding-bottom:2px}
+.cd{position:relative;aspect-ratio:1/1;max-height:84px;border:1px solid var(--rule);background:var(--paper);display:flex;flex-direction:column;justify-content:space-between;padding:4px 5px;font:inherit;text-align:left;color:var(--ink);cursor:pointer;min-width:0}
+.cd b{font-size:11px;font-weight:600}.cd i{font-style:normal;font-family:var(--f-mono);font-size:11px;text-align:right;overflow:hidden}
+.cd.l1,.calleg .l1{background:#E4E6E3}.cd.l2,.calleg .l2{background:#B9BDB9}.cd.l3,.calleg .l3{background:#7C817D;color:var(--paper)}.cd.l4,.calleg .l4{background:var(--ink);color:var(--paper)}
+.cd.lf{background:transparent;border-style:dashed;color:var(--faint);cursor:default}
+.cd.over::after{content:"";position:absolute;top:0;right:0;border-style:solid;border-width:0 10px 10px 0;border-color:transparent var(--signal) transparent transparent}
+.cd.sel{outline:2px solid var(--signal);outline-offset:1px}.cd:focus-visible{outline:2px solid var(--ink);outline-offset:1px}
+.calleg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted);margin-top:12px}
+.calleg i{display:inline-block;width:12px;height:12px;border:1px solid var(--rule);vertical-align:-2px;margin-right:5px;background:var(--paper)}
+.calleg .ov{background:linear-gradient(225deg,var(--signal) 45%,var(--paper) 46%)}
+.tx.dim{opacity:.55}
+.wkbars{display:grid;gap:8px}.wkbars div{display:grid;grid-template-columns:90px minmax(0,1fr) 56px;gap:10px;align-items:center;font-size:13px}
+.wkbars .b{height:9px;background:var(--bg);border:1px solid var(--rule)}.wkbars .b i{display:block;height:100%;background:var(--ink)}.wkbars .num{text-align:right}
+.srow .chg,.srow .stag,.srow .still{justify-self:end;width:auto;display:inline-flex;align-items:center}

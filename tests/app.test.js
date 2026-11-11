@@ -25,7 +25,7 @@ module.exports = async function () {
   });
 
   console.log('\nPages (desktop and phone)');
-  var PAGES = ['dashboard', 'transactions', 'budgets', 'goals', 'monthly', 'wealth', 'settings', 'anomalies', 'subscriptions'];
+  var PAGES = ['dashboard', 'transactions', 'budgets', 'goals', 'monthly', 'wealth', 'settings', 'anomalies', 'subscriptions', 'calendar'];
   for (var phone of [false, true]) {
     await h.test('every page opens without errors on ' + (phone ? 'phone' : 'desktop'), async function () {
       var app = await h.openApp({ data: demo.data, phone: phone });

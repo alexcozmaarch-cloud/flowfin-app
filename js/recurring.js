@@ -1,6 +1,7 @@
 // FlowFin · Recurring items: detector and page.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
-import { addDays, daysBetween, esc, pd, periodModel, today, txs, ymd } from './core.js';
+import { budgetMapFor, nextBudget } from './budgets.js';
+import { addDays, daysBetween, esc, pd, periodAt, periodModel, today, txs, ymd } from './core.js';
 import { creditCardModel, kpi, periodDay, sumBy, sw, sw0 } from './dashboard.js';
 import { catIco, ico, opt, setting } from './transactions.js';
 
@@ -39,6 +40,7 @@ function detectRecurring() {
     // amounts within 25% (or CHF 2) of the group's median belong to the same item; one-off outliers are left out
     var medAmt = median(g.map(function (x) { return +x.amount || 0; }));
     var core = g.filter(function (x) { return Math.abs((+x.amount || 0) - medAmt) <= Math.max(medAmt * 0.25, 2); });
+    var latestAll = g.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; })[g.length - 1];
     var sets = [core];
     // a second price point (e.g. two Apple subscriptions) gets its own chance
     var rest = g.filter(function (x) { return core.indexOf(x) < 0; });
@@ -52,8 +54,17 @@ function detectRecurring() {
       var next = nextAfter(lastD, iv);
       while (next < addDays(t, -iv.tol)) next = nextAfter(next, iv);
       var recent = grp.slice(-3), avg = sumBy(recent, function (x) { return +x.amount; }) / recent.length;
+      // price watch: the newest charge with this description against the usual (median of the ones before it)
+      // (a charge that belongs to another price point of the same name, e.g. a second Apple subscription, never counts)
+      var own = median(grp.map(function (x) { return +x.amount || 0; }));
+      var other = sets.some(function (s) { return s !== grp && s.length >= 2 && s.indexOf(latestAll) > -1; });
+      var newest = !other && latestAll.date >= last.date && (+latestAll.amount || 0) >= own && (+latestAll.amount || 0) - own <= Math.max(own * 0.6, 5) ? latestAll : last;
+      var prior = grp.filter(function (x) { return x !== newest; }).slice(-3), usual = prior.length ? median(prior.map(function (x) { return +x.amount || 0; })) : +newest.amount;   // the last 3 before it
       out.push({ key:k + '|' + Math.round(avg), name:last.description.trim(), type:last.type, amount:Math.round(avg * 100) / 100, last:+last.amount, frequency:iv.label, perYear:iv.perYear,
-        account:last.account, category:last.category, subcategory:last.subcategory || '', next:next, overdue:next < t, n:grp.length, conf:pat.conf, lastSeen:last.date });
+        account:last.account, category:last.category, subcategory:last.subcategory || '', next:next, overdue:next < t, n:grp.length, conf:pat.conf, lastSeen:last.date,
+        usual:Math.round(usual * 100) / 100, newest:newest, firstSeen:grp[0].date,
+        // a price only counts as new if it was never charged before under this name (Apple alternates 3.00 and 3.95)
+        newPrice:!g.some(function (x) { return x !== newest && x.date < newest.date && Math.abs((+x.amount || 0) - (+newest.amount || 0)) < 0.01; }) });
     });
   });
   return out.sort(function (a, b) { return a.next - b.next; });
@@ -122,7 +133,7 @@ function recurringBody() {
   var outY = sumBy(active, function (r) { return (r.type === 'income' || r.type === 'refund') ? 0 : r.amount * r.perYear; });
   var inY = sumBy(active, function (r) { return (r.type === 'income' || r.type === 'refund') ? r.amount * r.perYear : 0; });
   var subsY = sumBy(active, function (r) { return r.subcategory === 'Subscriptions' ? r.amount * r.perYear : 0; });
-  var h = '<h2 class="sechead" id="recurring">Recurring</h2>';
+  var h = '<h2 class="sechead" id="recurring">Recurring</h2>' + subsWatchHTML();
   h += '<section class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))">' +
     kpi('Recurring out', sw0(outY / 12), 'a month · ' + sw0(outY) + ' a year') +
     kpi('Recurring in', sw0(inY / 12), 'a month') +
@@ -145,4 +156,57 @@ function recurringBody() {
   return h;
 }
 
-export { INTERVALS, normDesc, median, addMonthsKeepDay, nextAfter, detectRecurring, trackedFor, recurringItems, upcomingItems, upcomingHTML, recurringBody };
+// ─── Watch on recurring costs: price rises, yearly cost, “still using?” ─────
+// A rise counts when the newest charge is over 5% and over 1.00 above the usual amount (median of the 3 before it),
+// is a price never charged before, and is within the last 60 days. Below that it's usually exchange-rate noise (Google One is billed in USD).
+function priceAlerts() {
+  var t = today();
+  return recurringItems().filter(function (r) {
+    if (!r.newest || !r.newPrice || r.type !== 'expense' || (r.status && r.status !== 'active')) return false;
+    var a = +r.newest.amount || 0, u = r.tracked && +r.tracked.amount ? +r.tracked.amount : r.usual;
+    if (!(a > u * 1.05 && a - u > 1)) return false;
+    if (daysBetween(pd(r.newest.date), t) > 60) return false;
+    return !setting('price_ok_' + normDesc(r.name) + '_' + r.newest.id, '');
+  }).map(function (r) {
+    var a = +r.newest.amount, u = r.tracked && +r.tracked.amount ? +r.tracked.amount : r.usual;
+    return { r:r, amount:a, usual:u, diff:a - u, pct:(a - u) / u * 100, perYear:(a - u) * r.perYear, key:'price_ok_' + normDesc(r.name) + '_' + r.newest.id };
+  });
+}
+function priceAlertHTML(x) {
+  return '<div class="palert" role="status"><span class="eyebrow">Price went up</span>' +
+    '<span><b>' + esc(x.r.name) + '</b> charged <b class="num">' + sw(x.amount) + '</b>, usually <span class="num">' + sw(x.usual) + '</span> (+' + sw(x.diff) + ', +' + Math.round(x.pct) + '%)</span>' +
+    '<small>That’s +' + sw(x.perYear) + ' a year. Charged on ' + periodDay(pd(x.r.newest.date)) + '</small>' +
+    '<span class="btns"><button class="btn primary" data-act="priceok" data-key="' + esc(x.key) + '" data-name="' + esc(x.r.name) + '" data-amt="' + x.amount + '">OK, new price</button>' +
+    '<button class="btn" data-act="priceonce" data-key="' + esc(x.key) + '">One-off</button>' +
+    '<button class="btn" data-tx="' + esc(x.r.newest.id) + '">Open transaction</button></span></div>';
+}
+function stillUsing(r) {
+  if (r.type !== 'expense' || (r.status && r.status !== 'active') || !r.firstSeen) return false;
+  var t = today(), ok = setting('sub_ok_' + normDesc(r.name), '');
+  var since = ok ? pd(String(ok).slice(0, 10)) : pd(r.firstSeen);
+  return daysBetween(since, t) > 182;
+}
+function subsWatchHTML() {
+  var items = recurringItems().filter(function (r) { return r.type === 'expense' && r.subcategory === 'Subscriptions' && (!r.status || r.status === 'active'); })
+    .map(function (r) { return Object.assign({}, r, { cur:r.tracked && +r.tracked.amount ? +r.tracked.amount : r.newest ? +r.newest.amount : r.amount }); })   // today's price
+    .sort(function (a, b) { return b.cur * b.perYear - a.cur * a.perYear; });
+  var alerts = priceAlerts(), month = sumBy(items, function (r) { return r.cur * r.perYear / 12; });
+  if (!items.length && !alerts.length) return '';
+  var p = periodAt(0), pc = budgetMapFor(p)['Personal Cash'], nb = nextBudget('Personal Cash', p);
+  var lim = nb ? +nb.monthly_limit : pc ? +pc.monthly_limit : 0;
+  var h = '<section class="card subwatch" id="subwatch">' + alerts.map(priceAlertHTML).join('') +
+    '<div class="swhead"><span class="eyebrow">Personal subscriptions</span><span class="bignum sm"><span class="val">' + sw0(month * 12) + '</span><span class="cur">a year</span></span>' +
+    '<small>' + sw(month) + ' a month · ' + items.length + ' subscription' + (items.length === 1 ? '' : 's') +
+    (lim ? ' · ' + Math.round(month / lim * 100) + '% of your Personal Cash budget' + (nb ? ' from ' + periodDay(pd(nb.period)) + String(nb.period).slice(0, 4) + ' (' + sw0(lim) + ')' : ' (' + sw0(lim) + ')') : '') + '</small></div>' +
+    '<div class="sublist">' + items.map(function (r) {
+      var al = alerts.filter(function (x) { return x.r.name === r.name; })[0];
+      var note = r.tracked && r.tracked.notes ? '<span class="stag">' + esc(String(r.tracked.notes).slice(0, 24)) + '</span>' : '';
+      var tag = al ? '<span class="chg rise">+' + Math.round(al.pct) + '%</span>' : stillUsing(r)
+        ? '<span class="still"><span class="stag">still using?</span><button class="navlink" data-act="subkeep" data-name="' + esc(r.name) + '">Yes</button><button class="navlink" data-act="subcancel" data-name="' + esc(r.name) + '">Cancelled</button></span>' : note;
+      return '<div class="srow"><span><b>' + esc(r.name) + '</b><small>' + r.frequency + (r.next ? ' · ' + periodDay(r.next) : '') + ' · ' + sw(r.cur) + '</small></span>' + tag +
+        '<span class="num">' + sw0(r.cur * r.perYear) + ' / yr</span></div>';
+    }).join('') + '</div></section>';
+  return h;
+}
+
+export { priceAlerts, priceAlertHTML, stillUsing, subsWatchHTML, INTERVALS, normDesc, median, addMonthsKeepDay, nextAfter, detectRecurring, trackedFor, recurringItems, upcomingItems, upcomingHTML, recurringBody };

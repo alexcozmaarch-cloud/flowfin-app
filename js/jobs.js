@@ -21,7 +21,7 @@ function runJobs() {
   JOBS_RAN = true;
   var chain = Promise.resolve();
   purgeBin();
-  [jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories, jobDeletePorsche].forEach(function (job) {
+  [jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories, jobDeletePorsche, jobSubNotes].forEach(function (job) {
     chain = chain.then(function () { return job(); }).catch(function (e) { toast('Setup step not saved yet (' + e.message + '); it will try again next time.'); });
   });
   return chain;
@@ -43,6 +43,15 @@ function jobCategories() {
     DATA.Category = (DATA.Category || []).concat(j.rows || rows); applyCategories(); persistCache();
     return saveSetting(key, '1');
   }).then(function () { toast('Categories moved to the Sheet (Category tab)'); draw(); });
+}
+// Your 19.11.2026 reminders, shown next to those subscriptions (only where the note is empty)
+function jobSubNotes() {
+  var key = 'job_sub_notes_1911';
+  if (done(key)) return;
+  var want = [[/swisscom/i, 'check 19.11.'], [/base44/i, 'cancel 19.11.']];
+  var rows = (DATA.Subscription || []).filter(function (s) { return !s.notes && want.some(function (w) { return w[0].test(s.name || ''); }); });
+  return seq(rows, function (s) { var n = want.filter(function (w) { return w[0].test(s.name); })[0][1]; return saveRow('Subscription', Object.assign({}, s, { notes:n })); })
+    .then(function () { return saveSetting(key, '1'); });
 }
 function seq(items, fn) { var c = Promise.resolve(); items.forEach(function (x) { c = c.then(function () { return fn(x); }); }); return c; }
 // The Sheet turns a saved "1" into the number 1, so compare as text (before 11.11.2026 this missed every flag,

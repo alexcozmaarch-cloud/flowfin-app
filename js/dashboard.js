@@ -3,10 +3,11 @@
 import { budgetMapFor, budgetRows, catSpend, holidaysBudgeted } from './budgets.js';
 import { chartColors, netSavingsData } from './charts.js';
 import { $, addDays, calcTotals, daysBetween, esc, fmt0, fmtCHF, inPeriod, isInfra, isSalary, lsGet, pd, periodAt, periodLabel, periodModel, roles, today, txs, ymd } from './core.js';
+import { calendarLine } from './calendar.js';
 import { goalView } from './goals.js';
 import { topbar } from './nav.js';
 import { monthEnds } from './wealth.js';
-import { upcomingHTML } from './recurring.js';
+import { priceAlertHTML, priceAlerts, upcomingHTML } from './recurring.js';
 import { catIco, ico } from './transactions.js';
 
 // ─── Dashboard ────────────────────────────────────────────────────────────
@@ -107,6 +108,7 @@ function dashboardHTML() {
   h += waterfallHTML(m);
   // 6 · upcoming: the next three and the total still to pay
   h += upcomingHTML(m, 3);
+  if (m.isCurrent) h += priceAlerts().map(priceAlertHTML).join('');
   // 7 · the goal with the nearest deadline
   h += nearestGoalHTML();
   // more detail, one tap down
@@ -121,6 +123,7 @@ function dashboardHTML() {
   var nd = netSavingsData(), pos = nd.filter(function (x) { return x.net >= 0; }).length;
   h += fold('net', 'Saved per period', pos + ' of ' + nd.length + ' periods positive',
     '<p class="chartnote">Income minus spending, cards at cost. Money moved into 3a or investing counts as saved.</p><div class="chartbox" style="height:220px"><canvas id="chNet" role="img" aria-label="Net saved per period for the last ' + nd.length + ' periods"></canvas></div>', false);
+  h += '<button class="linkrow" data-nav="calendar"><h3>Calendar</h3><span class="r">' + calendarLine(UI.periodOffset) + ' ›</span></button>';
   h += netWorthLink();
   return h;
 }

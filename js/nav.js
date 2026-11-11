@@ -1,11 +1,13 @@
 // FlowFin · Navigation and the single draw() dispatcher (pages never call each other).
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { priceAlerts } from './recurring.js';
 import { anomalyList } from './anomalies.js';
 import { syncHTML } from './api.js';
 import { budgetsHTML, planPaint } from './budgets.js';
 import { netSavingsChart } from './charts.js';
 import { $, periodAt, periodLabel, txs } from './core.js';
 import { dashboardCharts, dashboardHTML, savingsChart } from './dashboard.js';
+import { calendarHTML } from './calendar.js';
 import { goalsHTML } from './goals.js';
 import { monthlyChart, monthlyHTML } from './monthly.js';
 import { settingsHTML, soonHTML } from './settings.js';
@@ -31,7 +33,7 @@ function navBadge(page) {
   if (page !== 'transactions' || !txs().length) return '';
   var n = reviewCount(); return n ? ' <span class="nbadge" aria-label="' + n + ' to review">' + n + '</span>' : '';
 }
-function reviewCount() { return anomalyList().filter(function (x) { return !x.tx.anomaly_status; }).length; }
+function reviewCount() { return anomalyList().filter(function (x) { return !x.tx.anomaly_status; }).length + priceAlerts().length; }
 function go(page) { if (page === 'transactions') UI.txTab = 'all'; UI.page = page; location.hash = page; window.scrollTo(0, 0); draw(); }
 
 // ─── draw dispatcher (pages never call each other) ────────────────────────
@@ -48,6 +50,7 @@ function draw() {
   else if (UI.page === 'wealth') v.innerHTML = wealthHTML();
   else if (UI.page === 'goals') v.innerHTML = goalsHTML();
   else if (UI.page === 'monthly') v.innerHTML = monthlyHTML();
+  else if (UI.page === 'calendar') v.innerHTML = calendarHTML();
   else v.innerHTML = soonHTML();
   if (UI.page === 'monthly') {
     var mc = function () { if (UI.page === 'monthly') monthlyChart(); };

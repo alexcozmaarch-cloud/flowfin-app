@@ -22,7 +22,7 @@ function isLiab(e) { return truthy(e.is_liability) || acctType(e.account_type)[1
 function isInv(e) { return acctType(e.account_type)[1] === 'invest'; }
 function accounts() { return (DATA.NetWorthEntry || []).slice(); }
 // Archived accounts still count in net worth and history but leave the lists and the monthly update
-function isArchived(e) { return setting('acct_archived_' + e.id, '') === '1'; }
+function isArchived(e) { return String(setting('acct_archived_' + e.id, '')) === '1'; }
 function activeAccounts() { return accounts().filter(function (e) { return !isArchived(e); }); }
 // Saved according to your transactions in a calendar month: income minus spending (money moved into
 // collectibles, investing or 3a stays yours, so it isn't spending here)

@@ -12,6 +12,10 @@ function chartPath() {   // the package's exports hide dist/, so look for the fi
   return fs.existsSync(f) ? f : null;
 }
 var CORS = { 'Access-Control-Allow-Origin': '*' };
+// Google Sheets hands back "1" as the number 1 (and any number-looking text as a number); do the same
+function asSheet(rows) {
+  return rows.map(function (r) { var o = {}; Object.keys(r).forEach(function (k) { var v = r[k]; o[k] = typeof v === 'string' && k !== 'id' && /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; }); return o; });
+}
 
 var browser = null;
 async function getBrowser() { if (!browser) browser = await chromium.launch(); return browser; }
@@ -45,7 +49,7 @@ async function openApp(opts) {
           if (opts.oldBackend) return route.fulfill({ body: JSON.stringify({ ok: false, error: 'Error: Unknown table: undefined' }), contentType: 'application/json', headers: CORS });
           if (body.key !== 'test-key') return route.fulfill({ body: JSON.stringify({ ok: false, error: 'Error: Wrong or missing access key' }), contentType: 'application/json', headers: CORS });
           state.getCount++;
-          var all = {}; Object.keys(store).forEach(function (k) { all[k] = Object.values(store[k]); });
+          var all = {}; Object.keys(store).forEach(function (k) { all[k] = asSheet(Object.values(store[k])); });
           return route.fulfill({ body: JSON.stringify(opts.api1 ? { ok: true, data: all } : { ok: true, api: 2, data: all }), contentType: 'application/json', headers: CORS });
         }
         if (req.headers()['content-type'] && !/text\/plain/.test(req.headers()['content-type'])) errors.push('POST sent a Content-Type header (breaks Apps Script): ' + req.headers()['content-type']);
@@ -58,7 +62,7 @@ async function openApp(opts) {
         return route.fulfill({ body: JSON.stringify(out), contentType: 'application/json', headers: CORS });
       }
       state.getCount++; state.urlKeyReads = (state.urlKeyReads || 0) + (/[?&]key=/.test(u) ? 1 : 0);
-      var d = {}; Object.keys(store).forEach(function (k) { d[k] = Object.values(store[k]); });
+      var d = {}; Object.keys(store).forEach(function (k) { d[k] = asSheet(Object.values(store[k])); });
       return route.fulfill({ body: JSON.stringify({ ok: true, data: d }), contentType: 'application/json', headers: CORS });
     }
     if (/frankfurter|currency-api/.test(u)) return route.fulfill({ body: JSON.stringify({ rates: { CHF: 0.8 }, usd: { chf: 0.8 } }), contentType: 'application/json', headers: CORS });

@@ -233,7 +233,7 @@ function saveGoal() {
 function deleteGoal() {
   var id = GFORM.g.id, name = GFORM.g.name, cs = (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === id; });
   closeGForm();
-  var chain = (id === '6abcdd8dc07aa2a0e69e164a' && !done('job_restore_porsche') ? saveSetting('job_restore_porsche', '1') : Promise.resolve())
+  var chain = Promise.resolve()
     .then(function () { return name === 'Pillar 3a 2027' && !done('job_goal_3a_2027') ? saveSetting('job_goal_3a_2027', '1') : null; })
     .then(function () { return deleteRow('FinancialGoal', id); });
   cs.forEach(function (c) { chain = chain.then(function () { return deleteRow('GoalContribution', c.id, true); }); });

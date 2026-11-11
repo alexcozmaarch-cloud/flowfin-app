@@ -1,6 +1,6 @@
 // FlowFin · One-time data jobs (run once per Sheet, flag set only after every save worked).
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
-import { applyCategories, persistCache, post, saveRow } from './api.js';
+import { applyCategories, deleteRow, persistCache, post, saveRow } from './api.js';
 import { budgetMapFor, truthy } from './budgets.js';
 import { periodAt, toast, txs } from './core.js';
 import { goalFund } from './goals.js';
@@ -19,7 +19,7 @@ function runJobs() {
   if (JOBS_RAN || !txs().length) return;
   JOBS_RAN = true;
   var chain = Promise.resolve();
-  [jobRestorePorsche, jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories].forEach(function (job) {
+  [jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories, jobDeletePorsche].forEach(function (job) {
     chain = chain.then(function () { return job(); }).catch(function (e) { toast('Setup step not saved yet (' + e.message + '); it will try again next time.'); });
   });
   return chain;
@@ -43,23 +43,21 @@ function jobCategories() {
   }).then(function () { toast('Categories moved to the Sheet (Category tab)'); draw(); });
 }
 function seq(items, fn) { var c = Promise.resolve(); items.forEach(function (x) { c = c.then(function () { return fn(x); }); }); return c; }
-function done(key) { return setting(key, '') === '1'; }
-// Black Porsche and its 4 contributions disappeared on 06.11.2026; put them back exactly as imported from Base44
-function jobRestorePorsche() {
-  var key = 'job_restore_porsche';
+// The Sheet turns a saved "1" into the number 1, so compare as text (before 11.11.2026 this missed every flag,
+// and the one-time jobs ran again on every load, which is what kept bringing Black Porche back)
+function done(key) { return String(setting(key, '')) === '1'; }
+// You deleted Black Porche; the old restore job kept putting it back (see done() above). The restore job is gone
+// for good; this removes the goal and its 4 contributions once, and never touches goals again.
+function jobDeletePorsche() {
+  var key = 'job_porsche_deleted';
   if (done(key)) return;
-  var gid = '6abcdd8dc07aa2a0e69e164a', goals = DATA.FinancialGoal || [];
-  var have = goals.some(function (g) { return g.id === gid || /porsche|porche/i.test(g.name || ''); });
-  var contribs = [['6ae46bc6057ff301d4e8247b','2026-04-10',48.67,486.73], ['6ae46bc6057ff301d4e8247c','2026-05-10',86.18,861.78],
-    ['6ae46bc6057ff301d4e8247d','2026-07-10',81.32,813.19], ['6ae46bc6057ff301d4e8247e','2026-09-10',50.79,507.9]];
-  if (have) return saveSetting(key, '1');
-  return saveSetting(key, '1').then(function () { return saveRow('FinancialGoal', { id:gid, name:'Black Porche', target_amount:80000, current_amount:5335.25, saving_pct:10, deadline:'2036-08-28', icon:'🚗', color:'amber', fund_bucket:'savings',
-      notes:'1980 911 SC 3.0 Weissach €74,900 106,700 km 1 of 400 Black Metallic Matching numbers Munich, Germany', created_date:'2026-09-30 09:59:41' }); })
-    .then(function () {
-      return seq(contribs.filter(function (c) { return !(DATA.GoalContribution || []).some(function (x) { return x.goal_id === gid && String(x.period).slice(0, 10) === c[1]; }); }),
-        function (c) { return saveRow('GoalContribution', { id:c[0], goal_id:gid, period:c[1], amount:c[2], pct:10, net:c[3], created_date:'2026-10-30 10:04:54' }); });
-    })
-    .then(function () { toast('Black Porche goal restored'); });
+  var gid = '6abcdd8dc07aa2a0e69e164a';
+  var goals = (DATA.FinancialGoal || []).filter(function (g) { return g.id === gid; });
+  var cs = (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === gid; });
+  return seq(cs.map(function (c) { return ['GoalContribution', c.id]; }).concat(goals.map(function (g) { return ['FinancialGoal', g.id]; })),
+    function (x) { return deleteRow(x[0], x[1], true); })
+    .then(function () { return saveSetting(key, '1'); })
+    .then(function () { if (goals.length) toast('Black Porche goal deleted'); });
 }
 // Family Infrastructure stays 6'700 in 2027 (holidays get their own budget if needed)
 function jobFamily2027() {
@@ -92,4 +90,4 @@ function jobBudgets2027() {
     .then(function () { if (todo.length) toast('2027 budgets set, from 10.01.2027'); });
 }
 
-export { JOBS_RAN, runJobs, jobCategories, seq, done, jobRestorePorsche, jobFamily2027, jobGoal3a2027, jobBudgets2027 };
+export { JOBS_RAN, runJobs, jobCategories, seq, done, jobDeletePorsche, jobFamily2027, jobGoal3a2027, jobBudgets2027 };

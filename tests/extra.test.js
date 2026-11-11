@@ -20,6 +20,28 @@ module.exports = async function () {
     h.assert(Object.values(app.store.FinancialGoal).some(function (g) { return g.name === 'Test goal'; }), 'goal not saved');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('a deleted goal stays deleted; one-time jobs never run twice', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.FinancialGoal.push({ id: '6abcdd8dc07aa2a0e69e164a', name: 'Black Porche', target_amount: 80000, current_amount: 5335.25, saving_pct: 10, deadline: '2036-08-28' });
+    data.GoalContribution.push({ id: 'gc1', goal_id: '6abcdd8dc07aa2a0e69e164a', period: '2026-04-10', amount: 48.67, pct: 10, net: 486.73 });
+    var app = await h.openApp({ data: data }), pg = app.page; await pg.waitForTimeout(800);
+    h.assert(!app.store.FinancialGoal['6abcdd8dc07aa2a0e69e164a'], 'Black Porche should be deleted');
+    h.eq(Object.keys(app.store.GoalContribution).length, 0, 'its contributions should be deleted');
+    var before = app.posts.length;
+    // reload twice: the Sheet now returns the flags as numbers; nothing may be written again
+    for (var i = 0; i < 2; i++) { await pg.reload(); await pg.waitForTimeout(1200); }
+    var again = app.posts.slice(before).filter(function (p) { return p.action !== 'readAll'; });
+    h.eq(again.length, 0, 'writes on reload: ' + JSON.stringify(again).slice(0, 200));
+    h.assert(!app.store.FinancialGoal['6abcdd8dc07aa2a0e69e164a'], 'Black Porche came back');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('an archived account stays archived when the Sheet returns 1 as a number', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.Settings.push({ id: 'arch', key: 'acct_archived_nw2', value: '1' });
+    var app = await h.openApp({ data: data, hash: 'wealth' });
+    h.assert(await app.page.evaluate(function () { return /Archived/i.test(document.getElementById('view').innerText); }), 'archived section missing');
+    h.noErrors(app); await app.ctx.close();
+  });
   await h.test('wealth: month-end update saves a value', async function () {
     var app = await h.openApp({ data: demo.data, hash: 'wealth' }), pg = app.page;
     await pg.locator('[data-act=wupdate]').first().click(); await pg.waitForTimeout(400);

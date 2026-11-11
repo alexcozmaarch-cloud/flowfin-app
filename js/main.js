@@ -1,5 +1,6 @@
 // FlowFin · Entry point: delegated events and boot. Loaded by index.html after js/config.js.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { forget, removeWithUndo, restore } from './bin.js';
 import { setAnomaly } from './anomalies.js';
 import { applyData, deleteRow, loadAll, post, saveRow } from './api.js';
 import { LOCK_KEY, PLAN_CATS, planChange, planFit, planPaint, planSave, saveBudget } from './budgets.js';
@@ -30,7 +31,9 @@ document.addEventListener('click', function (e) {
   if (act === 'save') return saveForm();
   if (act === 'del') { readForm(); FORM._confirmDelete = true; return drawModal(); }
   if (act === 'delno') { readForm(); FORM._confirmDelete = false; return drawModal(); }
-  if (act === 'delyes') { var id = FORM.id; closeModal(); return deleteRow('Transaction', id).then(function () { toast('Transaction deleted'); }); }
+  if (act === 'delyes') { var id = FORM.id, d = FORM.description; closeModal(); return removeWithUndo('“' + (d || 'Transaction') + '”', [['Transaction', id]]); }
+  if (act === 'binrestore') return restore(a.getAttribute('data-key'));
+  if (act === 'binforget') return forget(a.getAttribute('data-key'));
   if (act === 'saveurl') { lsSet(URL_KEY, $('surl').value.trim()); lsSet(KEY_KEY, $('skey').value.trim()); toast('Connection saved'); return loadAll(); }
   if (act === 'b44') {
     var bo = $('b44Out'); bo.textContent = 'Pulling from Base44…'; a.disabled = true;
@@ -113,7 +116,7 @@ document.addEventListener('click', function (e) {
     return saveRow('Rule', { match:mt, category:cs[0], subcategory:cs[1] || '', type:$('rtype').value, account:$('racct').value, tags:String($('rtags').value || '').trim(), priority:100 })
       .then(function () { toast('Rule added for “' + mt + '”'); });
   }
-  if (act === 'rdel') return deleteRow('Rule', a.getAttribute('data-id')).then(function () { toast('Rule removed'); });
+  if (act === 'rdel') { var rr = (DATA.Rule || []).filter(function (x) { return x.id === a.getAttribute('data-id'); })[0]; return removeWithUndo('Rule “' + (rr ? rr.match : '') + '”', [['Rule', a.getAttribute('data-id')]]); }
   if (act === 'rsugg' || act === 'rsuggall') {
     var sg = suggestedRules().slice(0, 15), pick = act === 'rsugg' ? [sg[+a.getAttribute('data-i')]] : sg;
     var newRules = pick.filter(Boolean).map(function (r) { return { match:r.match, category:r.category, subcategory:r.subcategory, type:r.type, account:r.account, tags:'', priority:100 }; });

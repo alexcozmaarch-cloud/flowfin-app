@@ -42,6 +42,47 @@ module.exports = async function () {
     h.assert(await app.page.evaluate(function () { return /Archived/i.test(document.getElementById('view').innerText); }), 'archived section missing');
     h.noErrors(app); await app.ctx.close();
   });
+  console.log('\nUndo and Recently deleted');
+  await h.test('deleting a transaction can be undone, with the same id', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true, hash: 'transactions' }), pg = app.page;
+    var row = pg.locator('.tx').first(); await row.click(); await pg.waitForTimeout(250);
+    var desc = await pg.inputValue('#mdesc');
+    var before = Object.keys(app.store.Transaction).length;
+    await pg.click('[data-act=del]'); await pg.click('[data-act=delyes]'); await pg.waitForTimeout(700);
+    h.eq(Object.keys(app.store.Transaction).length, before - 1, 'not deleted');
+    h.assert(await pg.locator('.toast.undo button').count() === 1, 'no Undo button');
+    await pg.locator('.toast.undo button').click(); await pg.waitForTimeout(700);
+    h.eq(Object.keys(app.store.Transaction).length, before, 'not restored');
+    h.assert(Object.values(app.store.Transaction).some(function (t) { return t.description === desc; }), 'restored row differs');
+    h.assert(!Object.values(app.store.Settings).some(function (s) { return /^bin_/.test(s.key); }), 'bin entry should be gone after undo');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('a deleted goal with its contributions comes back from Recently deleted', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.GoalContribution.push({ id: 'gcx', goal_id: 'g1', period: '2026-04-10', amount: 50, pct: 10, net: 500 });
+    var app = await h.openApp({ data: data, hash: 'goals' }), pg = app.page;
+    await pg.evaluate(function () { var g = document.querySelector('[data-goal="g1"],[data-id="g1"]'); if (g) g.click(); });
+    await pg.waitForTimeout(250);
+    if (!(await pg.locator('[data-act=gdel]').count())) { await pg.locator('text=Demo car').first().click(); await pg.waitForTimeout(250); }
+    await pg.click('[data-act=gdel]'); await pg.waitForTimeout(100);
+    if (await pg.locator('[data-act=gdelyes]').count()) await pg.click('[data-act=gdelyes]');
+    await pg.waitForTimeout(800);
+    h.assert(!app.store.FinancialGoal.g1 && !app.store.GoalContribution.gcx, 'goal or contribution not deleted');
+    await pg.evaluate(function () { location.hash = 'settings'; }); await pg.waitForTimeout(300);
+    h.assert(/Goal “Demo car”/.test(await pg.innerText('#view')), 'not listed in Recently deleted');
+    h.assert(/with 1 linked row/.test(await pg.innerText('#view')), 'linked row count missing');
+    await pg.click('[data-act=binrestore]'); await pg.waitForTimeout(800);
+    h.assert(app.store.FinancialGoal.g1 && app.store.GoalContribution.gcx, 'not restored');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('copies older than 30 days are removed', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.Settings.push({ id: 'old', key: 'bin_old', value: JSON.stringify({ label: 'Old', at: new Date(Date.now() - 31 * 864e5).toISOString(), rows: [{ t: 'Rule', row: { id: 'r9', match: 'x' } }] }) });
+    data.Settings.push({ id: 'new', key: 'bin_new', value: JSON.stringify({ label: 'New', at: new Date().toISOString(), rows: [{ t: 'Rule', row: { id: 'r8', match: 'y' } }] }) });
+    var app = await h.openApp({ data: data }); await app.page.waitForTimeout(600);
+    h.assert(!app.store.Settings.old, 'old copy kept'); h.assert(app.store.Settings.new, 'recent copy removed');
+    h.noErrors(app); await app.ctx.close();
+  });
   await h.test('wealth: month-end update saves a value', async function () {
     var app = await h.openApp({ data: demo.data, hash: 'wealth' }), pg = app.page;
     await pg.locator('[data-act=wupdate]').first().click(); await pg.waitForTimeout(400);

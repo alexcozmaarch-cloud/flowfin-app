@@ -432,3 +432,10 @@ details.fold>summary:hover h3{color:var(--muted)}
 .linkrow h3{margin:0}.linkrow h3::before{content:"→";font-family:var(--f-mono);font-weight:500;width:18px;display:inline-block}
 .linkrow .r{font-size:13px;color:var(--muted)}.linkrow:hover h3{color:var(--muted)}
 .ur.more{border-bottom:0}
+
+/* Undo toast and Recently deleted */
+.toast.undo{display:flex;align-items:center;gap:16px;padding:8px 8px 8px 16px;max-width:calc(100vw - 32px)}
+.toast.undo span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast.undo button{background:none;border:1px solid var(--bg);color:var(--bg);font:inherit;font-weight:600;padding:6px 12px;cursor:pointer}
+.binrow{align-items:center;gap:12px}.binrow small{display:block;color:var(--muted);font-size:12px}
+.binrow > span:first-child{min-width:0}.binact{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}

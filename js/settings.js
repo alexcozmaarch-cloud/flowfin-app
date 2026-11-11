@@ -1,5 +1,6 @@
 // FlowFin · Settings page.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { binHTML } from './bin.js';
 import { saveRow } from './api.js';
 import { apiKey, apiUrl, esc } from './core.js';
 import { importHTML } from './import.js';
@@ -30,6 +31,7 @@ function settingsHTML() {
   h += '<div class="card"><h3>Foreign card payments</h3><div class="bedit" style="padding-top:0">' +
     '<div class="field"><label for="sfee">Card fee on foreign currency (%)</label><input id="sfee" type="number" step="0.05" min="0" value="' + cardFeePct() + '"></div>' +
     '<button class="btn" data-act="savefee">Save</button></div><p class="soon" style="margin:10px 0 0;font-size:13px">Added to the CHF amount when you enter a foreign-currency payment and tick “Add card fee”. Rates are the ECB reference rates for the transaction date.</p></div>';
+  h += binHTML();
   h += '<div class="card"><h3>Data in the Sheet</h3><div>' + TABLES.map(function (t) {
     return '<div class="rowline"><span>' + t + '</span><span class="num">' + (t === 'Category' && !UI.catTable ? 'tab not found' : (DATA[t] || []).length) + '</span></div>';
   }).join('') + '</div><p class="soon" style="margin:12px 0 0">Period runs from day ' + START_DAY + ' to day ' + (START_DAY - 1) + ' of the next month. ' +

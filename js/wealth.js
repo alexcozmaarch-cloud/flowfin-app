@@ -1,5 +1,6 @@
 // FlowFin · Wealth & Assets and the month-end model.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { removeWithUndo } from './bin.js';
 import { deleteRow, saveRow } from './api.js';
 import { truthy } from './budgets.js';
 import { chartColors } from './charts.js';
@@ -325,9 +326,8 @@ function saveAcct() {
 function deleteAcct() {
   var id = WFORM.e.id, snaps = (DATA.AssetSnapshot || []).filter(function (s) { return s.entry_id === id; });
   closeWForm();
-  var chain = deleteRow('NetWorthEntry', id);
-  snaps.forEach(function (s) { chain = chain.then(function () { return deleteRow('AssetSnapshot', s.id, true); }); });
-  chain.then(function () { toast('Account deleted'); });
+  var name = (accounts().filter(function (a) { return a.id === id; })[0] || {}).name || 'Account';
+  removeWithUndo('Account “' + name + '”', [['NetWorthEntry', id]].concat(snaps.map(function (s) { return ['AssetSnapshot', s.id]; })));
 }
 
 export { ACCOUNT_TYPES, WEALTH_GROUPS, acctType, isLiab, isInv, accounts, isArchived, activeAccounts, txSavedInMonth, snapsByEntry, wealthOn, wealthNow, mkey, mDate, mNext, mEnd, mLong, mShort, mName, monthEnds, lastSnapshotDate, sgn0, wealthHTML, wealthChart, WFORM, closeWForm, monthDate, monthSnaps, openUpdate, loadRates, drawUpdate, saveUpdate, openAcct, drawAcct, readAcct, saveAcct, deleteAcct };

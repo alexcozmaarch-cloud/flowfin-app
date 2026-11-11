@@ -1,5 +1,6 @@
 // FlowFin · One-time data jobs (run once per Sheet, flag set only after every save worked).
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { purgeBin } from './bin.js';
 import { applyCategories, deleteRow, persistCache, post, saveRow } from './api.js';
 import { budgetMapFor, truthy } from './budgets.js';
 import { periodAt, toast, txs } from './core.js';
@@ -19,6 +20,7 @@ function runJobs() {
   if (JOBS_RAN || !txs().length) return;
   JOBS_RAN = true;
   var chain = Promise.resolve();
+  purgeBin();
   [jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories, jobDeletePorsche].forEach(function (job) {
     chain = chain.then(function () { return job(); }).catch(function (e) { toast('Setup step not saved yet (' + e.message + '); it will try again next time.'); });
   });

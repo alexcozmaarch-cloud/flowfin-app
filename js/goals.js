@@ -1,5 +1,6 @@
 // FlowFin · Goals: funding, contributions and the goal form.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { removeWithUndo } from './bin.js';
 import { deleteRow, saveRow } from './api.js';
 import { $, calcTotals, esc, inPeriod, pd, periodAt, periodLabel, toast, today, txs, ymd } from './core.js';
 import { fold, kpi, monthYear, periodDay, savingsProjection, savingsProjectionBody, sumBy, sw, sw0 } from './dashboard.js';
@@ -233,11 +234,9 @@ function saveGoal() {
 function deleteGoal() {
   var id = GFORM.g.id, name = GFORM.g.name, cs = (DATA.GoalContribution || []).filter(function (c) { return c.goal_id === id; });
   closeGForm();
-  var chain = Promise.resolve()
+  Promise.resolve()
     .then(function () { return name === 'Pillar 3a 2027' && !done('job_goal_3a_2027') ? saveSetting('job_goal_3a_2027', '1') : null; })
-    .then(function () { return deleteRow('FinancialGoal', id); });
-  cs.forEach(function (c) { chain = chain.then(function () { return deleteRow('GoalContribution', c.id, true); }); });
-  chain.then(function () { toast('Goal deleted'); });
+    .then(function () { return removeWithUndo('Goal “' + name + '”', [['FinancialGoal', id]].concat(cs.map(function (c) { return ['GoalContribution', c.id]; }))); });
 }
 
 export { goalContribs, goalPeriods, avgNetCashFlow, monthsUntil, goalFund, acctCHF, acctTrend, addMonthsD, goalView, catGoal, goalsHTML, goalFundBody, addFixed, recordContribs, repairContribs, GFORM, openGoal, closeGForm, drawGoal, readGoal, saveGoal, deleteGoal };

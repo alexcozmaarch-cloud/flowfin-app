@@ -116,6 +116,24 @@ module.exports = async function () {
     h.assert(/Biggest single purchase/.test(t), 'biggest purchase missing');
     h.noErrors(app); await app.ctx.close();
   });
+  console.log('\nEvening mode');
+  await h.test('evening follows the phone, Settings can fix Day or Evening, charts redraw', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true, colorScheme: 'dark' }), pg = app.page;
+    var bg = function () { return pg.evaluate(function () { return getComputedStyle(document.body).backgroundColor; }); };
+    h.eq(await bg(), 'rgb(31, 34, 33)', 'charcoal ground when the phone is dark');
+    h.eq(await pg.evaluate(function () { return document.querySelector('meta[name=theme-color]').content; }), '#1F2221', 'status bar colour');
+    await pg.evaluate(function () { location.hash = 'settings'; }); await pg.waitForTimeout(250);
+    await pg.click('[data-act=theme][data-v=light]'); await pg.waitForTimeout(200);
+    h.eq(await bg(), 'rgb(243, 244, 242)', 'Day fixed in Settings');
+    await pg.reload(); await pg.waitForTimeout(1000);
+    h.eq(await bg(), 'rgb(243, 244, 242)', 'Day remembered after reload');
+    await pg.evaluate(function () { location.hash = 'settings'; }); await pg.waitForTimeout(250);
+    await pg.click('[data-act=theme][data-v=auto]'); await pg.waitForTimeout(200);
+    h.eq(await bg(), 'rgb(31, 34, 33)', 'Automatic back to evening');
+    await pg.evaluate(function () { location.hash = 'monthly'; }); await pg.waitForTimeout(600);
+    h.assert(await pg.locator('#chMonths').count() === 1, 'monthly chart missing');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nUndo and Recently deleted');
   await h.test('deleting a transaction can be undone, with the same id', async function () {
     var app = await h.openApp({ data: demo.data, phone: true, hash: 'transactions' }), pg = app.page;

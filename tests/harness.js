@@ -26,6 +26,7 @@ async function openApp(opts) {
   opts = opts || {};
   var b = await getBrowser();
   var ctxOpts = opts.phone ? Object.assign({}, devices['iPhone 13'], { serviceWorkers: 'block' }) : { viewport: { width: 1280, height: 900 }, serviceWorkers: 'block' };
+  if (opts.colorScheme) ctxOpts.colorScheme = opts.colorScheme;
   var ctx = await b.newContext(ctxOpts);
   var page = await ctx.newPage();
   var store = {}, posts = [], errors = [], state = { offline: false, fail: 0, getCount: 0 };

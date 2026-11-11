@@ -156,7 +156,7 @@ function waterfallHTML(m) {
     .filter(function (r) { return Math.abs(r.v) >= 0.5 || ['Family Infrastructure', 'Personal Cash', 'Collectibles', 'Retirement 3a'].indexOf(r.c) > -1; });
   var inc = T.income, out = sumBy(rows, function (r) { return r.v; }), left = inc - out;
   if (!(inc > 0) && !(out > 0)) return '';
-  var shades = ['var(--ink)', '#3A3E3B', '#5E635F', '#858A86', '#A9ADA9', '#C6C9C6'], base = Math.max(inc, out);
+  var shades = ['var(--ink)', 'var(--s1)', 'var(--s2)', 'var(--s3)', 'var(--s4)', 'var(--s5)'], base = Math.max(inc, out);
   var bar = rows.map(function (r, i) { return r.v > 0 ? '<i style="width:' + (r.v / base * 100) + '%;background:' + shades[i % shades.length] + '"></i>' : ''; }).join('') +
     (left > 0 ? '<i style="width:' + (left / base * 100) + '%;background:var(--good)"></i>' : '');
   // compact: one bar, a legend you can tap through to the transactions, and what is left
@@ -176,7 +176,7 @@ function budgetsMiniHTML(m, D) {
       return '<div class="mb drill"' + drill({ category:r.cat === 'Holidays' ? 'Family Infrastructure' : r.cat }) + '><span>' + catIco(r.cat) + ' ' + esc(r.cat) + (r.over ? ' <span class="tag ex">over</span>' : r.willOver ? ' <span class="tag ex">heading over</span>' : '') + '</span>' +
         '<span class="num ' + (r.over ? 'neg' : '') + '">' + sw0(r.spent) + (r.fc !== null && Math.round(r.fc) !== Math.round(r.spent) ? ' → ' + sw0(r.fc) : '') + ' / ' + sw0(r.limit) + '</span>' +
         '<span class="mbar">' + (fpct > pct ? '<b style="width:' + Math.min(100, fpct * 100) + '%"></b>' : '') + '<i class="' + (r.over ? 'over' : '') + '" style="width:' + Math.min(100, Math.max(0, pct * 100)) + '%"></i></span></div>';
-    }).join('') + '</div><p class="chartnote" style="margin-top:8px">Dark: spent. Light: forecast for the whole period from your usual spending.</p></section>';
+    }).join('') + '</div><p class="chartnote" style="margin-top:8px">Solid: spent. Shaded: forecast for the whole period from your usual spending.</p></section>';
 }
 
 // 7 · seven-day blocks from the start of the period, the last one shorter
@@ -449,7 +449,7 @@ function accountBody(m) {
 
 // ─── Free cash allocation: how accrued free cash was used, and the split it should follow ─
 var FUNDS = [['emergency','Emergency'],['invest','Investments'],['savings','Savings'],['fun','Entertainment']];
-var FUND_SHADE = ['var(--ink)', '#4A4F4C', '#8A8F8B', '#B9BDB9'];
+var FUND_SHADE = ['var(--ink)', 'var(--s1)', 'var(--s3)', 'var(--s4)'];
 function fundBody(m) {
   var pct = { emergency:20, invest:50, savings:20, fun:10 };
   (DATA.FundAllocation || []).forEach(function (f) { if (f.key in pct) pct[f.key] = +f.pct || 0; });

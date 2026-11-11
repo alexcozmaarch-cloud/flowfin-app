@@ -18,6 +18,11 @@ function settingsHTML() {
   var inBar = MOBILE_NAV.map(function (x) { return x[0]; }), more = [];
   NAV.forEach(function (g) { g.items.forEach(function (it) { if (inBar.indexOf(it[0]) < 0 && it[0] !== 'settings') more.push(it); }); });
   if (more.length) h += '<div class="card phoneonly morepages"><h3>Pages</h3>' + more.map(function (it) { return '<button class="drill rowline" data-nav="' + it[0] + '"><span>' + it[1] + '</span><span class="soon">›</span></button>'; }).join('') + '</div>';
+  var tp = themePref();
+  h += '<div class="card"><h3>Appearance</h3><div class="seg3 themeseg" role="radiogroup" aria-label="Appearance">' +
+    [['light', 'Day'], ['dark', 'Evening'], ['auto', 'Automatic']].map(function (x) {
+      return '<button role="radio" aria-checked="' + (tp === x[0]) + '" class="' + (tp === x[0] ? 'on' : '') + '" data-act="theme" data-v="' + x[0] + '">' + x[1] + '</button>';
+    }).join('') + '</div><p class="soon" style="margin:10px 0 0;font-size:13px">Automatic follows your phone or computer: evening colours when it switches to dark mode. Remembered on this device.</p></div>';
   h += '<div class="card"><h3>Google Sheet connection</h3><div class="field"><label for="surl">Apps Script web app URL</label>' +
     '<input id="surl" value="' + esc(apiUrl()) + '" style="font-family:var(--f-mono);font-size:12px"></div>' +
     '<div class="field" style="margin-top:10px"><label for="skey">Access key (kept only in this browser)</label>' +

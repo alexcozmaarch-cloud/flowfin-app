@@ -115,14 +115,16 @@ function whatChangedHTML(m, hist) {
   return '<section class="card changed"><h3>What changed<span class="r">' + (m.partial ? 'so far, ' : '') + 'vs your ' + hist.length + '-period average</span></h3>' +
     (list.length ? '<ul>' + list.map(function (x) { return '<li>' + x.t + '</li>'; }).join('') + '</ul>' : '<p class="soon" style="margin:0">Nothing out of the ordinary: every area is within 20% of usual.</p>') + '</section>';
 }
-var MONTH_SHADES = ['#121413', '#5B605C', '#8A8F8B', '#C3C7C3'];
+var MONTH_SHADES = ['var(--ink)', 'var(--s2)', 'var(--s3)', 'var(--s5)'];
+// the chart draws on a canvas, which can't read CSS variables: resolve them for the current theme
+function monthShades() { var css = getComputedStyle(document.documentElement); return MONTH_SHADES.map(function (v) { return css.getPropertyValue(v.slice(4, -1)).trim(); }); }
 function monthlyChart() {
   var el = $('chMonths'); if (!el || !window.Chart || CHARTS.months) return;
   var ms = []; for (var i = 6; i >= 0; i--) { var x = monthModel(UI.periodOffset - i); if (x.n) ms.push(x); }
   var C = chartColors();
   CHARTS.months = new Chart(el, {
     data:{ labels:ms.map(function (x) { return periodDay(x.p.start).slice(3) + String(x.p.start.getFullYear()).slice(2) + (x.partial ? '*' : ''); }),
-      datasets:MONTH_BUCKETS.map(function (b, i) { return { type:'bar', label:b[1], data:ms.map(function (x) { return Math.round(x[b[0]]); }), backgroundColor:MONTH_SHADES[i], stack:'s', maxBarThickness:48 }; })
+      datasets:MONTH_BUCKETS.map(function (b, i) { return { type:'bar', label:b[1], data:ms.map(function (x) { return Math.round(x[b[0]]); }), backgroundColor:monthShades()[i], stack:'s', maxBarThickness:48 }; })
         .concat([{ type:'line', label:'Left over', data:ms.map(function (x) { return Math.round(x.left); }), borderColor:C.signal, backgroundColor:C.signal, borderWidth:2, pointRadius:3, tension:0, stack:'line' }]) },
     options:{ responsive:true, maintainAspectRatio:false, interaction:{ mode:'index', intersect:false },
       plugins:{ legend:{ display:false }, tooltip:{ backgroundColor:C.ink, cornerRadius:0, titleFont:{ family:'IBM Plex Mono' }, bodyFont:{ family:'IBM Plex Mono' }, callbacks:{ label:function (c) { return c.dataset.label + ': ' + sw0(c.raw); } } } },

@@ -45,6 +45,17 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '11.11.2026 · 4';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '11.11.2026 · 5';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
+
+// Day / Evening / Automatic (follows the phone). Applied here, before anything is drawn, so the page never flashes.
+var THEME_KEY = 'ff_theme_v1';
+function themePref() { try { return localStorage.getItem(THEME_KEY) || 'auto'; } catch (e) { return 'auto'; } }
+function isEvening() { var t = themePref(); return t === 'dark' || (t === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches); }
+function applyTheme() {
+  var t = themePref(), el = document.documentElement;
+  if (t === 'auto') el.removeAttribute('data-theme'); else el.setAttribute('data-theme', t);
+  var m = document.querySelector('meta[name=theme-color]'); if (m) m.setAttribute('content', isEvening() ? '#1F2221' : '#F3F4F2');
+}
+if (typeof document !== 'undefined') applyTheme();

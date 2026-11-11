@@ -101,6 +101,7 @@ document.addEventListener('click', function (e) {
   if (act === 'splitadd' && FORM) { readForm(); FORM._split.push({ category:'Personal Cash', subcategory:subsOf('Personal Cash')[0] || '', amount:'' }); return drawModal(); }
   if (act === 'splitdel' && FORM) { readForm(); FORM._split.splice(+a.getAttribute('data-i'), 1); if (!FORM._split.length) FORM._split = null; return drawModal(); }
   if (act === 'splitoff' && FORM) { readForm(); FORM._split = null; return drawModal(); }
+  if (act === 'theme') { try { localStorage.setItem(THEME_KEY, a.getAttribute('data-v')); } catch (e) {} applyTheme(); return draw(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
   if (act === 'priceok' || act === 'priceonce') {
     var pk = a.getAttribute('data-key'), pname = a.getAttribute('data-name');
@@ -230,6 +231,9 @@ document.addEventListener('change', function (e) {
   if (id === 'msub' && FORM && e.target.value === '__new') { readForm(); FORM._newsub = true; drawModal(); var ns = $('mnewsub'); if (ns) ns.focus(); return; }
   if (id === 'mdesc' && FORM) autofill();
 });
+// the phone switches between day and dark: redraw so the charts pick up the new colours
+if (window.matchMedia) { var mq = matchMedia('(prefers-color-scheme: dark)'), onScheme = function () { applyTheme(); if (themePref() === 'auto') draw(); };
+  if (mq.addEventListener) mq.addEventListener('change', onScheme); else if (mq.addListener) mq.addListener(onScheme); }
 window.addEventListener('hashchange', function () { var h = location.hash.slice(1); if (h === 'add') { try { history.replaceState(null, '', '#' + UI.page); } catch (e) {} return openTx(null); } if (h && h !== UI.page) { UI.page = h; draw(); } });
 
 // ─── boot ─────────────────────────────────────────────────────────────────

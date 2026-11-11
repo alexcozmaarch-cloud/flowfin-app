@@ -181,7 +181,7 @@ function wealthHTML() {
   var byCur = {}; accounts().forEach(function (e) { if (!isLiab(e)) { var c = e.currency || 'CHF'; byCur[c] = (byCur[c] || 0) + Math.abs(cur.per[e.id]); } });
   var curs = Object.keys(byCur).sort(function (a, b) { return byCur[b] - byCur[a]; });
   if (curs.length > 1) {
-    var shades = ['var(--ink)', '#4A4F4C', '#8A8F8B', '#B9BDB9', '#D3D6D2'];
+    var shades = ['var(--ink)', 'var(--s1)', 'var(--s3)', 'var(--s4)', 'var(--s5)'];
     h += '<section class="card"><h3>Currency exposure<span class="r">assets, in CHF</span></h3><div class="split">' +
       curs.map(function (c, i) { return '<i style="width:' + (byCur[c] / cur.assets * 100) + '%;background:' + shades[i % shades.length] + '"></i>'; }).join('') + '</div><div class="splitkey">' +
       curs.map(function (c, i) { return '<span><i style="background:' + shades[i % shades.length] + '"></i>' + esc(c) + ' ' + (byCur[c] / cur.assets * 100).toFixed(0) + '% · ' + sw0(byCur[c]) + '</span>'; }).join('') + '</div></section>';

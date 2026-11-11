@@ -2,7 +2,7 @@
 const fs=require('fs'),acorn=require('acorn'),walk=require('acorn-walk'),path=require('path');
 const R=require('path').join(__dirname,'..','js');
 const cfg=acorn.parse(fs.readFileSync(R+'/config.js','utf8'),{ecmaVersion:2022});
-const globals=new Set();cfg.body.forEach(s=>s.type==='VariableDeclaration'&&s.declarations.forEach(d=>globals.add(d.id.name)));
+const globals=new Set();cfg.body.forEach(s=>{if(s.type==='VariableDeclaration')s.declarations.forEach(d=>globals.add(d.id.name));if(s.type==='FunctionDeclaration')globals.add(s.id.name);});
 const BUILTIN=new Set(Object.getOwnPropertyNames(globalThis).concat(['window','document','location','history','navigator','localStorage','sessionStorage','Chart','fetch','HashChangeEvent','Event','matchMedia','requestAnimationFrame','getComputedStyle','CSS','Intl','Blob','URL','FileReader','alert','confirm','setTimeout','clearTimeout','setInterval','clearInterval','console','arguments','undefined','performance','caches','Node','Element','HTMLElement','screen','innerWidth','innerHeight','scrollTo','scrollY','devicePixelRatio','IntersectionObserver','ResizeObserver','MutationObserver','DOMParser','TextDecoder','TextEncoder','crypto','atob','btoa','structuredClone','queueMicrotask','prompt','open','print','self','top','name','event','addEventListener','removeEventListener','dispatchEvent','visualViewport']));
 const exportsOf={};
 for(const f of fs.readdirSync(R)){if(f==='config.js')continue;const ast=acorn.parse(fs.readFileSync(R+'/'+f,'utf8'),{ecmaVersion:2022,sourceType:'module'});

@@ -134,6 +134,64 @@ module.exports = async function () {
     h.assert(await pg.locator('#chMonths').count() === 1, 'monthly chart missing');
     h.noErrors(app); await app.ctx.close();
   });
+  console.log('\nSearch and Trends');
+  await h.test('search understands words, amounts, years, months and tags, and totals the result', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'transactions' }), pg = app.page;
+    var y = String(new Date().getFullYear());
+    var expect = await pg.evaluate(function (y) { var l = FF.DATA.Transaction.filter(function (t) { return /parking/i.test(t.description) && t.date.slice(0, 4) === y; }); return { n:l.length, s:Math.round(l.reduce(function (a, t) { return a + +t.amount; }, 0) * 100) / 100 }; }, y);
+    await pg.fill('#fq', 'parking ' + y); await pg.dispatchEvent('#fq', 'input'); await pg.waitForTimeout(300);
+    var txt = await pg.innerText('.srch');
+    h.assert(new RegExp(expect.n + ' results', 'i').test(txt), 'count: ' + txt.slice(0, 80) + ' expected ' + expect.n);
+    h.eq(await pg.locator('.tx').count(), expect.n, 'rows shown');
+    await pg.fill('#fq', '>500'); await pg.dispatchEvent('#fq', 'input'); await pg.waitForTimeout(300);
+    var amts = await pg.evaluate(function () { return FF.DATA.Transaction.filter(function (t) { return +t.amount > 500; }).length; });
+    h.eq(await pg.locator('.tx').count(), amts, 'amount filter');
+    await pg.fill('#fq', 'parking 2-4'); await pg.dispatchEvent('#fq', 'input'); await pg.waitForTimeout(300);
+    h.assert(/2–4/.test(await pg.innerText('.srch')), 'range chip');
+    await pg.click('.srch [data-act=qdel][data-i="1"]'); await pg.waitForTimeout(250);
+    h.eq(await pg.inputValue('#fq'), 'parking', 'removing a chip edits the search');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('trends: one chart per subcategory, rising first, tap opens its transactions', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'monthly' }), pg = app.page;
+    var n = await pg.locator('.tc').count(); h.assert(n >= 3, 'charts: ' + n);
+    var kinds = await pg.locator('.tc .tg').allInnerTexts(), order = { rising:0, new:1, steady:2, falling:3 };
+    for (var i = 1; i < kinds.length; i++) h.assert(order[kinds[i - 1]] <= order[kinds[i]], 'not sorted rising first: ' + kinds.join(','));
+    await pg.click('[data-act=trendsort][data-v=big]'); await pg.waitForTimeout(200);
+    var first = await pg.locator('.tc b').first().innerText();
+    await pg.locator('.tc').first().click(); await pg.waitForTimeout(300);
+    h.assert(/Transactions/.test(await pg.innerText('#view h1')), 'did not open Transactions');
+    h.assert((await pg.locator('.tx').count()) > 0, 'no transactions for ' + first);
+    h.noErrors(app); await app.ctx.close();
+  });
+  console.log('\nSearch and Trends');
+  await h.test('search understands words, amounts, years, months and tags, and totals the result', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'transactions' }), pg = app.page;
+    var y = String(new Date().getFullYear());
+    var expect = await pg.evaluate(function (y) { return FF.DATA.Transaction.filter(function (t) { return /parking/i.test(t.description) && String(t.date).slice(0, 4) === y; }).length; }, y);
+    await pg.fill('#fq', 'parking ' + y); await pg.dispatchEvent('#fq', 'input'); await pg.waitForTimeout(300);
+    var txt = await pg.innerText('.srch');
+    h.assert(new RegExp(expect + ' results', 'i').test(txt), 'count: ' + txt.slice(0, 80) + ' expected ' + expect);
+    h.eq(await pg.locator('.tx').count(), expect, 'rows shown');
+    await pg.fill('#fq', '>500'); await pg.dispatchEvent('#fq', 'input'); await pg.waitForTimeout(300);
+    var amts = await pg.evaluate(function () { return FF.DATA.Transaction.filter(function (t) { return +t.amount > 500; }).length; });
+    h.eq(await pg.locator('.tx').count(), amts, 'amount filter');
+    await pg.fill('#fq', 'parking 2-4'); await pg.dispatchEvent('#fq', 'input'); await pg.waitForTimeout(300);
+    h.assert(/2–4/.test(await pg.innerText('.srch')), 'range chip');
+    await pg.click('.srch [data-act=qdel][data-i="1"]'); await pg.waitForTimeout(250);
+    h.eq(await pg.inputValue('#fq'), 'parking', 'removing a chip edits the search');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('trends: one chart per subcategory, rising first, tap opens its transactions', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'monthly' }), pg = app.page;
+    var n = await pg.locator('.tc').count(); h.assert(n >= 3, 'charts: ' + n);
+    var kinds = await pg.locator('.tc .tg').allInnerTexts(), order = { rising:0, new:1, steady:2, falling:3 };
+    for (var i = 1; i < kinds.length; i++) h.assert(order[kinds[i - 1]] <= order[kinds[i]], 'not sorted rising first: ' + kinds.join(','));
+    await pg.click('[data-act=trendsort][data-v=big]'); await pg.waitForTimeout(200);
+    await pg.locator('.tc').first().click(); await pg.waitForTimeout(300);
+    h.assert((await pg.locator('.tx').count()) > 0, 'tapping a chart should list its transactions');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nUndo and Recently deleted');
   await h.test('deleting a transaction can be undone, with the same id', async function () {
     var app = await h.openApp({ data: demo.data, phone: true, hash: 'transactions' }), pg = app.page;

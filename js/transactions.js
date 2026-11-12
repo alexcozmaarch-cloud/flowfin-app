@@ -97,10 +97,60 @@ function fxRate(cur, date) {
 }
 
 // ─── Transactions list ────────────────────────────────────────────────────
+// ─── One search box ─────────────────────────────────────────────────────────
+// Understands words, amounts (>100, <5, 50-200), years (2026), months (oct), "this period" / "last period" and #tags.
+// A search looks through all time unless it names a time itself.
+var MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+var MONTH_FULL = ['january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december'];
+function searchTokens(q) {
+  var out = [], s = String(q || '').toLowerCase().replace(/\b(this|last) period\b/g, function (m) { return m.replace(' ', '_'); });
+  s.split(/\s+/).filter(Boolean).forEach(function (w) {
+    var m, n = function (x) { return parseFloat(x.replace(',', '.')); };
+    if ((m = /^(>=?|<=?)(\d+(?:[.,]\d+)?)$/.exec(w))) out.push({ k:'amt', op:m[1], v:n(m[2]), label:m[1].replace('>=', '≥').replace('<=', '≤') + ' ' + m[2] });
+    else if ((m = /^(\d+(?:[.,]\d+)?)-(\d+(?:[.,]\d+)?)$/.exec(w))) out.push({ k:'range', a:n(m[1]), b:n(m[2]), label:m[1] + '–' + m[2] });
+    else if (/^20\d\d$/.test(w)) out.push({ k:'year', v:w, label:w });
+    else if (MONTHS.indexOf(w.slice(0, 3)) > -1 && (MONTHS.indexOf(w) > -1 || MONTH_FULL.indexOf(w) > -1)) out.push({ k:'month', v:MONTHS.indexOf(w.slice(0, 3)) + 1, label:MONTH_FULL[MONTHS.indexOf(w.slice(0, 3))].replace(/^./, function (c) { return c.toUpperCase(); }) });
+    else if (w === 'this_period' || w === 'last_period') out.push({ k:'period', v:w === 'this_period' ? 0 : -1, label:w.replace('_', ' ') });
+    else if (w.charAt(0) === '#' && w.length > 1) out.push({ k:'tag', v:w.slice(1), label:w });
+    else out.push({ k:'word', v:w, label:w });
+  });
+  return out;
+}
+function searchWithout(q, i) { return searchTokens(q).filter(function (x, j) { return j !== i; }).map(function (x) { return x.k === 'period' ? x.label : x.k === 'amt' ? x.op + x.v : x.k === 'range' ? x.a + '-' + x.b : x.k === 'month' ? MONTHS[x.v - 1] : x.label; }).join(' '); }
+function searchMatch(tx, toks) {
+  var a = +tx.amount || 0, d = String(tx.date).slice(0, 10), hay = (tx.description + ' ' + tx.subcategory + ' ' + tx.category + ' ' + (tx.tags || '')).toLowerCase();
+  return toks.every(function (t) {
+    if (t.k === 'word') return hay.indexOf(t.v) > -1;
+    if (t.k === 'amt') return t.op === '>' ? a > t.v : t.op === '>=' ? a >= t.v : t.op === '<' ? a < t.v : a <= t.v;
+    if (t.k === 'range') return a >= Math.min(t.a, t.b) && a <= Math.max(t.a, t.b);
+    if (t.k === 'year') return d.slice(0, 4) === t.v;
+    if (t.k === 'month') return +d.slice(5, 7) === t.v;
+    if (t.k === 'period') return inPeriod(tx, periodAt(t.v));
+    if (t.k === 'tag') return tagsOf(tx).some(function (g) { return g.toLowerCase().indexOf(t.v) === 0; });
+    return true;
+  });
+}
+function searchSummaryHTML(list, toks) {
+  var out = 0, inc = 0, cats = {}, byMonth = {};
+  list.forEach(function (tx) {
+    var a = +tx.amount || 0, sgn = tx.type === 'income' ? 0 : tx.type === 'refund' ? -1 : 1;
+    if (tx.type === 'income') inc += a; else out += sgn * a;
+    var k = tx.category + (tx.subcategory ? ' › ' + tx.subcategory : ''); cats[k] = (cats[k] || 0) + 1;
+    var mk = String(tx.date).slice(0, 7); byMonth[mk] = (byMonth[mk] || 0) + (tx.type === 'income' ? a : sgn * a);
+  });
+  var onlyInc = !out && inc, total = onlyInc ? inc : out, top = Object.keys(cats).sort(function (x, y) { return cats[y] - cats[x]; })[0];
+  var t = today(), months = []; for (var i = 11; i >= 0; i--) { var d = new Date(t.getFullYear(), t.getMonth() - i, 1); months.push(d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')); }
+  var mx = Math.max.apply(null, months.map(function (m) { return Math.max(0, byMonth[m] || 0); }).concat([0.01]));
+  return '<section class="srch" aria-live="polite"><div class="chips">' + toks.map(function (x, j) { return '<button class="chip on" data-act="qdel" data-i="' + j + '" aria-label="Remove ' + esc(x.label) + '">' + esc(x.label) + ' ×</button>'; }).join('') + '</div>' +
+    '<div class="srtot"><span class="eyebrow">' + list.length + ' result' + (list.length === 1 ? '' : 's') + (onlyInc ? ' · income' : '') + '</span><span class="val num">' + chf(total) + '</span>' +
+    (list.length ? '<small>average ' + fmtCHF.format(total / list.length) + (top ? (cats[top] === list.length ? ' · all in ' + esc(top) : cats[top] * 2 > list.length ? ' · mostly ' + esc(top) + ' (' + cats[top] + ' of ' + list.length + ')' : ' · across ' + Object.keys(cats).length + ' categories') : '') + '</small>' : '') + '</div>' +
+    (list.length ? '<div class="srbars" aria-hidden="true">' + months.map(function (m) { return '<i title="' + m + '" style="height:' + Math.round(Math.max(0, byMonth[m] || 0) / mx * 100) + '%"></i>'; }).join('') + '</div>' +
+      '<div class="srlab">' + months.map(function (m) { return '<span>' + 'JFMAMJJASOND'.charAt(+m.slice(5) - 1) + '</span>'; }).join('') + '</div>' : '') + '</section>';
+}
 function filteredTx() {
-  var f = UI.tx, p = periodAt(UI.periodOffset), q = f.q.trim().toLowerCase();
+  var f = UI.tx, p = periodAt(UI.periodOffset), toks = searchTokens(f.q);
   return txs().filter(function (tx) {
-    if (f.scope === 'period' && !inPeriod(tx, p)) return false;
+    if (f.scope === 'period' && !toks.length && !inPeriod(tx, p)) return false;   // a search looks through all time
     if (f.type && tx.type !== f.type) return false;
     if (f.category && tx.category !== f.category) return false;
     if (f.account && tx.account !== f.account) return false;
@@ -109,7 +159,7 @@ function filteredTx() {
     if (f.to && tx.date > f.to) return false;
     if (f.tag && tagsOf(tx).indexOf(f.tag) < 0) return false;
     if (f.dayToDay && !((tx.type === 'expense' && !isInfra(tx, roles())) || tx.type === 'refund')) return false;
-    if (q && (tx.description + ' ' + tx.subcategory + ' ' + tx.category + ' ' + (tx.tags || '')).toLowerCase().indexOf(q) < 0) return false;
+    if (toks.length && !searchMatch(tx, toks)) return false;
     return true;
   }).sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
 }
@@ -139,14 +189,14 @@ function transactionsHTML() {
   var h = topbar('Transactions', f.scope === 'period', '<button class="btn primary" data-act="addtx">+ Add</button>') + tabs;
   var nf = (f.scope !== 'period' ? 1 : 0) + (f.type ? 1 : 0) + (f.category ? 1 : 0) + (f.account ? 1 : 0) + (f.tag ? 1 : 0);
   h += '<div style="display:grid;gap:14px"><div class="filters">' +
-    '<input type="search" id="fq" placeholder="Search description, category or tag" value="' + esc(f.q) + '">' +
+    '<input type="search" id="fq" placeholder="Search: parking, >100, 2026, oct, #split" autocomplete="off" value="' + esc(f.q) + '">' +
     '<button class="btn ffbtn' + (UI.fOpen ? ' on' : '') + '" data-act="ftoggle" aria-expanded="' + !!UI.fOpen + '">Filter' + (nf ? ' · ' + nf : '') + '</button>' +
     '<div class="fmore' + (UI.fOpen ? ' open' : '') + '"><select id="fscope">' + opt('period','This period',f.scope) + opt('all','All time',f.scope) + '</select>' +
     '<select id="ftype">' + opt('','All types',f.type) + TYPES.map(function (x) { return opt(x[0], x[1], f.type); }).join('') + '</select>' +
     '<select id="fcat">' + opt('','All categories',f.category) + Object.keys(CATEGORIES).map(function (c) { return opt(c, c, f.category); }).join('') + '</select>' +
     '<select id="facct">' + opt('','Both cards',f.account) + ACCOUNTS.map(function (x) { return opt(x[0], x[1], f.account); }).join('') + '</select>' +
     (tagList.length ? '<select id="ftag">' + opt('','All tags',f.tag || '') + tagList.map(function (x) { return opt(x.tag, '#' + x.tag, f.tag || ''); }).join('') + '</select>' : '') +
-    '</div></div>' + filterChips(f) + '<div class="sumbar"><span>' + list.length + ' transactions</span><span>Out<b>' + chf(out) + '</b></span><span>Refunds<b>' + chf(back) + '</b></span><span>Income<b>' + chf(inc) + '</b></span></div>';
+    '</div></div>' + filterChips(f) + (searchTokens(f.q).length ? searchSummaryHTML(list, searchTokens(f.q)) : '') + '<div class="sumbar"><span>' + list.length + ' transactions</span><span>Out<b>' + chf(out) + '</b></span><span>Refunds<b>' + chf(back) + '</b></span><span>Income<b>' + chf(inc) + '</b></span></div>';
   if (tagList.length && !f.tag) {
     h += '<div class="tagrow phonefold' + (UI.fOpen ? ' open' : '') + '"><span class="soon">Tags</span>' + tagList.slice(0, 8).map(function (x) {
       return '<button class="tagchip" data-act="tagfilter" data-tag="' + esc(x.tag) + '">#' + esc(x.tag) + ' <b>' + sw0(x.total) + '</b></button>';
@@ -446,4 +496,4 @@ function ruleFromForm() {
 }
 function FORM_cat(r) { return r.category + (r.subcategory ? ' › ' + r.subcategory : ''); }
 
-export { splitRest, splitHTML, ico, catIco, txIco, goalIco, tagsOf, allTags, setting, cardFeePct, sortedRules, matchRule, suggestedRules, ruleText, CURRENCIES, RATE_CACHE, fxRate, filteredTx, opt, filterChips, transactionsHTML, saveMany, FORM, openTx, closeModal, MODAL_BUSY, MODAL_AGAIN, drawModal, drawModalNow, fxInfo, readForm, recalcFx, saveForm, customSubs, subsOf, autofill, descSuggestions, hideSugg, paintSugg, pickSugg, addCustomSub, ruleFromForm, FORM_cat };
+export { searchTokens, searchWithout, searchMatch, searchSummaryHTML, splitRest, splitHTML, ico, catIco, txIco, goalIco, tagsOf, allTags, setting, cardFeePct, sortedRules, matchRule, suggestedRules, ruleText, CURRENCIES, RATE_CACHE, fxRate, filteredTx, opt, filterChips, transactionsHTML, saveMany, FORM, openTx, closeModal, MODAL_BUSY, MODAL_AGAIN, drawModal, drawModalNow, fxInfo, readForm, recalcFx, saveForm, customSubs, subsOf, autofill, descSuggestions, hideSugg, paintSugg, pickSugg, addCustomSub, ruleFromForm, FORM_cat };

@@ -12,7 +12,7 @@ import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoa
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
-import { FORM, addCustomSub, autofill, fxInfo, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
+import { FORM, addCustomSub, autofill, fxInfo, searchWithout, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
 import { WFORM, accounts, closeWForm, deleteAcct, drawAcct, isArchived, openAcct, openUpdate, readAcct, saveAcct, saveUpdate } from './wealth.js';
 
 // ─── events (delegated) ───────────────────────────────────────────────────
@@ -103,6 +103,8 @@ document.addEventListener('click', function (e) {
   if (act === 'splitoff' && FORM) { readForm(); FORM._split = null; return drawModal(); }
   if (act === 'theme') { try { localStorage.setItem(THEME_KEY, a.getAttribute('data-v')); } catch (e) {} applyTheme(); return draw(); }
   if (act === 'fxcalc' && FORM) { FORM._chfManual = false; recalcFx(); var mi = $('mamt'); if (mi && FORM._calc != null) mi.value = FORM._calc.toFixed(2); return; }
+  if (act === 'qdel') { UI.tx.q = searchWithout(UI.tx.q, +a.getAttribute('data-i')); draw(); var qi = $('fq'); if (qi) qi.focus(); return; }
+  if (act === 'trendsort') { UI.trendSort = a.getAttribute('data-v'); return draw(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
   if (act === 'priceok' || act === 'priceonce') {
     var pk = a.getAttribute('data-key'), pname = a.getAttribute('data-name');
@@ -167,7 +169,7 @@ document.addEventListener('click', function (e) {
 });
 function openDrill(el) {
   var f = {}; try { f = JSON.parse(el.getAttribute('data-drill')); } catch (err) {}
-  UI.tx = { scope:'period', q:'', type:'', category:f.category || '', account:f.account || '', sub:f.sub || '', from:f.from || '', to:f.to || '', tag:'', dayToDay:!!f.dayToDay };
+  UI.tx = { scope:f.scope || 'period', q:'', type:'', category:f.category || '', account:f.account || '', sub:f.sub || '', from:f.from || '', to:f.to || '', tag:'', dayToDay:!!f.dayToDay };
   go('transactions');
 }
 document.addEventListener('toggle', function (e) {

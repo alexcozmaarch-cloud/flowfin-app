@@ -33,6 +33,7 @@ function monthlyHTML() {
   var h = topbar('Monthly', true);
   if (!m.n) return h + '<div class="empty">No transactions in this period.</div>';
   h += whatChangedHTML(m, hist);
+  h += trendsHTML();
   // waterfall
   var rows = [['Income', m.income, 'in'], ['Household', -m.household], ['= Free cash flow', m.free, 'sub'], ['Personal Cash', -m.personal], ['Collectibles', -m.coll], ['Invested', -m.invest], ['= Left over', m.left, 'total']];
   var max = Math.max(m.income, 1);
@@ -115,6 +116,52 @@ function whatChangedHTML(m, hist) {
   return '<section class="card changed"><h3>What changed<span class="r">' + (m.partial ? 'so far, ' : '') + 'vs your ' + hist.length + '-period average</span></h3>' +
     (list.length ? '<ul>' + list.map(function (x) { return '<li>' + x.t + '</li>'; }).join('') + '</ul>' : '<p class="soon" style="margin:0">Nothing out of the ordinary: every area is within 20% of usual.</p>') + '</section>';
 }
+// ─── Trends: one small chart per day-to-day subcategory over the last finished periods ───
+// rising / falling compares the last 3 periods with the ones before, using the middle value (median),
+// so a single big month (a one-off) doesn't count as a trend.
+var TREND_CATS = ['Personal Cash', 'Collectibles'];
+function med(a) { var b = a.slice().sort(function (x, y) { return x - y; }), k = Math.floor(b.length / 2); return b.length ? (b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2) : 0; }
+function trendsModel() {
+  var last = Math.min(UI.periodOffset, -1), offs = [], first = txs().reduce(function (m, t) { return !m || t.date < m ? t.date : m; }, '');
+  for (var o = last - 11; o <= last; o++) { var p = periodAt(o); if (first && p.end >= pd(first)) offs.push(o); }
+  var ps = offs.map(periodAt), by = {};
+  txs().forEach(function (tx) {
+    if (TREND_CATS.indexOf(tx.category) < 0 || tx.anomaly_status === 'excluded' || (tx.type !== 'expense' && tx.type !== 'refund')) return;
+    for (var i = 0; i < ps.length; i++) if (inPeriod(tx, ps[i])) {
+      var k = tx.category + '|' + (tx.subcategory || '—'); by[k] = by[k] || ps.map(function () { return 0; });
+      by[k][i] += (tx.type === 'refund' ? -1 : 1) * (+tx.amount || 0); break;
+    }
+  });
+  var items = Object.keys(by).map(function (k) {
+    var v = by[k].map(function (x) { return Math.max(0, x); }), n = v.length;
+    var before = med(v.slice(0, Math.max(1, n - 3))), lately = med(v.slice(-3)), d = lately - before;
+    var kind = n < 5 ? 'new' : d > Math.max(15, before * 0.15) ? 'up' : d < -Math.max(15, before * 0.15) ? 'down' : 'flat';
+    return { cat:k.split('|')[0], sub:k.split('|')[1], v:v, before:before, lately:lately, d:d, kind:kind, total:sumBy(v, function (x) { return x; }) };
+  }).filter(function (x) { return x.total >= 150; });
+  return { ps:ps, items:items };
+}
+function spark(v, usual) {
+  var w = 150, h = 44, mx = Math.max.apply(null, v.concat([usual, 1])), n = v.length;
+  var x = function (i) { return n > 1 ? 6 + i * (w - 12) / (n - 1) : w / 2; }, y = function (a) { return h - 6 - a / mx * (h - 14); };
+  return '<svg viewBox="0 0 ' + w + ' ' + h + '" class="sp" aria-hidden="true"><line x1="6" x2="' + (w - 6) + '" y1="' + y(usual).toFixed(1) + '" y2="' + y(usual).toFixed(1) + '" class="avg"/>' +
+    '<path class="ln" d="M' + v.map(function (a, i) { return x(i).toFixed(1) + ' ' + y(a).toFixed(1); }).join(' L') + '"/><circle class="end" r="3" cx="' + x(n - 1).toFixed(1) + '" cy="' + y(v[n - 1]).toFixed(1) + '"/></svg>';
+}
+function trendsHTML() {
+  var T = trendsModel(); if (!T.items.length || T.ps.length < 3) return '';
+  var sort = UI.trendSort === 'big' ? 'big' : 'rise', rank = { up:0, new:1, flat:2, down:3 };
+  var items = T.items.slice().sort(sort === 'big' ? function (a, b) { return b.total - a.total; } : function (a, b) { return rank[a.kind] - rank[b.kind] || b.d - a.d; });
+  var lastP = T.ps[T.ps.length - 1], span = T.ps[0].start.toLocaleDateString('en-GB', { month:'short' }) + '–' + lastP.start.toLocaleDateString('en-GB', { month:'short' });
+  var word = { up:'rising', down:'falling', flat:'steady', new:'new' };
+  return '<section class="card trends"><h3>Trends<span class="r"><span class="seg3 tsort" role="radiogroup" aria-label="Sort">' +
+    '<button role="radio" aria-checked="' + (sort === 'rise') + '" class="' + (sort === 'rise' ? 'on' : '') + '" data-act="trendsort" data-v="rise">Rising first</button>' +
+    '<button role="radio" aria-checked="' + (sort === 'big') + '" class="' + (sort === 'big' ? 'on' : '') + '" data-act="trendsort" data-v="big">Biggest</button></span></span></h3>' +
+    '<p class="chartnote" style="margin:0 0 10px">Each subcategory over the last ' + T.ps.length + ' finished periods (' + span + '). Dashed: your usual (middle value). Red dot: the latest period. Tap one to see its transactions.</p>' +
+    '<div class="tgrid">' + items.map(function (x) {
+      return '<div class="tc"' + drill({ category:x.cat, sub:x.sub === '—' ? '' : x.sub, scope:'all' }) + '><div class="tt"><b>' + esc(x.sub) + '</b><span class="tg tg-' + x.kind + '">' + word[x.kind] + '</span></div>' +
+        '<small>' + esc(x.cat) + ' · usual ' + sw0(x.before) + ' → ' + sw0(x.lately) + '</small>' + spark(x.v, med(x.v.slice(0, -1).length ? x.v.slice(0, -1) : x.v)) +
+        '<div class="tn"><span>' + lastP.start.toLocaleDateString('en-GB', { month:'short' }) + ' <b>' + sw0(x.v[x.v.length - 1]) + '</b></span><span>' + span + '</span></div></div>';
+    }).join('') + '</div></section>';
+}
 var MONTH_SHADES = ['var(--ink)', 'var(--s2)', 'var(--s3)', 'var(--s5)'];
 // the chart draws on a canvas, which can't read CSS variables: resolve them for the current theme
 function monthShades() { var css = getComputedStyle(document.documentElement); return MONTH_SHADES.map(function (v) { return css.getPropertyValue(v.slice(4, -1)).trim(); }); }
@@ -133,4 +180,4 @@ function monthlyChart() {
   });
 }
 
-export { MONTH_BUCKETS, monthModel, monthlyHTML, MONTH_SHADES, monthlyChart };
+export { trendsModel, trendsHTML, MONTH_BUCKETS, monthModel, monthlyHTML, MONTH_SHADES, monthlyChart };

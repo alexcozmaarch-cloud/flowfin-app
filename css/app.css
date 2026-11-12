@@ -503,3 +503,22 @@ details.fold>summary:hover h3{color:var(--muted)}
 .changed li::before{content:"→";position:absolute;left:0;font-family:var(--f-mono);color:var(--muted)}
 .changed li b{font-weight:600}
 @media (max-width:600px){.kpis:not(.cal3){grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+
+/* One search box (Transactions) */
+.srch{display:grid;gap:10px;border-top:2px solid var(--ink);padding-top:12px}
+.srch .chip.on{border:1px solid var(--ink);background:var(--paper);color:var(--ink);font-family:var(--f-mono);font-size:12px;padding:3px 8px;cursor:pointer}
+.srtot{display:grid;gap:2px}.srtot .val{font-size:40px;line-height:1;letter-spacing:-.03em}.srtot small{color:var(--muted);font-size:13px}
+.srbars{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;align-items:end;height:64px;border-bottom:1px solid var(--ink);padding-bottom:1px}
+.srbars i{display:block;background:var(--ink);min-height:0}
+.srlab{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;font-family:var(--f-mono);font-size:10px;color:var(--muted);text-align:center}
+/* Trends (Monthly) */
+.tsort{font-size:12px}.tsort button{height:28px;padding:0 10px;font-size:12px}
+.tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px}
+.tc{background:var(--paper);border:1px solid var(--rule);padding:9px 10px;display:grid;gap:3px;min-width:0;cursor:pointer}
+.tc:hover,.tc:focus-visible{border-color:var(--ink)}
+.tt{display:flex;justify-content:space-between;align-items:center;gap:6px}.tt b{font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tc small{color:var(--muted);font-size:11px}
+.tg{font-family:var(--f-mono);font-size:9.5px;padding:1px 5px;border:1px solid currentColor;white-space:nowrap}
+.tg-up{color:var(--signal)}.tg-down{color:var(--good)}.tg-flat,.tg-new{color:var(--muted)}
+.sp{width:100%;height:auto;display:block}.sp .ln{fill:none;stroke:var(--ink);stroke-width:1.8}.sp .avg{stroke:var(--faint);stroke-dasharray:3 3}.sp .end{fill:var(--signal)}
+.tn{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}.tn b{font-family:var(--f-mono);color:var(--ink);font-weight:500}

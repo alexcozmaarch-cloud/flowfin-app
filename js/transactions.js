@@ -1,5 +1,6 @@
 // FlowFin · Transactions: tags, rules, currency, list and the add/edit form.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { afterSave, oweBoxHTML, oweToSave, owedItems, readOwe } from './owed.js';
 import { priceAlertHTML, priceAlerts } from './recurring.js';
 import { anomalyBody } from './anomalies.js';
 import { persistCache, post, saveRow, setSync } from './api.js';
@@ -163,6 +164,11 @@ function filteredTx() {
     return true;
   }).sort(function (a, b) { return a.date < b.date ? 1 : a.date > b.date ? -1 : 0; });
 }
+function owedPill(tx) {
+  if (tagsOf(tx).indexOf('owed') < 0) return '';
+  var it = owedItems().filter(function (x) { return x.tx.id === tx.id; })[0];
+  return it && it.rec.status === 'open' && it.left > 0.004 ? ' <span class="otag">owed ' + fmtCHF.format(it.left) + (it.rec.who ? ' · ' + esc(it.rec.who) : '') + '</span>' : '';
+}
 function opt(v, label, sel) { return '<option value="' + esc(v) + '"' + (v === sel ? ' selected' : '') + '>' + esc(label) + '</option>'; }
 function filterChips(f) {
   var c = [];
@@ -227,7 +233,7 @@ function transactionsHTML() {
     var fx = tx.orig_currency && tx.orig_currency !== 'CHF' ? ' · ' + fmtCHF.format(+tx.orig_amount || 0) + ' ' + esc(tx.orig_currency) + (+tx.fx_fee ? ' + ' + tx.fx_fee + '% fee' : '') : '';
     h += '<div class="tx" data-tx="' + esc(tx.id) + '" tabindex="0" role="button"><span class="ti' + (cls ? ' ' + cls : '') + '">' + txIco(tx) + '</span>' +
       '<span class="d"><b>' + esc(tx.description) + tags + '</b><small>' + esc(tx.subcategory || tx.category) + ' · ' + (tx.account === 'credit_card' ? 'Credit card' : 'Debit card') + fx +
-      tagsOf(tx).map(function (g) { return ' <span class="hash">#' + esc(g) + '</span>'; }).join('') + '</small></span>' +
+      tagsOf(tx).map(function (g) { return ' <span class="hash">#' + esc(g) + '</span>'; }).join('') + owedPill(tx) + '</small></span>' +
       '<span class="a ' + cls + '">' + sign + ' ' + fmtCHF.format(a) + '</span></div>';
   });
   if (lastDate) h += '</div>';
@@ -289,6 +295,7 @@ function drawModalNow() {
     (foreign
       ? '<div class="field"><label for="mamt">In CHF · ' + (FORM._chfManual ? 'your amount' : 'calculated, or type your bank’s') + '</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>'
       : '<div class="field"><label for="mamt">Amount</label><div class="amtrow"><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '">' + '<select id="mcur" aria-label="Currency">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select>' + '</div></div>') +
+    oweBoxHTML(FORM) +
     (quick ? quickSummary() : fullFields(subs, tagList)) +
     '</div>' + (FORM._err ? '<div class="err">' + esc(FORM._err) + '</div>' : '') +
     '<div class="actions">' +
@@ -353,6 +360,7 @@ function readForm() {
   if ((x = v('mcat')) !== null) FORM.category = x; if ((x = v('msub')) !== null && x !== '__new') FORM.subcategory = x;
   if ((x = v('macct')) !== null) FORM.account = x; if ((x = v('manom')) !== null) FORM.anomaly_status = x;
   if ((x = v('mtags')) !== null) FORM.tags = x; if ((x = v('mcur')) !== null) FORM.orig_currency = x;
+  readOwe(FORM);
   (FORM._split || []).forEach(function (p, i) { var c = v('sp_c' + i), s = v('sp_s' + i), a = v('sp_a' + i);
     if (c !== null) { if (c !== p.category) { p.category = c; p.subcategory = (subsOf(c)[0] || ''); } else if (s !== null) p.subcategory = s; } if (a !== null) p.amount = a; });
   if ($('morig')) FORM.orig_amount = $('morig').value;
@@ -391,22 +399,25 @@ function saveForm() {
     orig_amount:foreign ? Math.round(parseFloat(String(FORM.orig_amount).replace(',', '.')) * 100) / 100 || '' : '',
     orig_currency:foreign ? FORM.orig_currency : '', fx_rate:foreign && FORM._rate ? FORM._rate : '', fx_fee:foreign && FORM._fee ? cardFeePct() : '' };
   var isNew = !FORM.id;
+  var owe = oweToSave(FORM, Math.round(amt * 100) / 100);
+  if (owe.err) { FORM._err = owe.err; return drawModal(); }
+  if (owe.rec) row.tags = tagsOf({ tags:row.tags }).concat(tagsOf({ tags:row.tags }).indexOf('owed') < 0 ? ['owed'] : []).join(', ');
   var parts = (FORM._split || []).map(function (p) { return Object.assign({}, p, { amount:Math.round((parseFloat(String(p.amount).replace(',', '.')) || 0) * 100) / 100 }); }).filter(function (p) { return p.amount > 0; });
   if (parts.length) {
     var rest = Math.round((row.amount - parts.reduce(function (s, p) { return s + p.amount; }, 0)) * 100) / 100;
     if (rest < 0) { FORM._err = 'The parts add up to more than the total (' + fmtCHF.format(row.amount) + ').'; return drawModal(); }
     var total = row.amount, share = function (a) { return total ? a / total : 0; };
     var tags = tagsOf({ tags:row.tags }); if (tags.indexOf('split') < 0) tags.push('split');
-    var base = { date:row.date, description:row.description, type:row.type, account:row.account, tags:tags.join(', '), anomaly_status:'', orig_currency:row.orig_currency, fx_rate:row.fx_rate, fx_fee:row.fx_fee };
+    var base = { date:row.date, description:row.description, type:row.type, account:row.account, tags:tags.filter(function (g) { return g !== 'owed'; }).join(', '), anomaly_status:'', orig_currency:row.orig_currency, fx_rate:row.fx_rate, fx_fee:row.fx_fee };
     var origOf = function (a) { return foreign && row.orig_amount ? Math.round(row.orig_amount * share(a) * 100) / 100 : ''; };
     var main = Object.assign({}, row, { amount:rest, tags:tags.join(', '), orig_amount:origOf(rest) });
     closeModal();
-    var chain = saveRow('Transaction', main);
+    var chain = saveRow('Transaction', main).then(function (s) { return afterSave(s, owe.rec); });
     parts.forEach(function (p) { chain = chain.then(function () { return saveRow('Transaction', Object.assign({}, base, { category:p.category, subcategory:p.subcategory, amount:p.amount, orig_amount:origOf(p.amount) })); }); });
     return chain.then(function () { toast('Saved in ' + (parts.length + 1) + ' parts'); });
   }
   closeModal();
-  saveRow('Transaction', row).then(function () { toast(isNew ? 'Transaction added' : 'Changes saved'); });
+  saveRow('Transaction', row).then(function (s) { return afterSave(s, owe.rec).then(function () { toast(owe.rec ? 'Added · ' + owe.rec.who + ' owes you ' + fmtCHF.format(owe.rec.amount) : isNew ? 'Transaction added' : 'Changes saved'); }); });
 }
 // A matching rule fills the form; otherwise the last transaction with the same description does
 // Subcategories per category: the built-in list plus any used in your transactions or rules, so nothing gets dropped

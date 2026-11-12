@@ -1,5 +1,6 @@
 // FlowFin · Entry point: delegated events and boot. Loaded by index.html after js/config.js.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { markPaid, writeOff } from './owed.js';
 import { normDesc, recurringItems } from './recurring.js';
 import { forget, removeWithUndo, restore } from './bin.js';
 import { setAnomaly } from './anomalies.js';
@@ -105,6 +106,10 @@ document.addEventListener('click', function (e) {
   if (act === 'fxcalc' && FORM) { FORM._chfManual = false; recalcFx(); var mi = $('mamt'); if (mi && FORM._calc != null) mi.value = FORM._calc.toFixed(2); return; }
   if (act === 'qdel') { UI.tx.q = searchWithout(UI.tx.q, +a.getAttribute('data-i')); draw(); var qi = $('fq'); if (qi) qi.focus(); return; }
   if (act === 'trendsort') { UI.trendSort = a.getAttribute('data-v'); return draw(); }
+  if (act === 'owemode' && FORM) { readForm(); FORM._owe = FORM._owe || { on:true, mode:'half', amount:'', who:'', note:'' }; FORM._owe.mode = a.getAttribute('data-v'); drawModal(); var oa = $(FORM._owe.mode === 'other' ? 'moweamt' : 'mowho'); if (oa) oa.focus(); return; }
+  if (act === 'pbmode' && FORM) { readForm(); FORM._pb = FORM._pb || { mode:'all', amount:'', date:ymd(today()), account:'debit_card' }; FORM._pb.mode = a.getAttribute('data-v'); drawModal(); var pa = $('mpbamt'); if (pa) pa.focus(); return; }
+  if (act === 'owepaid' && FORM) { readForm(); var F1 = FORM; return markPaid(F1).then(function (r) { if (r && r.err) { F1._err = r.err; drawModal(); } else closeModal(); }); }
+  if (act === 'owewriteoff' && FORM) { readForm(); var F2 = FORM; closeModal(); return writeOff(F2); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
   if (act === 'priceok' || act === 'priceonce') {
     var pk = a.getAttribute('data-key'), pname = a.getAttribute('data-name');
@@ -225,6 +230,7 @@ document.addEventListener('change', function (e) {
     var sid = e.target.getAttribute('data-id'), st = e.target.value, srow = (DATA.Subscription || []).filter(function (x) { return x.id === sid; })[0];
     if (srow) saveRow('Subscription', Object.assign({}, srow, { status:st })).then(function () { toast(srow.name + ': ' + st); });
   }
+  if (id === 'mowe' && FORM) { readForm(); drawModal(); var wh = $('mowho'); if (wh && FORM._owe && FORM._owe.on) wh.focus(); return; }
   if (id === 'mcur' && FORM) {
     var wasCHF = FORM.orig_currency !== e.target.value && (!FORM.orig_currency || FORM.orig_currency === 'CHF');
     readForm(); FORM._rate = null; FORM._rateErr = ''; FORM._calc = null;

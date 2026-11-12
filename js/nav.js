@@ -1,5 +1,6 @@
 // FlowFin · Navigation and the single draw() dispatcher (pages never call each other).
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { owedHTML } from './owed.js';
 import { priceAlerts } from './recurring.js';
 import { anomalyList } from './anomalies.js';
 import { syncHTML } from './api.js';
@@ -51,6 +52,7 @@ function draw() {
   else if (UI.page === 'goals') v.innerHTML = goalsHTML();
   else if (UI.page === 'monthly') v.innerHTML = monthlyHTML();
   else if (UI.page === 'calendar') v.innerHTML = calendarHTML();
+  else if (UI.page === 'owed') v.innerHTML = owedHTML();
   else v.innerHTML = soonHTML();
   if (UI.page === 'monthly') {
     var mc = function () { if (UI.page === 'monthly') monthlyChart(); };

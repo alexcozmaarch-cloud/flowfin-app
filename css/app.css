@@ -522,3 +522,17 @@ details.fold>summary:hover h3{color:var(--muted)}
 .tg-up{color:var(--signal)}.tg-down{color:var(--good)}.tg-flat,.tg-new{color:var(--muted)}
 .sp{width:100%;height:auto;display:block}.sp .ln{fill:none;stroke:var(--ink);stroke-width:1.8}.sp .avg{stroke:var(--faint);stroke-dasharray:3 3}.sp .end{fill:var(--signal)}
 .tn{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}.tn b{font-family:var(--f-mono);color:var(--ink);font-weight:500}
+
+/* To be paid back */
+.owebox{display:grid;gap:7px;border:1px solid var(--ink);background:var(--bg);padding:10px 12px}
+.owebox.done{border-color:var(--rule)}.owebox small{font-size:12.5px}
+.owebox > label:not(.switch){font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.owechk span{font-family:var(--f-sans);text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;color:var(--ink)}
+.owemode{width:100%}.owemode button{flex:1}
+.owe2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.owe2 span{display:grid;gap:4px;min-width:0}
+.owe2 label{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.owebtns{display:flex;gap:6px;justify-content:flex-end}
+.otag{font-family:var(--f-mono);font-size:10.5px;padding:0 5px;border:1px solid var(--ink);color:var(--ink);white-space:nowrap}
+.otag.ok{border-color:var(--good);color:var(--good)}.otag.old{border-color:var(--signal);color:var(--signal)}
+.owedline{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;text-align:left;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--rule);padding:12px 14px;cursor:pointer;margin-bottom:16px}
+.owedline:hover{border-color:var(--ink)}.owedline small{display:block;color:var(--muted);font-size:12px}.owedline .num{font-size:14px}

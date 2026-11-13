@@ -536,3 +536,11 @@ details.fold>summary:hover h3{color:var(--muted)}
 .otag.ok{border-color:var(--good);color:var(--good)}.otag.old{border-color:var(--signal);color:var(--signal)}
 .owedline{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:12px;align-items:center;text-align:left;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--rule);padding:12px 14px;cursor:pointer;margin-bottom:16px}
 .owedline:hover{border-color:var(--ink)}.owedline small{display:block;color:var(--muted);font-size:12px}.owedline .num{font-size:14px}
+
+/* Suggested tags in the add form */
+.tagpick{display:grid;gap:6px}
+.tchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tchip{font-family:var(--f-mono);font-size:12.5px;border:1px solid var(--rule);background:var(--paper);color:var(--ink);padding:5px 10px;cursor:pointer;min-height:32px}
+.tchip:hover{border-color:var(--ink)}.tchip.on{background:var(--ink);border-color:var(--ink);color:var(--paper)}
+.tchip.add{border-style:dashed;color:var(--muted)}
+.tnew{display:inline-flex;gap:0}.tnew input{width:130px;min-height:32px;padding:4px 8px;font-size:13px}.tnew .tchip{border-left:0}

@@ -13,7 +13,7 @@ import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoa
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
-import { FORM, addCustomSub, autofill, fxInfo, searchWithout, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
+import { FORM, addCustomSub, autofill, fxInfo, paintTagChips, searchWithout, toggleTag, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
 import { WFORM, accounts, closeWForm, deleteAcct, drawAcct, isArchived, openAcct, openUpdate, readAcct, saveAcct, saveUpdate } from './wealth.js';
 
 // ─── events (delegated) ───────────────────────────────────────────────────
@@ -110,6 +110,9 @@ document.addEventListener('click', function (e) {
   if (act === 'pbmode' && FORM) { readForm(); FORM._pb = FORM._pb || { mode:'all', amount:'', date:ymd(today()), account:'debit_card' }; FORM._pb.mode = a.getAttribute('data-v'); drawModal(); var pa = $('mpbamt'); if (pa) pa.focus(); return; }
   if (act === 'owepaid' && FORM) { readForm(); var F1 = FORM; return markPaid(F1).then(function (r) { if (r && r.err) { F1._err = r.err; drawModal(); } else closeModal(); }); }
   if (act === 'owewriteoff' && FORM) { readForm(); var F2 = FORM; closeModal(); return writeOff(F2); }
+  if ((act === 'tagon' || act === 'tagoff') && FORM) { readForm(); toggleTag(a.getAttribute('data-t'), act === 'tagon'); return drawModal(); }
+  if (act === 'tagnew' && FORM) { readForm(); FORM._newtag = true; drawModal(); var nt = $('mnewtag'); if (nt) nt.focus(); return; }
+  if (act === 'tagadd' && FORM) { var nv = ($('mnewtag') || {}).value || ''; readForm(); FORM._newtag = false; if (nv.trim()) toggleTag(nv.trim(), true); return drawModal(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
   if (act === 'priceok' || act === 'priceonce') {
     var pk = a.getAttribute('data-key'), pname = a.getAttribute('data-name');
@@ -198,6 +201,7 @@ document.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); hideSugg(); return; }   // phone “return”: close the list, keep what was typed
   }
   if (e.target.id === 'mnewsub' && e.key === 'Enter') { e.preventDefault(); return addCustomSub(); }
+  if (e.target.id === 'mnewtag' && e.key === 'Enter') { e.preventDefault(); var tv = e.target.value; readForm(); FORM._newtag = false; if (tv.trim()) toggleTag(tv.trim(), true); return drawModal(); }
   if (e.key === 'Enter' && e.target.matches && e.target.matches('[data-drill]')) openDrill(e.target);
   if (e.key === 'Escape' && FORM) closeModal();
   if (e.key === 'Escape' && WFORM) closeWForm();
@@ -207,7 +211,9 @@ document.addEventListener('keydown', function (e) {
 });
 document.addEventListener('input', function (e) {
   var pid = e.target.id || '';
+  if (pid === 'mdesc' && FORM) { FORM.description = e.target.value; paintTagChips(); }
   if (pid === 'mdesc' && FORM && !FORM.id) { FORM._picked = false; return paintSugg(); }
+  if (pid === 'mtags' && FORM) return paintTagChips();
   if (/^pl_[vr]\d$/.test(pid) && UI.plan) { planChange(PLAN_CATS[+pid.slice(4)], parseFloat(String(e.target.value).replace(',', '.'))); return planPaint(); }
   if (pid === 'pl_fam' && UI.plan) { UI.plan.fam = Math.max(0, parseFloat(e.target.value) || 0); planFit(); return planPaint(); }
   var id = e.target.id;

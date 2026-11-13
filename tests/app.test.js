@@ -82,6 +82,28 @@ module.exports = async function () {
     h.noErrors(app); await app.ctx.close();
   });
 
+  console.log('\nSuggested tags');
+  await h.test('suggested tags: starter words, your own tags first, tap to add, new tag', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.Transaction.push({ id: 'tg1', date: '2026-10-02', description: 'Running shorts Ochsner', category: 'Personal Cash', subcategory: 'Extras', amount: 45, type: 'expense', account: 'credit_card', tags: 'marathon 2027' });
+    var app = await h.openApp({ data: data, phone: true }), pg = app.page;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200);
+    await pg.type('#mdesc', 'Training shorts', { delay: 15 }); await pg.waitForTimeout(150);
+    var chips = await pg.locator('#mtagchips .tchip:not(.on):not(.add)').allInnerTexts();
+    h.eq(chips[0], '#marathon 2027', 'your own tag from a similar purchase comes first: ' + chips.join(' '));
+    h.assert(chips.indexOf('#running') > -1 && chips.indexOf('#sports') > -1, 'starter tags: ' + chips.join(' '));
+    await pg.click('#mtagchips [data-act=tagon][data-t=running]'); await pg.waitForTimeout(150);
+    await pg.click('#mtagchips [data-act=tagnew]'); await pg.waitForTimeout(150);
+    await pg.fill('#mnewtag', 'kit'); await pg.press('#mnewtag', 'Enter'); await pg.waitForTimeout(150);
+    h.eq(await pg.locator('#mtagchips .tchip.on').count(), 2, 'two tags chosen');
+    await pg.fill('#mamt', '39'); await pg.click('[data-act=save]'); await pg.waitForTimeout(700);
+    var row = Object.values(app.store.Transaction).filter(function (t) { return t.description === 'Training shorts'; })[0];
+    h.eq(row.tags, 'running, kit');
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await pg.type('#mdesc', 'Physio session', { delay: 15 }); await pg.waitForTimeout(150);
+    var c2 = await pg.locator('#mtagchips .tchip:not(.on):not(.add)').allInnerTexts();
+    h.assert(c2.indexOf('#recovery') > -1 && c2.indexOf('#health') > -1, 'physio suggestions: ' + c2.join(' '));
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nForeign currency');
   await h.test('typing the amount first, then picking USD: the number becomes the USD amount', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;

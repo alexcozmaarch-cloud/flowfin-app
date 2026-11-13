@@ -18,6 +18,59 @@ function catIco(cat, sub) { return ico(SUB_ICON[sub] || CAT_ICON[cat] || 'tag', 
 function txIco(tx) { return tx.type === 'refund' ? ico('undo-2', 'var(--good)') : tx.type === 'income' && tx.subcategory !== 'Cash' ? ico('arrow-down-to-line', 'var(--good)') : catIco(tx.category, tx.subcategory); }
 function goalIco(g) { var f = goalFund(g); return f.mode === 'category' && /3a/.test(f.category) ? ico('landmark', CAT_TINT['Retirement 3a']) : /porsch|porch|car|auto/i.test(g.name) ? ico('car', '#D97706') : ico('target', '#D97706'); }
 function tagsOf(tx) { return String(tx.tags || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean); }
+// ─── Suggested tags in the add form ─────────────────────────────────────────
+// Ranked: tags you used on transactions with similar words > tags you used in the same subcategory >
+// starter tags from common words (below) > your most used tags. Tap to add; with time your own tags take over.
+var TAG_WORDS = [
+  [/short|shoe|sneaker|running|run\b|marathon|trail|garmin|strava|asics|on running|hoka|salomon/i, ['running', 'sports']],
+  [/gym|fitness|yoga|pilates|swim|ski|bike|cycling|tennis|padel|climb|decathlon|ochsner|sport/i, ['sports']],
+  [/physio|physiotherap|massage|osteo|chiro|recovery|foam roll/i, ['recovery', 'health']],
+  [/doctor|arzt|dentist|zahnarzt|pharma|apothe|drogerie|hospital|clinic|optic/i, ['health']],
+  [/hotel|airbnb|booking|flight|swiss\.com|easyjet|airline|hostel|trip|vacation|holiday/i, ['travel']],
+  [/\bsbb\b|\btrains?\b|\btram\b|\bbus\b|taxi|uber|parking|fuel|petrol|benzin|car wash|toll/i, ['transport']],
+  [/restaurant|lunch|dinner|pizza|sushi|burger|cafe|coffee|bar\b|beer|hiltl/i, ['eating-out']],
+  [/gift|present|birthday|geschenk/i, ['gifts']],
+  [/kita|daycare|school|toy|kids|baby|nanny/i, ['family']],
+  [/tcg|pokemon|pokémon|cardmarket|lorcana|one piece|psa|graded|booster/i, ['tcg']],
+  [/amazon|digitec|galaxus|zalando|temu|aliexpress|online/i, ['online']],
+  [/book|kindle|course|udemy|workshop|class\b/i, ['learning']],
+  [/cinema|kino|concert|theatre|museum|ticket|festival/i, ['culture']]
+];
+function tagKey(t) { return String(t || '').trim().toLowerCase(); }
+function tagSuggestions(F) {
+  var have = tagsOf({ tags:F.tags }).map(tagKey), score = {}, label = {};
+  function add(t, s) { var k = tagKey(t); if (!k || have.indexOf(k) > -1) return; score[k] = (score[k] || 0) + s; if (!label[k]) label[k] = String(t).trim(); }
+  var desc = String(F.description || '').toLowerCase(), words = desc.split(/[^a-z0-9äöüéèàç]+/).filter(function (w) { return w.length > 2; });
+  txs().forEach(function (tx) {
+    var tg = tagsOf(tx); if (!tg.length || tx.id === F.id) return;
+    var d = String(tx.description || '').toLowerCase(), hit = words.filter(function (w) { return d.indexOf(w) > -1; }).length;
+    tg.forEach(function (t) {
+      if (hit) add(t, 10 * hit);
+      if (F.subcategory && tx.subcategory === F.subcategory && tx.category === F.category) add(t, 3);
+      add(t, 0.1);   // overall use
+    });
+  });
+  var text = desc;   // words you typed only (the subcategory may still be the form's default)
+  TAG_WORDS.forEach(function (r) { if (r[0].test(text)) r[1].forEach(function (t, i) { add(t, 6 - i); }); });
+  return Object.keys(score).filter(function (k) { return score[k] >= 1 || Object.keys(score).length < 4; })
+    .sort(function (a, b) { return score[b] - score[a]; }).slice(0, 6).map(function (k) { return label[k]; });
+}
+function tagChipsHTML(F) {
+  var sel = tagsOf({ tags:F.tags }), sug = tagSuggestions(F);
+  return '<div class="field full tagpick"><label>Tags</label><div class="tchips" id="mtagchips">' + tagChipsInner(sel, sug) + '</div></div>';
+}
+function tagChipsInner(sel, sug) {
+  return sel.map(function (t) { return '<button type="button" class="tchip on" data-act="tagoff" data-t="' + esc(t) + '" aria-label="Remove tag ' + esc(t) + '">#' + esc(t) + ' ×</button>'; }).join('') +
+    sug.map(function (t) { return '<button type="button" class="tchip" data-act="tagon" data-t="' + esc(t) + '">#' + esc(t) + '</button>'; }).join('') +
+    (FORM && FORM._newtag ? '<span class="tnew"><input id="mnewtag" autocomplete="off" placeholder="new tag" aria-label="New tag"><button type="button" class="tchip" data-act="tagadd">Add</button></span>'
+      : '<button type="button" class="tchip add" data-act="tagnew">+ tag</button>');
+}
+function paintTagChips() { var el = $('mtagchips'); if (el && FORM) { var mt = $('mtags'); if (mt) FORM.tags = mt.value; el.innerHTML = tagChipsInner(tagsOf({ tags:FORM.tags }), tagSuggestions(FORM)); } }
+function toggleTag(t, on) {
+  var cur = tagsOf({ tags:FORM.tags }).filter(function (x) { return tagKey(x) !== tagKey(t); });
+  if (on) cur.push(String(t).trim().replace(/^#/, ''));
+  FORM.tags = cur.join(', ');
+}
 function allTags() {
   var m = {};
   txs().forEach(function (tx) {
@@ -296,6 +349,7 @@ function drawModalNow() {
       ? '<div class="field"><label for="mamt">In CHF · ' + (FORM._chfManual ? 'your amount' : 'calculated, or type your bank’s') + '</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>'
       : '<div class="field"><label for="mamt">Amount</label><div class="amtrow"><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '">' + '<select id="mcur" aria-label="Currency">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select>' + '</div></div>') +
     oweBoxHTML(FORM) +
+    (FORM.type === 'income' ? '' : tagChipsHTML(FORM)) +
     (quick ? quickSummary() : fullFields(subs, tagList)) +
     '</div>' + (FORM._err ? '<div class="err">' + esc(FORM._err) + '</div>' : '') +
     '<div class="actions">' +
@@ -507,4 +561,4 @@ function ruleFromForm() {
 }
 function FORM_cat(r) { return r.category + (r.subcategory ? ' › ' + r.subcategory : ''); }
 
-export { searchTokens, searchWithout, searchMatch, searchSummaryHTML, splitRest, splitHTML, ico, catIco, txIco, goalIco, tagsOf, allTags, setting, cardFeePct, sortedRules, matchRule, suggestedRules, ruleText, CURRENCIES, RATE_CACHE, fxRate, filteredTx, opt, filterChips, transactionsHTML, saveMany, FORM, openTx, closeModal, MODAL_BUSY, MODAL_AGAIN, drawModal, drawModalNow, fxInfo, readForm, recalcFx, saveForm, customSubs, subsOf, autofill, descSuggestions, hideSugg, paintSugg, pickSugg, addCustomSub, ruleFromForm, FORM_cat };
+export { tagSuggestions, paintTagChips, toggleTag, searchTokens, searchWithout, searchMatch, searchSummaryHTML, splitRest, splitHTML, ico, catIco, txIco, goalIco, tagsOf, allTags, setting, cardFeePct, sortedRules, matchRule, suggestedRules, ruleText, CURRENCIES, RATE_CACHE, fxRate, filteredTx, opt, filterChips, transactionsHTML, saveMany, FORM, openTx, closeModal, MODAL_BUSY, MODAL_AGAIN, drawModal, drawModalNow, fxInfo, readForm, recalcFx, saveForm, customSubs, subsOf, autofill, descSuggestions, hideSugg, paintSugg, pickSugg, addCustomSub, ruleFromForm, FORM_cat };

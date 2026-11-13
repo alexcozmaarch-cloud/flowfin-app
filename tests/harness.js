@@ -12,10 +12,8 @@ function chartPath() {   // the package's exports hide dist/, so look for the fi
   return fs.existsSync(f) ? f : null;
 }
 var CORS = { 'Access-Control-Allow-Origin': '*' };
-// Google Sheets hands back "1" as the number 1 (and any number-looking text as a number); do the same
-function asSheet(rows) {
-  return rows.map(function (r) { var o = {}; Object.keys(r).forEach(function (k) { var v = r[k]; o[k] = typeof v === 'string' && k !== 'id' && /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v; }); return o; });
-}
+var { FakeGas } = require('./fake-gas');
+var SLOW_MS = 60 * 1000;   // a single request that would take Google over a minute is a bug waiting to happen
 
 var browser = null;
 async function getBrowser() { if (!browser) browser = await chromium.launch(); return browser; }
@@ -29,11 +27,25 @@ async function openApp(opts) {
   if (opts.colorScheme) ctxOpts.colorScheme = opts.colorScheme;
   var ctx = await b.newContext(ctxOpts);
   var page = await ctx.newPage();
-  var store = {}, posts = [], errors = [], state = { offline: false, fail: 0, getCount: 0 };
-  Object.keys(opts.data || {}).forEach(function (t) { store[t] = {}; opts.data[t].forEach(function (r) { store[t][String(r.id)] = JSON.parse(JSON.stringify(r)); }); });
+  var posts = [], errors = [], state = { offline: false, fail: 0, getCount: 0 };
+  // the real backend/Code.gs runs against a fake Sheet; app.store is a read-only view of what the Sheet holds
+  var gas = new FakeGas(), store = {};
+  gas.setup();
+  if (opts.oldBackend || (opts.data && !opts.data.Category && opts.noCategoryTab)) gas.dropSheet('Category');
+  gas.seed(opts.data || {});
+  function refresh() { var s = gas.snapshot(); Object.keys(store).forEach(function (k) { delete store[k]; }); Object.assign(store, s); }
+  refresh();
+  function answer(route, res) {
+    if (res.timeout) errors.push('Apps Script request ran past Google\'s 6-minute limit: ' + gas.log[gas.log.length - 1].action);
+    else if (res.ms > SLOW_MS) errors.push('Apps Script request would take ' + Math.round(res.ms / 1000) + ' s at Google: ' + gas.log[gas.log.length - 1].action);
+    refresh();
+    var text = res.timeout ? JSON.stringify({ ok: false, error: 'Exceeded maximum execution time' }) : res.body;
+    return new Promise(function (ok) { setTimeout(ok, Math.min(400, res.ms / 40)); }).then(function () {
+      return route.fulfill({ body: text, contentType: 'application/json', headers: CORS });
+    });
+  }
   page.on('pageerror', function (e) { errors.push(String(e && e.stack || e)); });
   page.on('console', function (m) { if (m.type() === 'error' && !/ServiceWorker|Failed to load resource/.test(m.text())) errors.push('console: ' + m.text()); });
-  var uid = 0;
   await page.route('**/*', async function (route) {
     var req = route.request(), u = req.url();
     if (u.indexOf('https://app.local/') === 0) {
@@ -45,26 +57,20 @@ async function openApp(opts) {
     if (u.indexOf('script.google.com') > -1) {
       if (state.offline || state.fail > 0) { if (state.fail > 0) state.fail--; return route.abort('internetdisconnected'); }
       if (req.method() === 'POST') {
-        var body = JSON.parse(req.postData() || '{}'); posts.push(body);
+        var raw = req.postData() || '{}', body = JSON.parse(raw); posts.push(body);
+        if (req.headers()['content-type'] && !/text\/plain/.test(req.headers()['content-type'])) errors.push('POST sent a Content-Type header (breaks Apps Script): ' + req.headers()['content-type']);
         if (body.action === 'readAll') {
           if (opts.oldBackend) return route.fulfill({ body: JSON.stringify({ ok: false, error: 'Error: Unknown table: undefined' }), contentType: 'application/json', headers: CORS });
-          if (body.key !== 'test-key') return route.fulfill({ body: JSON.stringify({ ok: false, error: 'Error: Wrong or missing access key' }), contentType: 'application/json', headers: CORS });
           state.getCount++;
-          var all = {}; Object.keys(store).forEach(function (k) { all[k] = asSheet(Object.values(store[k])); });
-          return route.fulfill({ body: JSON.stringify(opts.api1 ? { ok: true, data: all } : { ok: true, api: 2, data: all }), contentType: 'application/json', headers: CORS });
+          var r = gas.post(raw);
+          if (opts.api1 && r.body) { var o = JSON.parse(r.body); delete o.api; r.body = JSON.stringify(o); }
+          return answer(route, r);
         }
-        if (req.headers()['content-type'] && !/text\/plain/.test(req.headers()['content-type'])) errors.push('POST sent a Content-Type header (breaks Apps Script): ' + req.headers()['content-type']);
-        var t = store[body.table] = store[body.table] || {};
-        var up = function (row) { row = Object.assign({}, row); if (!row.id) row.id = 'new' + (++uid); t[String(row.id)] = row; return row; };
-        var out;
-        if (body.action === 'delete') { delete t[String(body.id)]; out = { ok: true, deleted: true }; }
-        else if (body.action === 'upsertMany') out = { ok: true, rows: body.rows.map(up) };
-        else out = { ok: true, row: up(body.row) };
-        return route.fulfill({ body: JSON.stringify(out), contentType: 'application/json', headers: CORS });
+        return answer(route, gas.post(raw));
       }
       state.getCount++; state.urlKeyReads = (state.urlKeyReads || 0) + (/[?&]key=/.test(u) ? 1 : 0);
-      var d = {}; Object.keys(store).forEach(function (k) { d[k] = asSheet(Object.values(store[k])); });
-      return route.fulfill({ body: JSON.stringify({ ok: true, data: d }), contentType: 'application/json', headers: CORS });
+      var params = {}; new URL(u).searchParams.forEach(function (v, k) { params[k] = v; });
+      return answer(route, gas.get(params));
     }
     if (/frankfurter|currency-api/.test(u)) return route.fulfill({ body: JSON.stringify({ rates: { CHF: 0.8 }, usd: { chf: 0.8 } }), contentType: 'application/json', headers: CORS });
     if (/chart\.umd/.test(u)) { var cp = chartPath(); return cp ? route.fulfill({ path: cp, contentType: 'text/javascript' }) : route.continue(); }
@@ -75,7 +81,7 @@ async function openApp(opts) {
   await page.goto('https://app.local/index.html' + (opts.hash ? '#' + opts.hash : ''));
   await page.waitForFunction(function () { return window.FF && document.querySelector('#view') && document.querySelector('#view').children.length > 0; }, null, { timeout: 15000 });
   await page.waitForTimeout(600);
-  return { page: page, ctx: ctx, store: store, posts: posts, errors: errors, state: state };
+  return { page: page, ctx: ctx, store: store, posts: posts, errors: errors, state: state, gas: gas };
 }
 
 // tiny test runner: named checks, a clear report, non-zero exit on failure

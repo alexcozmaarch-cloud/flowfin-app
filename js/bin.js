@@ -1,6 +1,6 @@
 // FlowFin · Undo and Recently deleted. Before anything is deleted, a copy goes into the Settings tab
 // (key bin_…); Undo or Restore puts the rows back with their original ids. Copies older than 30 days are removed.
-import { deleteRow, persistCache, post } from './api.js';
+import { deleteMany, deleteRow, persistCache, post } from './api.js';
 import { esc, toast } from './core.js';
 import { draw } from './nav.js';
 import { saveSetting } from './settings.js';
@@ -22,8 +22,10 @@ function removeWithUndo(label, items) {
   var kept = rows.length ? saveSetting(key, JSON.stringify({ label:label, at:new Date().toISOString(), rows:rows })).then(function () { return true; }, function () { return false; })
     : Promise.resolve(false);
   return kept.then(function (ok) {
-    var chain = Promise.resolve();
-    items.forEach(function (x, i) { chain = chain.then(function () { return deleteRow(x[0], x[1], i > 0); }); });
+    // the row itself first, then what belongs to it, one request per table
+    var rest = {}; items.slice(1).forEach(function (x) { (rest[x[0]] = rest[x[0]] || []).push(x[1]); });
+    var chain = deleteRow(items[0][0], items[0][1]);
+    Object.keys(rest).forEach(function (t) { chain = chain.then(function () { return deleteMany(t, rest[t]); }); });
     return chain.then(function () {
       if (ok) toastUndo(label + ' deleted', function () { restore(key); }); else toast(label + ' deleted');
     });
@@ -59,9 +61,7 @@ function forget(key) {
 // on every load: drop copies older than 30 days
 function purgeBin() {
   var cut = Date.now() - BIN_DAYS * 864e5, old = binEntries().filter(function (e) { return Date.parse(e.at) < cut; });
-  var chain = Promise.resolve();
-  old.forEach(function (e) { chain = chain.then(function () { return deleteRow('Settings', e.sid, true); }); });
-  return chain;
+  return deleteMany('Settings', old.map(function (e) { return e.sid; }));
 }
 function binHTML() {
   var list = binEntries();

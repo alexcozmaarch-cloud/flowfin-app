@@ -158,6 +158,22 @@ function deleteRow(table, id, quiet) {
     setSync('err', e.message); toast('Not deleted: ' + e.message); draw();
   });
 }
+// Several rows of one table at once. Backends before API 3 get one request per row.
+function deleteMany(table, ids) {
+  ids = ids.filter(function (id) { return !/^tmp-/.test(id); });
+  if (!ids.length) return Promise.resolve();
+  if ((UI.api || 1) < 3) { var chain = Promise.resolve(); ids.forEach(function (id) { chain = chain.then(function () { return deleteRow(table, id, true); }); }); return chain; }
+  var arr = DATA[table] || [], gone = {}; ids.forEach(function (id) { gone[id] = true; });
+  var removed = arr.filter(function (r) { return gone[r.id]; });
+  DATA[table] = arr.filter(function (r) { return !gone[r.id]; });
+  draw(); setSync('busy');
+  return post({ action:'deleteMany', table:table, ids:ids }).then(function () {
+    persistCache(); UI.lastSync = new Date(); setSync('ok');
+  }).catch(function (e) {
+    DATA[table] = (DATA[table] || []).concat(removed);
+    setSync('err', e.message); toast('Not deleted: ' + e.message); draw();
+  });
+}
 
 // ─── Offline: transactions added or changed without signal wait on this phone and are sent later ───
 // Kept in the browser (survives closing the app). Sent in order before every load, and when the phone is back online.
@@ -215,4 +231,4 @@ function applyCategories() {
   Object.keys(next).forEach(function (k) { CATEGORIES[k] = next[k]; });
 }
 
-export { readAll, applyCategories, outbox, flushOutbox, setSync, syncHTML, loadAll, post, applyData, persistCache, PENDING, saveRow, NATURAL_KEY, REPAIRING, repairDuplicates, deleteRow };
+export { readAll, applyCategories, outbox, flushOutbox, setSync, syncHTML, loadAll, post, applyData, persistCache, PENDING, saveRow, NATURAL_KEY, REPAIRING, repairDuplicates, deleteRow, deleteMany };

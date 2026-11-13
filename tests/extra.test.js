@@ -296,6 +296,35 @@ module.exports = async function () {
     h.assert(Object.values(app.store.AssetSnapshot || {}).some(function (s) { return s.entry_id === 'nw1' && +s.value === 21000; }), 'snapshot not saved');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('deleting an account with 6 years of month-end values takes 2 requests, not 73, and Undo brings them all back', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    data.AssetSnapshot = (data.AssetSnapshot || []).filter(function (s) { return s.entry_id !== 'nw1'; });
+    for (var m = 0; m < 72; m++) { var d = new Date(2020, m + 1, 0); data.AssetSnapshot.push({ id: 'snap' + m, entry_id: 'nw1', date: d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'), value: 10000 + m * 100, total_invested: 0, exchange_rate: 1 }); }
+    var app = await h.openApp({ data: data, hash: 'wealth' }), pg = app.page;
+    var n0 = app.gas.log.length;
+    await pg.locator('[data-act=weditacct][data-id=nw1]').first().click(); await pg.waitForTimeout(250);
+    await pg.click('[data-act=wdel]'); await pg.waitForTimeout(150); await pg.click('[data-act=wdelyes]'); await pg.waitForTimeout(1500);
+    h.eq(Object.values(app.store.AssetSnapshot).filter(function (s) { return s.entry_id === 'nw1'; }).length, 0, 'month-end values left');
+    h.assert(!app.store.NetWorthEntry.nw1, 'account not deleted');
+    var reqs = app.gas.log.slice(n0).filter(function (x) { return /delete/.test(x.action); });
+    h.assert(reqs.length <= 2, reqs.length + ' delete requests to the Sheet');
+    await pg.locator('.toast.undo button').click(); await pg.waitForTimeout(1200);
+    h.eq(Object.values(app.store.AssetSnapshot).filter(function (s) { return s.entry_id === 'nw1'; }).length, 72, 'month-end values restored');
+    h.eq(app.store.AssetSnapshot.snap5.date, '2020-06-30', 'dates survive the round trip');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('the fake Sheet converts like Google: "1" → 1, dates, TRUE; Settings text and JSON come back as written', async function () {
+    var { FakeGas } = require('./fake-gas'), g = new FakeGas(); g.setup();
+    g.seed({ Settings: [{ id: 's1', key: 'job_x', value: '1' }, { id: 's2', key: 'owed_t', value: '{"amount":25}' }, { id: 's3', key: 'price_ok_x', value: '2026-11-13' }],
+      NetWorthEntry: [{ id: 'n1', name: 'X', is_liability: 'TRUE', current_value: '12.5' }] });
+    var s = g.snapshot();
+    h.eq(s.Settings.s1.value, 1, 'a 1 typed as text comes back as a number'); h.eq(s.Settings.s2.value, '{"amount":25}', 'JSON value'); h.eq(s.Settings.s3.value, '2026-11-13', 'date value');
+    h.eq(s.NetWorthEntry.n1.is_liability, true); h.eq(s.NetWorthEntry.n1.current_value, 12.5);
+    var r = g.post(JSON.stringify({ action: 'upsertMany', key: 'test-key', table: 'Rule', rows: Array.from({ length: 2000 }, function (_, i) { return { match: 'm' + i }; }) }));
+    h.assert(!r.timeout && r.ms < 10000, 'a 2000-row save should be one quick write, took ' + r.ms + ' ms');
+    var bad = g.post(JSON.stringify({ action: 'readAll', key: 'nope' }));
+    h.assert(/Wrong or missing access key/.test(bad.body), 'wrong key accepted');
+  });
   await h.test('budgets: the planner opens and redistributes', async function () {
     var app = await h.openApp({ data: demo.data, hash: 'budgets' }), pg = app.page;
     var n = await pg.locator('[id^=pl_v]').count();
@@ -387,7 +416,7 @@ module.exports = async function () {
     h.assert(rows.length >= 30, 'only ' + rows.length + ' category rows');
     h.assert(rows.some(function (r) { return r.category === 'Personal Cash' && r.subcategory === 'Car wash'; }), 'your own subcategory was not moved');
     h.assert(rows.some(function (r) { return r.category === 'Family Infrastructure' && r.subcategory === 'Mortgage'; }), 'built-in subcategory missing');
-    h.assert(Object.values(app.store.Settings).some(function (r) { return r.key === 'job_categories_sheet' && r.value === '1'; }), 'done-flag not set');
+    h.assert(Object.values(app.store.Settings).some(function (r) { return r.key === 'job_categories_sheet' && String(r.value) === '1'; }), 'done-flag not set');
     h.eq(app.state.urlKeyReads || 0, 0, 'the key should not travel in the address');
     await app.page.evaluate(function () { location.hash = 'settings'; }); await app.page.waitForTimeout(250);
     h.assert(/Apps Script: up to date/.test(await app.page.innerText('#view')), 'settings should say the Apps Script is up to date');

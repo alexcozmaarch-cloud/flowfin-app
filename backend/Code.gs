@@ -35,7 +35,7 @@ var BOOLEAN = ['is_default','rollover_enabled','is_liability','auto_detected'];
 
 var SS_ = null;
 function ss_() { return SS_ || (SS_ = SpreadsheetApp.openById(SHEET_ID)); }   // opened once per request
-var API_VERSION = 2;   // 2: readAll without the lock, upsertMany in one write
+var API_VERSION = 3;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written
 
 function setup() {
   var ss = ss_();
@@ -66,7 +66,8 @@ function readTable_(name) {
     headers.forEach(function (h, i) {
       var v = r[i];
       if (v instanceof Date) v = Utilities.formatDate(v, 'Europe/Zurich', 'yyyy-MM-dd');
-      if (NUMERIC.indexOf(h) > -1 && v !== '') v = Number(v);
+      // Settings.value holds text and JSON (owed, recently deleted…); only AssetSnapshot's value is a number
+      if (NUMERIC.indexOf(h) > -1 && v !== '' && !(name === 'Settings' && h === 'value')) v = Number(v);
       if (BOOLEAN.indexOf(h) > -1) v = (v === true || String(v).toLowerCase() === 'true');
       o[h] = v;
     });
@@ -111,6 +112,7 @@ function doGet(e) {
 //   { "action": "upsert", "table": "Transaction", "row": {...} }       → returns row with id
 //   { "action": "upsertMany", "table": "Transaction", "rows": [...] }
 //   { "action": "delete", "table": "Transaction", "id": "..." }
+//   { "action": "deleteMany", "table": "AssetSnapshot", "ids": [...] }   (API 3)
 //   { "action": "readAll" }   → same as a plain GET, but the key travels in the body instead of the address
 function doPost(e) {
   var lock = null, out;
@@ -126,6 +128,7 @@ function doPost(e) {
     if (body.action === 'upsert') out = { ok: true, row: upsert_(body.table, body.row) };
     else if (body.action === 'upsertMany') out = { ok: true, rows: upsertMany_(body.table, body.rows || []) };
     else if (body.action === 'delete') out = { ok: true, deleted: delete_(body.table, body.id) };
+    else if (body.action === 'deleteMany') out = { ok: true, deleted: deleteMany_(body.table, body.ids || []) };
     else throw new Error('Unknown action: ' + body.action);
   } catch (err) {
     out = { ok: false, error: String(err) };
@@ -277,6 +280,19 @@ function delete_(table, id) {
   if (!rowIdx) return false;
   sh.deleteRow(rowIdx);
   return true;
+}
+
+// Many rows in one go (an account with all its month-end values): one read, one write, one delete
+function deleteMany_(table, ids) {
+  var sh = ss_().getSheetByName(table), lastRow = sh.getLastRow(), lastCol = sh.getLastColumn();
+  if (lastRow < 2 || !ids.length) return 0;
+  var gone = {}; ids.forEach(function (id) { gone[String(id)] = true; });
+  var data = sh.getRange(2, 1, lastRow - 1, lastCol).getValues();
+  var keep = data.filter(function (r) { return !gone[String(r[0])]; }), n = data.length - keep.length;
+  if (!n) return 0;
+  if (keep.length) sh.getRange(2, 1, keep.length, lastCol).setValues(keep);
+  sh.deleteRows(2 + keep.length, n);
+  return n;
 }
 
 function findRow_(sh, id) {

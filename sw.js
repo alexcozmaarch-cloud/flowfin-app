@@ -1,6 +1,6 @@
 // FlowFin service worker: makes the app installable and opens offline with the last loaded version.
 // Only the app's own files are cached. Data calls to Apps Script and exchange rates always go to the network.
-var CACHE = 'flowfin-v9';
+var CACHE = 'flowfin-v10';
 var FILES = ['./', './index.html', './manifest.webmanifest', './icon.svg', './css/app.css', './js/anomalies.js', './js/api.js', './js/bin.js', './js/budgets.js', './js/calendar.js', './js/charts.js', './js/config.js', './js/core.js', './js/dashboard.js', './js/goals.js', './js/import.js', './js/jobs.js', './js/main.js', './js/monthly.js', './js/nav.js', './js/owed.js', './js/recurring.js', './js/settings.js', './js/transactions.js', './js/wealth.js'];
 self.addEventListener('install', function (e) { e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); })); self.skipWaiting(); });
 self.addEventListener('activate', function (e) {

@@ -52,7 +52,7 @@ module.exports = async function () {
     for (var id of ['mdate', 'mcat', 'msub', 'macct', 'mtags', 'manom']) h.eq(await pg.locator('#' + id).count(), 0, id + ' should be hidden in quick add');
     h.eq(await pg.evaluate(function () { return document.activeElement.id; }), 'mdesc', 'description should have focus');
     await pg.type('#mdesc', 'Netflix', { delay: 20 }); await pg.press('#mdesc', 'Enter'); await pg.tap('#mamt'); await pg.waitForTimeout(350);
-    h.assert(/Personal Cash › Subscriptions/.test(await pg.innerText('.qsum')), 'summary should show the category from history: ' + await pg.innerText('.qsum'));
+    h.assert(/Subscriptions/.test(await pg.innerText('.qsum')), 'summary should show the category from history: ' + await pg.innerText('.qsum'));
     h.eq(await pg.inputValue('#mamt'), '18.9', 'amount from the last one');
     await pg.fill('#mamt', '19.9'); await pg.click('[data-act=save]'); await pg.waitForTimeout(600);
     var today = require('./demo-data').ymd(new Date());

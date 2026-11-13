@@ -1,6 +1,6 @@
 // FlowFin · Transactions: tags, rules, currency, list and the add/edit form.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
-import { afterSave, oweBoxHTML, oweToSave, owedItems, readOwe } from './owed.js';
+import { afterSave, oweBoxHTML, oweButtonHTML, oweToSave, owedItems, readOwe } from './owed.js';
 import { priceAlertHTML, priceAlerts } from './recurring.js';
 import { anomalyBody } from './anomalies.js';
 import { persistCache, post, saveRow, setSync } from './api.js';
@@ -55,8 +55,9 @@ function tagSuggestions(F) {
   return Object.keys(score).filter(function (k) { return score[k] >= 1 || Object.keys(score).length < 4; })
     .sort(function (a, b) { return score[b] - score[a]; }).slice(0, 6).map(function (k) { return label[k]; });
 }
-function tagChipsHTML(F) {
+function tagChipsHTML(F, quick) {
   var sel = tagsOf({ tags:F.tags }), sug = tagSuggestions(F);
+  if (quick) return '<div class="field full qtags"><div class="tchips slide" id="mtagchips" aria-label="Tags">' + tagChipsInner(sel, sug) + '</div>' + oweButtonHTML(F) + '</div>';
   return '<div class="field full tagpick"><label>Tags</label><div class="tchips" id="mtagchips">' + tagChipsInner(sel, sug) + '</div></div>';
 }
 function tagChipsInner(sel, sug) {
@@ -334,7 +335,9 @@ function drawModalNow() {
   txs().forEach(function (t) { if (t.description) descs[t.description] = 1; });
   var subs = subsOf(FORM.category), foreign = FORM.orig_currency && FORM.orig_currency !== 'CHF', quick = FORM._quick && !FORM.id;
   var h = '<div class="scrim" data-act="scrim"><div class="modal' + (quick ? ' quick' : '') + '" role="dialog" aria-modal="true" aria-labelledby="mtitle">' +
-    '<h2 id="mtitle">' + (FORM.id ? 'Edit transaction' : 'New transaction') + '</h2>' +
+    (quick   // Add sits in the header so it stays above the phone keyboard
+      ? '<div class="qhead"><button type="button" class="qcancel" data-act="cancel">Cancel</button><h2 id="mtitle">New transaction</h2><button class="btn primary" data-act="save">Add</button></div>'
+      : '<h2 id="mtitle">' + (FORM.id ? 'Edit transaction' : 'New transaction') + '</h2>') +
     (quick ? '' : '<div class="seg" id="mtype">' + TYPES.map(function (x) { return '<button type="button" data-type="' + x[0] + '" class="' + (FORM.type === x[0] ? 'on' : '') + '">' + x[1] + '</button>'; }).join('') + '</div>') +
     '<div class="formgrid">' +
     '<div class="field full sugwrap"><label for="mdesc">Description</label><input id="mdesc" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="msugg" value="' + esc(FORM.description) + '">' +
@@ -348,17 +351,17 @@ function drawModalNow() {
     (foreign
       ? '<div class="field"><label for="mamt">In CHF · ' + (FORM._chfManual ? 'your amount' : 'calculated, or type your bank’s') + '</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>'
       : '<div class="field"><label for="mamt">Amount</label><div class="amtrow"><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '">' + '<select id="mcur" aria-label="Currency">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select>' + '</div></div>') +
-    oweBoxHTML(FORM) +
-    (FORM.type === 'income' ? '' : tagChipsHTML(FORM)) +
-    (quick ? quickSummary() : fullFields(subs, tagList)) +
+    (quick
+      ? quickSummary() + (FORM.type === 'income' ? '' : tagChipsHTML(FORM, true)) + oweBoxHTML(FORM, true)
+      : oweBoxHTML(FORM) + (FORM.type === 'income' ? '' : tagChipsHTML(FORM)) + fullFields(subs, tagList)) +
     '</div>' + (FORM._err ? '<div class="err">' + esc(FORM._err) + '</div>' : '') +
-    '<div class="actions">' +
+    (quick ? '' : '<div class="actions">' +
     (FORM.id ? (FORM._confirmDelete
       ? '<span class="left"><button class="btn danger" data-act="delyes">Yes, delete</button> <button class="btn" data-act="delno">Keep</button></span>'
       : '<button class="btn danger left" data-act="del">Delete</button>') : '') +
     (quick ? '' : '<button class="btn" data-act="mkrule" title="Future transactions with this description get the same category, type and account">Save as rule</button>') +
     '<button class="btn" data-act="cancel">Cancel</button><button class="btn primary" data-act="save">' + (FORM.id ? 'Save changes' : 'Add transaction') + '</button>' +
-    '</div></div></div>';
+    '</div>') + '</div></div>';
   $('modalRoot').innerHTML = h;
 }
 // Quick add: what will be saved besides the two fields, filled from your history and rules; tap to change it
@@ -366,9 +369,8 @@ function quickSummary() {
   var t = FORM.type !== 'expense' ? (TYPES.filter(function (x) { return x[0] === FORM.type; })[0] || ['', FORM.type])[1] + ' · ' : '';
   var acct = (ACCOUNTS.filter(function (x) { return x[0] === FORM.account; })[0] || ['', FORM.account])[1];
   var day = FORM.date === ymd(today()) ? 'Today' : FORM.date === ymd(addDays(today(), -1)) ? 'Yesterday' : periodDay(pd(FORM.date));
-  return '<div class="field full"><button type="button" class="qsum" data-act="qmore" aria-label="Change category, account, date and more">' + txIco(FORM) +
-    '<span class="qs"><b>' + esc(FORM.category) + (FORM.subcategory ? ' › ' + esc(FORM.subcategory) : '') + '</b>' +
-    '<small>' + esc(t) + esc(acct) + ' · ' + esc(day) + (FORM.tags ? ' · ' + esc(FORM.tags) : '') + '</small></span><span class="qm">More</span></button></div>';
+  return '<div class="field full"><button type="button" class="qsum" data-act="qmore" aria-label="Change category, account, date and more" title="' + esc(FORM.category + (FORM.subcategory ? ' › ' + FORM.subcategory : '')) + '">' +
+    '<span class="qs"><b>' + esc(FORM.subcategory || FORM.category) + '</b> · ' + esc(t) + esc(acct) + ' · ' + esc(day) + '</span><span class="qm">Change</span></button></div>';
 }
 function fullFields(subs, tagList) {
   return '<div class="field"><label for="mdate">Date</label><input id="mdate" type="date" value="' + esc(FORM.date) + '"></div>' +

@@ -149,10 +149,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible,[t
 .tx:hover{background:var(--paper)}
 .tx .sw{display:none}
 .sugwrap{position:relative}
-.qsum{width:100%;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:2px 12px;align-items:center;text-align:left;font:inherit;color:var(--ink);background:var(--paper);border:1px solid var(--rule);padding:10px 12px;cursor:pointer;min-height:52px}
-.qsum:hover{border-color:var(--ink)}.qsum .qs{min-width:0}.qsum b{display:block;font-weight:600;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.qsum small{display:block;color:var(--muted);font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.qsum .qm{font-size:13px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+/* quick add (B, approved 13.11.2026): Add in the header, category as one line, tags slide, owe as a small button */
+.qhead{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;margin:-22px -22px 0;padding:10px 14px;background:var(--bg);border-bottom:2px solid var(--ink)}
+.modal .qhead h2{font-size:16px;font-weight:700;text-align:center;letter-spacing:0}
+.qcancel{background:none;border:0;font:inherit;font-size:14px;color:var(--muted);cursor:pointer;padding:8px 2px;text-align:left}
+.qcancel:hover{color:var(--ink)}
+.qsum{width:100%;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;text-align:left;font:inherit;font-size:13px;color:var(--muted);background:none;border:0;padding:4px 0;cursor:pointer;min-height:32px}
+.qsum .qs{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.qsum b{color:var(--ink);font-weight:600}
+.qsum .qm{font-size:13px;font-weight:600;color:var(--ink);text-decoration:underline;text-underline-offset:3px}
+.qtags{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+.tchips.slide{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-right:28px;-webkit-mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(90deg,#000 calc(100% - 28px),transparent)}
+.tchips.slide::-webkit-scrollbar{display:none}.tchips.slide>*{flex:none}
+.owebtn{position:relative;width:40px;height:40px;display:grid;place-items:center;border:1px solid var(--ink);background:var(--paper);color:var(--ink);cursor:pointer}
+.owebtn.on{background:var(--ink);color:var(--bg)}.owebtn.on .ic{stroke:var(--bg);color:var(--bg)}
+.owebtn input{position:absolute;inset:0;width:100%;height:100%;margin:0;opacity:0;cursor:pointer}
+.owebtn:has(input:focus-visible){outline:2px solid var(--signal);outline-offset:2px}
+.owehead{font-size:14px;font-weight:600}
+@media (max-width:600px){.scrim:has(.modal.quick){align-items:flex-start;padding-top:calc(12px + env(safe-area-inset-top,0px))}}   /* the keyboard covers the lower half */
 .modal.quick .formgrid{grid-template-columns:1fr}
 .amtrow{display:grid;grid-template-columns:minmax(0,1fr) 88px}
 .amtrow select{border-left:0;font-family:'IBM Plex Mono',monospace;font-size:14px;padding-left:10px;padding-right:22px;background-color:var(--bg)}
@@ -528,7 +541,7 @@ details.fold>summary:hover h3{color:var(--muted)}
 .owebox.done{border-color:var(--rule)}.owebox small{font-size:12.5px}
 .owebox > label:not(.switch){font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .owechk span{font-family:var(--f-sans);text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;color:var(--ink)}
-.owemode{width:100%}.owemode button{flex:1}
+.owemode{width:100%}.owemode button{flex:1;padding:0 8px;white-space:nowrap}
 .owe2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.owe2 span{display:grid;gap:4px;min-width:0}
 .owe2 label{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .owebtns{display:flex;gap:6px;justify-content:flex-end}
@@ -544,3 +557,14 @@ details.fold>summary:hover h3{color:var(--muted)}
 .tchip:hover{border-color:var(--ink)}.tchip.on{background:var(--ink);border-color:var(--ink);color:var(--paper)}
 .tchip.add{border-style:dashed;color:var(--muted)}
 .tnew{display:inline-flex;gap:0}.tnew input{width:130px;min-height:32px;padding:4px 8px;font-size:13px}.tnew .tchip{border-left:0}
+
+/* One shared set (13.11.2026): chips you tap, pills that only label, segments in two sizes */
+.chip,.tagchip,.tchip{font-family:var(--f-mono);font-size:12.5px;font-weight:400;border:1px solid var(--rule);background:var(--paper);color:var(--ink);padding:0 10px;min-height:32px;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;cursor:pointer}
+.chip:hover,.tagchip:hover,.tchip:hover{border-color:var(--ink)}
+.chip.on,.tchip.on{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.tagchip b{margin-left:0;opacity:.7}
+.pill,.tag,.tg,.otag{font-family:var(--f-mono);font-size:11px;font-weight:400;letter-spacing:0;text-transform:none;padding:1px 6px;line-height:1.5;border:1px solid currentColor;white-space:nowrap}
+.tag{color:var(--muted)}.tag.exp,.tag.sch,.otag{color:var(--ink)}.tag.ex,.otag.old,.pill.over{color:var(--signal)}.otag.ok,.pill.ok{color:var(--good)}
+.tag.exp,.tag.sch,.tag.ex,.otag,.otag.ok,.otag.old{border-color:currentColor}
+.seg button,.seg3 button{height:34px;font-size:13px}
+.seg2 button{height:28px;padding:0 10px;font-size:12px}

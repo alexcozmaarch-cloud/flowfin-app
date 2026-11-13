@@ -192,6 +192,22 @@ module.exports = async function () {
     h.assert((await pg.locator('.tx').count()) > 0, 'tapping a chart should list its transactions');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('quick add on a phone: Add, category, tags and the owe button sit above the keyboard', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200);
+    await pg.fill('#mdesc', 'Training shorts'); await pg.fill('#mamt', '45'); await pg.waitForTimeout(300);
+    var kbTop = (await pg.evaluate(function () { return innerHeight; })) - 300;   // an iPhone keyboard is about 300 px tall
+    for (var sel of ['[data-act=save]', '.qsum', '#mtagchips', '.owebtn']) {
+      var b = await pg.locator(sel).first().boundingBox();
+      h.assert(b && b.y + b.height <= kbTop, sel + ' ends at ' + (b && Math.round(b.y + b.height)) + ' px, keyboard starts at ' + kbTop);
+    }
+    h.eq(await pg.locator('[data-act=save]').count(), 1, 'one Add button');
+    await pg.check('#mowe'); await pg.waitForTimeout(200);
+    h.assert(await pg.locator('.owebtn.on').count() === 1 && await pg.locator('#mowho').isVisible(), 'owe details open after tapping the button');
+    await pg.uncheck('#mowe'); await pg.waitForTimeout(200);
+    h.eq(await pg.locator('#mowho').count(), 0, 'owe details close again');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nTo be paid back');
   await h.test('pay for a colleague: full amount counts, Owed line on Home, paid back as a refund', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;

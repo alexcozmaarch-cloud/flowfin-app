@@ -25,14 +25,21 @@ function openOwed() { return owedItems().filter(function (x) { return x.rec.stat
 function people() { var s = {}; owedItems().forEach(function (x) { if (x.rec.who) s[x.rec.who] = 1; }); return Object.keys(s).sort(); }
 
 // ─── In the add / edit form ─────────────────────────────────────────────────
-function oweBoxHTML(F) {
+// quick add: the tick box is a small button beside the tags (oweButtonHTML) and only the details show here
+function oweButtonHTML(F) {
+  if (F.type !== 'expense' || (F.id && owedRecord(F.id))) return '';
+  var on = !!(F._owe && F._owe.on);
+  return '<label class="owebtn' + (on ? ' on' : '') + '" title="Someone owes me part of this"><input type="checkbox" id="mowe" aria-label="Someone owes me part of this"' + (on ? ' checked' : '') + '>' +
+    '<svg class="ic" aria-hidden="true"><use href="#i-hand-coins"></use></svg></label>';
+}
+function oweBoxHTML(F, quick) {
   if (F.type !== 'expense') return '';
   var rec = F.id ? owedRecord(F.id) : null;
   if (rec) return owedStatusHTML(F, rec);
   var o = F._owe || { on:false, mode:'half', amount:'', who:'', note:'' };
   var amt = parseFloat(String(F.amount).replace(',', '.')) || 0;
-  if (!o.on) return '<div class="field full"><label class="switch owechk" style="min-height:0"><input type="checkbox" id="mowe"><span>Someone owes me part of this</span></label></div>';
-  return '<div class="field full owebox"><label class="switch owechk" style="min-height:0"><input type="checkbox" id="mowe" checked><span>Someone owes me part of this</span></label>' +
+  if (!o.on) return quick ? '' : '<div class="field full"><label class="switch owechk" style="min-height:0"><input type="checkbox" id="mowe"><span>Someone owes me part of this</span></label></div>';
+  return '<div class="field full owebox">' + (quick ? '<b class="owehead">Someone owes me part of this</b>' : '<label class="switch owechk" style="min-height:0"><input type="checkbox" id="mowe" checked><span>Someone owes me part of this</span></label>') +
     '<div class="seg3 owemode" role="radiogroup" aria-label="How much">' + [['half', 'Half · ' + fmtCHF.format(amt / 2)], ['all', 'All · ' + fmtCHF.format(amt)], ['other', 'Other…']].map(function (x) {
       return '<button type="button" role="radio" aria-checked="' + (o.mode === x[0]) + '" class="' + (o.mode === x[0] ? 'on' : '') + '" data-act="owemode" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join('') + '</div>' +
     (o.mode === 'other' ? '<input id="moweamt" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Amount owed" aria-label="Amount owed" value="' + esc(o.amount) + '">' : '') +
@@ -140,4 +147,4 @@ function owedHTML() {
     (done.length ? '<section class="card"><h3>Settled<span class="r">last ' + done.length + '</span></h3><div class="txlist">' + done.map(row).join('') + '</div></section>' : '');
 }
 
-export { owedRecord, owedItems, openOwed, oweBoxHTML, readOwe, oweToSave, afterSave, attachPending, markPaid, writeOff, owedLineHTML, owedHTML };
+export { owedRecord, owedItems, openOwed, oweBoxHTML, oweButtonHTML, readOwe, oweToSave, afterSave, attachPending, markPaid, writeOff, owedLineHTML, owedHTML };

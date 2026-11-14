@@ -214,7 +214,7 @@ module.exports = async function () {
     var t = await pg.innerText('#vtOut');
     h.assert(/45 CHF/.test(t) && /Training shorts/.test(t) && /Hobbies/.test(t) && /Credit card/.test(t), t);
     await pg.click('[data-act=vtmic]'); await pg.waitForTimeout(200);
-    h.assert(/microphone|Listening/i.test(await pg.innerText('#vtStatus')), 'mic status shown');
+    h.assert(/mic/i.test(await pg.innerText('#vtStatus')), 'mic status shown');
     h.noErrors(app); await app.ctx.close();
   });
   console.log('\nTo be paid back');

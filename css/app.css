@@ -568,3 +568,9 @@ details.fold>summary:hover h3{color:var(--muted)}
 .tag.exp,.tag.sch,.tag.ex,.otag,.otag.ok,.otag.old{border-color:currentColor}
 .seg button,.seg3 button{height:34px;font-size:13px}
 .seg2 button{height:28px;padding:0 10px;font-size:12px}
+
+/* Say it · test (Settings) */
+.vtrow{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px}
+.vtgrid{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 12px;margin:12px 0 0;font-size:14px}
+.vtgrid dt{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.vtgrid dd{margin:0;min-width:0}

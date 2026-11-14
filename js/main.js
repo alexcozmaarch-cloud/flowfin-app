@@ -13,6 +13,7 @@ import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoa
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
+import { startMic, voicePreview } from './voicetest.js';
 import { FORM, addCustomSub, autofill, fxInfo, paintTagChips, searchWithout, toggleTag, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
 import { WFORM, accounts, closeWForm, deleteAcct, drawAcct, isArchived, openAcct, openUpdate, readAcct, saveAcct, saveUpdate } from './wealth.js';
 
@@ -28,6 +29,7 @@ document.addEventListener('click', function (e) {
   if (act === 'prev') { UI.periodOffset--; return draw(); }
   if (act === 'next') { UI.periodOffset++; return draw(); }
   if (act === 'addtx') return openTx(null);
+  if (act === 'vtmic') return startMic();
   if (act === 'cancel') return closeModal();
   if (act === 'save') return saveForm();
   if (act === 'del') { readForm(); FORM._confirmDelete = true; return drawModal(); }
@@ -214,6 +216,7 @@ document.addEventListener('input', function (e) {
   if (pid === 'mdesc' && FORM) { FORM.description = e.target.value; paintTagChips(); }
   if (pid === 'mdesc' && FORM && !FORM.id) { FORM._picked = false; return paintSugg(); }
   if (pid === 'mtags' && FORM) return paintTagChips();
+  if (pid === 'vttext') return voicePreview(e.target.value);
   if (/^pl_[vr]\d$/.test(pid) && UI.plan) { planChange(PLAN_CATS[+pid.slice(4)], parseFloat(String(e.target.value).replace(',', '.'))); return planPaint(); }
   if (pid === 'pl_fam' && UI.plan) { UI.plan.fam = Math.max(0, parseFloat(e.target.value) || 0); planFit(); return planPaint(); }
   var id = e.target.id;

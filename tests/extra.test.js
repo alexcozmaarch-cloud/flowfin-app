@@ -208,6 +208,15 @@ module.exports = async function () {
     h.eq(await pg.locator('#mowho').count(), 0, 'owe details close again');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Settings · Say it test: a typed sentence shows what would be filled in', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'settings' }), pg = app.page;
+    await pg.fill('#vttext', '45 francs training shorts, hobbies, credit card'); await pg.waitForTimeout(200);
+    var t = await pg.innerText('#vtOut');
+    h.assert(/45 CHF/.test(t) && /Training shorts/.test(t) && /Hobbies/.test(t) && /Credit card/.test(t), t);
+    await pg.click('[data-act=vtmic]'); await pg.waitForTimeout(200);
+    h.assert(/microphone|Listening/i.test(await pg.innerText('#vtStatus')), 'mic status shown');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nTo be paid back');
   await h.test('pay for a colleague: full amount counts, Owed line on Home, paid back as a refund', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;

@@ -38,4 +38,23 @@ export default async function (h) {
   await h.test('text is escaped before it goes into the page', async () => {
     h.eq(core.esc('<b>"Tom & Jerry\'s"</b>'), '&lt;b&gt;&quot;Tom &amp; Jerry&#39;s&quot;&lt;/b&gt;');
   });
+  const { parseSpoken } = await import(path.join(ROOT, 'js/voice.js'));
+  const vctx = { categories: globalThis.CATEGORIES, today: new Date(2026, 10, 14),
+    rules: [{ match: 'apify', category: 'Personal Cash', subcategory: 'Subscriptions' }],
+    txs: [{ description: 'Migros', category: 'Family Infrastructure', subcategory: 'Groceries', account: 'debit_card', date: '2026-11-01', type: 'expense' }] };
+  await h.test('say it: amount, currency, description, category, account', async () => {
+    let r = parseSpoken('45 francs training shorts, hobbies, credit card', vctx);
+    h.eq(r.amount, '45'); h.eq(r.currency, 'CHF'); h.eq(r.description, 'Training shorts'); h.eq(r.subcategory, 'Hobbies'); h.eq(r.account, 'credit_card');
+    r = parseSpoken('Apify 29 dollars', vctx); h.eq(r.currency, 'USD'); h.eq(r.subcategory, 'Subscriptions', 'rule'); h.eq(r.from, 'rule');
+    r = parseSpoken('Migros 82.40 yesterday debit card', vctx); h.eq(r.amount, '82.4'); h.eq(r.subcategory, 'Groceries', 'history'); h.eq(r.date, '2026-11-13'); h.eq(r.account, 'debit_card');
+    r = parseSpoken('spent 18,50 on drinks', vctx); h.eq(r.amount, '18.5'); h.eq(r.subcategory, 'Drinks');
+    r = parseSpoken('I paid 12 euros for coffee on Tuesday', vctx); h.eq(r.currency, 'EUR'); h.eq(r.description, 'Coffee'); h.eq(r.subcategory, 'Coffees'); h.eq(r.date, '2026-11-10');
+    r = parseSpoken('CHF 1,250 new running watch hashtag running', vctx); h.eq(r.amount, '1250'); h.eq(r.description, 'New running watch'); h.eq(r.tags.join(), 'running');
+  });
+  await h.test('say it: someone owes me', async () => {
+    let r = parseSpoken('Lunch at Hiltl 50 francs, Marco owes me half', vctx);
+    h.eq(r.description, 'Lunch at Hiltl'); h.eq(r.subcategory, 'Lunches'); h.eq(r.owe.who, 'Marco'); h.eq(r.owe.mode, 'half');
+    r = parseSpoken('Taxi 60 Ana owes me 30', vctx); h.eq(r.amount, '60'); h.eq(r.owe.mode, 'other'); h.eq(r.owe.amount, '30'); h.eq(r.description, 'Taxi');
+    r = parseSpoken('Dinner 90 split with ana', vctx); h.eq(r.owe.who, 'Ana');
+  });
 }

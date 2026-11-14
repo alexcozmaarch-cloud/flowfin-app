@@ -35,12 +35,18 @@ function startMic() {
   var st = $('vtStatus'), K = micKind();
   if (!K) { if (st) st.innerHTML = '<span class="neg">The in-app microphone isn’t offered here (' + where() + ').</span> Tap the text field and use the keyboard’s mic instead.'; return; }
   if (REC) { try { REC.stop(); } catch (e) {} REC = null; return; }
-  var r = REC = new K(); r.lang = 'en-GB'; r.interimResults = true; r.continuous = false;
+  var r = REC = new K(); r.lang = navigator.language || 'en-GB'; r.interimResults = true; r.continuous = false;
   var btn = document.querySelector('[data-act=vtmic]'); if (btn) btn.classList.add('on');
-  if (st) st.textContent = 'Listening… (' + where() + ')';
-  r.onresult = function (e) { var t = ''; for (var i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; var f = $('vttext'); if (f) f.value = t; voicePreview(t); };
-  r.onerror = function (e) { if (st) st.innerHTML = '<span class="neg">Microphone: ' + esc(e.error || 'error') + '</span> (' + where() + ')' + (e.error === 'not-allowed' ? '. Allow the microphone for this site in Settings → Safari, or use the keyboard’s mic.' : ''); };
-  r.onend = function () { REC = null; if (btn) btn.classList.remove('on'); if (st && /Listening/.test(st.textContent)) st.textContent = 'Done. In-app microphone works here (' + where() + ').'; };
+  // every step is written down, so a silent failure on the phone shows where it stops
+  var steps = [], got = false, t0 = Date.now();
+  function log(x) { steps.push(x + ' ' + ((Date.now() - t0) / 1000).toFixed(1) + 's'); if (st) st.innerHTML = 'Mic test (' + where() + ', ' + esc(r.lang) + '): ' + esc(steps.join(' → ')); }
+  log('asked');
+  ['start', 'audiostart', 'soundstart', 'speechstart', 'speechend', 'audioend'].forEach(function (ev) { r['on' + ev] = function () { log(ev); }; });
+  r.onresult = function (e) { got = true; var t = ''; for (var i = 0; i < e.results.length; i++) t += e.results[i][0].transcript; var f = $('vttext'); if (f) f.value = t; voicePreview(t); };
+  r.onnomatch = function () { log('no match'); };
+  r.onerror = function (e) { log('error: ' + (e.error || '?') + (e.message ? ' (' + e.message + ')' : '')); };
+  r.onend = function () { REC = null; if (btn) btn.classList.remove('on'); log(got ? 'done ✓' : 'ended without words'); };
+  setTimeout(function () { if (REC === r && !got) { log('nothing after 8s, stopped'); try { r.abort(); } catch (e) {} } }, 8000);
   try { r.start(); } catch (e) { REC = null; if (st) st.innerHTML = '<span class="neg">Could not start: ' + esc(e.message) + '</span>'; }
 }
 export { voiceTestHTML, voicePreview, startMic };

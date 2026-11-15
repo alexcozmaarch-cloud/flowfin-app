@@ -2,12 +2,22 @@
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
 import { binHTML } from './bin.js';
 import { voiceTestHTML } from './voicetest.js';
-import { saveRow } from './api.js';
-import { apiKey, apiUrl, esc } from './core.js';
+import { MODE_KEY, saveRow } from './api.js';
+import { apiKey, apiUrl, esc, lsGet } from './core.js';
 import { importHTML } from './import.js';
 import { done } from './jobs.js';
 import { topbar } from './nav.js';
 import { cardFeePct, opt, ruleText, sortedRules, subsOf, suggestedRules } from './transactions.js';
+
+// Fast sync needs Code.gs with API 4; until then it says so
+function syncModeHTML() {
+  var classic = lsGet(MODE_KEY) === 'classic', ok = (UI.api || 1) >= 4;
+  return '<div class="syncmode"><span class="flab">Sync</span><div class="seg2" role="radiogroup" aria-label="Sync">' +
+    [['', 'Fast'], ['classic', 'Classic']].map(function (x) { var on = classic === (x[0] === 'classic'); return '<button role="radio" aria-checked="' + on + '" class="' + (on ? 'on' : '') + '" data-act="syncmode" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join('') +
+    '</div><p class="soon" style="margin:6px 0 0;font-size:12.5px">' + (classic ? 'Every save goes straight to the Sheet and the app reloads everything on opening.' :
+      ok ? 'On: the app opens from this phone’s copy and only fetches when the Sheet changed; saves are sent together a moment later, also without signal.' :
+      'Waiting for the latest Code.gs (API 4). Until then the app works the classic way.') + '</p></div>';
+}
 
 // ─── Settings ─────────────────────────────────────────────────────────────
 function settingsHTML() {
@@ -29,7 +39,7 @@ function settingsHTML() {
     '<div class="field" style="margin-top:10px"><label for="skey">Access key (kept only in this browser)</label>' +
     '<input id="skey" type="password" autocomplete="off" value="' + esc(apiKey()) + '" style="font-family:var(--f-mono);font-size:12px"></div>' +
     '<div class="actions" style="justify-content:flex-start;margin-top:10px"><button class="btn primary" data-act="saveurl">Save &amp; reload</button><button class="btn" data-act="ping">Test connection</button><button class="btn" data-act="reload">Reload data</button></div>' +
-    '<div id="pingOut" class="soon" style="margin-top:8px"></div></div>';
+    '<div id="pingOut" class="soon" style="margin-top:8px"></div>' + syncModeHTML() + '</div>';
   h += '<div class="card"><h3>Base44</h3><p class="soon" style="margin:0">Switched over on 05.11.2026: FlowFin is where transactions are added and edited. ' +
     'The hourly pull from Base44 is stopped (stopHourlySync in Apps Script), so nothing from Base44 overwrites your changes.</p></div>';
   h += importHTML();

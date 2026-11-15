@@ -574,3 +574,5 @@ details.fold>summary:hover h3{color:var(--muted)}
 .vtgrid{display:grid;grid-template-columns:110px minmax(0,1fr);gap:6px 12px;margin:12px 0 0;font-size:14px}
 .vtgrid dt{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding-top:2px}
 .vtgrid dd{margin:0;min-width:0}
+
+.syncmode{margin-top:14px;padding-top:12px;border-top:1px solid var(--rule);display:grid;gap:6px;justify-items:start}

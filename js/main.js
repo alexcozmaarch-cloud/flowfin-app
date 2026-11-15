@@ -4,7 +4,7 @@ import { markPaid, writeOff } from './owed.js';
 import { normDesc, recurringItems } from './recurring.js';
 import { forget, removeWithUndo, restore } from './bin.js';
 import { setAnomaly } from './anomalies.js';
-import { applyData, deleteRow, loadAll, post, saveRow } from './api.js';
+import { MODE_KEY, applyData, deleteRow, loadAll, post, saveRow } from './api.js';
 import { LOCK_KEY, PLAN_CATS, planChange, planFit, planPaint, planSave, saveBudget } from './budgets.js';
 import { netSavingsChart } from './charts.js';
 import { $, apiUrl, calcTotals, esc, fmtCHF, lsGet, lsSet, periodAt, periodModel, toast, today, ymd } from './core.js';
@@ -47,7 +47,8 @@ document.addEventListener('click', function (e) {
       .then(function () { var b = document.querySelector('[data-act=b44]'); if (b) b.disabled = false; });
     return;
   }
-  if (act === 'reload') return loadAll();
+  if (act === 'reload') return loadAll(true);
+  if (act === 'syncmode') { lsSet(MODE_KEY, a.getAttribute('data-v') === 'classic' ? 'classic' : ''); toast(a.getAttribute('data-v') === 'classic' ? 'Classic sync: every save goes straight to the Sheet' : 'Fast sync on'); return loadAll(true); }
   if (act === 'mkrule') return ruleFromForm();
   if (act === 'wupdate') return openUpdate(a.dataset.month);
   if (act === 'gnew') return openGoal(null);
@@ -270,7 +271,7 @@ var h0 = location.hash.slice(1), wantAdd = h0 === 'add';
 if (wantAdd) { h0 = 'dashboard'; try { history.replaceState(null, '', '#dashboard'); } catch (e) {} }
 if (h0) UI.page = h0;
 try { _cache = JSON.parse(lsGet(CACHE_KEY)); } catch (e) { _cache = null; }
-if (_cache && _cache.data) { applyData(_cache.data); UI.lastSync = new Date(_cache.at); }
+if (_cache && _cache.data) { applyData(_cache.data); UI.lastSync = new Date(_cache.at); UI.api = +_cache.api || 0; UI.rev = _cache.rev || ''; UI.fullAt = +_cache.fullAt || 0; }
 draw();
 if (wantAdd) openTx(null);
 loadAll();

@@ -78,6 +78,7 @@ async function openApp(opts) {
     return route.abort();
   });
   await page.addInitScript(function () { try { if (!localStorage.getItem('ff_key_v1')) localStorage.setItem('ff_key_v1', 'test-key'); } catch (e) {} });
+  if (opts.classic) await page.addInitScript(function () { try { localStorage.setItem('ff_sync_mode', 'classic'); } catch (e) {} });
   await page.goto('https://app.local/index.html' + (opts.hash ? '#' + opts.hash : ''));
   await page.waitForFunction(function () { return window.FF && document.querySelector('#view') && document.querySelector('#view').children.length > 0; }, null, { timeout: 15000 });
   await page.waitForTimeout(600);
@@ -94,6 +95,11 @@ async function test(name, fn) {
 function assert(cond, msg) { if (!cond) throw new Error(msg || 'assertion failed'); }
 function eq(a, b, msg) { if (a !== b) throw new Error((msg || 'values differ') + ': got ' + JSON.stringify(a) + ', expected ' + JSON.stringify(b)); }
 function near(a, b, msg) { if (Math.abs(a - b) >= 0.005) throw new Error((msg || 'numbers differ') + ': got ' + a + ', expected ' + b); }
+// wait until the phone has nothing left to send (fast sync sends a moment after each change)
+async function settled(app, ms) {
+  await app.page.waitForFunction(function () { try { return !JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; } catch (e) { return true; } }, null, { timeout: ms || 5000 });
+  await app.page.waitForTimeout(150);
+}
 function noErrors(app) { assert(app.errors.length === 0, 'page errors:\n' + app.errors.join('\n')); }
 
-module.exports = { openApp: openApp, closeBrowser: closeBrowser, test: test, assert: assert, eq: eq, near: near, noErrors: noErrors, results: results, ROOT: ROOT };
+module.exports = { openApp: openApp, closeBrowser: closeBrowser, test: test, assert: assert, eq: eq, near: near, noErrors: noErrors, settled: settled, results: results, ROOT: ROOT };

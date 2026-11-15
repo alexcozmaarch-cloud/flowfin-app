@@ -35,7 +35,7 @@ var BOOLEAN = ['is_default','rollover_enabled','is_liability','auto_detected'];
 
 var SS_ = null;
 function ss_() { return SS_ || (SS_ = SpreadsheetApp.openById(SHEET_ID)); }   // opened once per request
-var API_VERSION = 3;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written
+var API_VERSION = 4;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written · 4: fast sync (change counter, batch)
 
 function setup() {
   var ss = ss_();
@@ -113,6 +113,8 @@ function doGet(e) {
 //   { "action": "upsertMany", "table": "Transaction", "rows": [...] }
 //   { "action": "delete", "table": "Transaction", "id": "..." }
 //   { "action": "deleteMany", "table": "AssetSnapshot", "ids": [...] }   (API 3)
+//   { "action": "batch", "ops": [ {action, table, row|id|ids}, ... ] }      (API 4)
+//   { "action": "readAll", "rev": "..." }  → { unchanged: true } when nothing changed (API 4)
 //   { "action": "readAll" }   → same as a plain GET, but the key travels in the body instead of the address
 function doPost(e) {
   var lock = null, out;
@@ -120,16 +122,23 @@ function doPost(e) {
     var body = JSON.parse(e.postData.contents);
     checkKey_(body.key);
     // reading never waits for the lock, so a slow save can't block the app from loading
-    if (body.action === 'readAll') return json_({ ok: true, api: API_VERSION, data: readAll_() });
+    // fast sync: if nothing changed since the app's last read, answer without opening the Sheet at all
+    if (body.action === 'readAll') {
+      var rev = rev_();
+      if (body.rev && String(body.rev) === rev) return json_({ ok: true, api: API_VERSION, rev: rev, unchanged: true });
+      return json_({ ok: true, api: API_VERSION, rev: rev, data: readAll_() });
+    }
     if (body.action === 'syncBase44') return json_({ ok: true, result: syncFromBase44() });
     lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) { lock = null; throw new Error('The Sheet is busy with another save; try again in a minute'); }
+    if (body.action === 'batch') { var prev = rev_(); out = { ok: true, prevRev: prev, results: batch_(body.ops || []) }; out.rev = bumpRev_(); return json_(out); }
     if (!TABLES[body.table]) throw new Error('Unknown table: ' + body.table);
     if (body.action === 'upsert') out = { ok: true, row: upsert_(body.table, body.row) };
     else if (body.action === 'upsertMany') out = { ok: true, rows: upsertMany_(body.table, body.rows || []) };
     else if (body.action === 'delete') out = { ok: true, deleted: delete_(body.table, body.id) };
     else if (body.action === 'deleteMany') out = { ok: true, deleted: deleteMany_(body.table, body.ids || []) };
     else throw new Error('Unknown action: ' + body.action);
+    out.prevRev = rev_(); out.rev = bumpRev_();
   } catch (err) {
     out = { ok: false, error: String(err) };
   } finally {
@@ -232,14 +241,52 @@ function stopHourlySync() {
   });
 }
 
+// ---------- fast sync (API 4) ----------
+// REV changes with every write (from the app, or a hand edit in the Sheet via onEdit), so the app can ask
+// "anything new since REV x?" and get "no" without the Sheet being opened.
+function rev_() {
+  var p = PropertiesService.getScriptProperties(), r = p.getProperty('REV');
+  if (!r) { r = bumpRev_(); }
+  return r;
+}
+function bumpRev_() {
+  var r = String(Date.now()) + '-' + Math.floor(Math.random() * 1e6);
+  PropertiesService.getScriptProperties().setProperty('REV', r);
+  return r;
+}
+// Runs by itself whenever you edit the Sheet by hand, so the app knows to fetch again
+function onEdit(e) { bumpRev_(); }
+// Several saves and deletes in one request, in order. Runs of saves to the same tab are written together.
+function batch_(ops) {
+  var results = [], i = 0;
+  while (i < ops.length) {
+    var op = ops[i];
+    try {
+      if (!TABLES[op.table]) throw new Error('Unknown table: ' + op.table);
+      if (op.action === 'upsert') {
+        var j = i, rows = [];
+        while (j < ops.length && ops[j].action === 'upsert' && ops[j].table === op.table) { rows.push(ops[j].row); j++; }
+        upsertMany_(op.table, rows).forEach(function (r) { results.push({ ok: true, row: r }); });
+        i = j; continue;
+      }
+      if (op.action === 'delete') results.push({ ok: true, deleted: delete_(op.table, op.id) });
+      else if (op.action === 'deleteMany') results.push({ ok: true, deleted: deleteMany_(op.table, op.ids || []) });
+      else throw new Error('Unknown action: ' + op.action);
+    } catch (err) { results.push({ ok: false, error: String(err) }); }
+    i++;
+  }
+  return results;
+}
+
 function upsert_(table, row) {
   var sh = ss_().getSheetByName(table);
   var headers = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
   var now = new Date().toISOString();
   if (!row.id) { row.id = Utilities.getUuid(); row.created_date = now; }
   row.updated_date = now;
-  var values = headers.map(function (h) { return row[h] === undefined ? '' : row[h]; });
   var rowIdx = findRow_(sh, row.id);
+  if (!rowIdx && !row.created_date) row.created_date = now;
+  var values = headers.map(function (h) { return row[h] === undefined ? '' : row[h]; });
   if (rowIdx) {
     // keep created_date if the client didn't send it
     var cIdx = headers.indexOf('created_date');
@@ -267,7 +314,10 @@ function upsertMany_(table, rows) {
       var i = at[String(row.id)];
       if (cIdx > -1 && !row.created_date) values[cIdx] = data[i][cIdx];
       data[i] = values; touched = true;
-    } else { at[String(row.id)] = -1; added.push(values); }
+    } else {
+      if (cIdx > -1 && !row.created_date) { row.created_date = now; values[cIdx] = now; }
+      at[String(row.id)] = -1; added.push(values);
+    }
   });
   if (touched) sh.getRange(2, 1, data.length, lastCol).setValues(data);
   if (added.length) sh.getRange(lastRow + 1, 1, added.length, lastCol).setValues(added);

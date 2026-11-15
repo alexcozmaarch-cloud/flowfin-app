@@ -1,6 +1,6 @@
 // FlowFin · Undo and Recently deleted. Before anything is deleted, a copy goes into the Settings tab
 // (key bin_…); Undo or Restore puts the rows back with their original ids. Copies older than 30 days are removed.
-import { deleteMany, deleteRow, persistCache, post } from './api.js';
+import { deleteMany, deleteRow, fastSync, persistCache, post, saveRow } from './api.js';
 import { esc, toast } from './core.js';
 import { draw } from './nav.js';
 import { saveSetting } from './settings.js';
@@ -19,6 +19,12 @@ function removeWithUndo(label, items) {
     if (r && !/^tmp-/.test(r.id)) rows.push({ t:x[0], row:JSON.parse(JSON.stringify(r)) });
   });
   var key = 'bin_' + Date.now().toString(36);
+  if (fastSync()) {   // the copy and all the deletes travel to the Sheet in one request
+    var rest0 = {}; items.forEach(function (x) { (rest0[x[0]] = rest0[x[0]] || []).push(x[1]); });
+    var jobs = [rows.length ? saveSetting(key, JSON.stringify({ label:label, at:new Date().toISOString(), rows:rows })) : null]
+      .concat(Object.keys(rest0).map(function (t) { return deleteMany(t, rest0[t]); }));
+    return Promise.all(jobs).then(function () { if (rows.length) toastUndo(label + ' deleted', function () { restore(key); }); else toast(label + ' deleted'); }, function () {});
+  }
   var kept = rows.length ? saveSetting(key, JSON.stringify({ label:label, at:new Date().toISOString(), rows:rows })).then(function () { return true; }, function () { return false; })
     : Promise.resolve(false);
   return kept.then(function (ok) {
@@ -41,6 +47,10 @@ function restore(key) {
   var e = binEntries().filter(function (x) { return x.key === key; })[0];
   if (!e) return Promise.resolve();
   var tables = {}; e.rows.forEach(function (r) { (tables[r.t] = tables[r.t] || []).push(r.row); });
+  if (fastSync()) {
+    var jobs = e.rows.map(function (r) { return saveRow(r.t, r.row); }).concat([deleteRow('Settings', e.sid, true)]);
+    return Promise.all(jobs).then(function () { toast(e.label + ' restored'); }, function (err) { toast('Not restored: ' + err.message); });
+  }
   var chain = Promise.resolve();
   Object.keys(tables).forEach(function (t) {
     chain = chain.then(function () {

@@ -15,14 +15,16 @@ function syncHTML() {
   if (n && cls !== 'busy') cls = 'err';
   return '<span class="sync" id="syncState" title="' + esc(UI.syncMsg) + '"><i class="dot ' + cls + '"></i>' + esc(txt) + '</span>';
 }
-function loadAll() {
+// force: read everything even if the Sheet says nothing changed (Settings → Reload data)
+function loadAll(force) {
   setSync('busy');
-  return flushOutbox().catch(function () {}).then(readAll).then(function (j) {
+  return (fastSync() ? fastFlush() : flushOutbox()).catch(function () {}).then(function () { return readAll(force); }).then(function (j) {
     if (!j.ok) throw new Error(j.error || 'Backend error');
+    if (j.unchanged) { UI.lastSync = new Date(); setSync('ok'); runJobs(); return; }   // the phone's copy is current: nothing to fetch
     applyData(j.data);
     keepWaiting();
-    _cache = { data:DATA, at:Date.now() };
-    lsSet(CACHE_KEY, JSON.stringify(_cache));
+    UI.rev = j.rev || ''; UI.fullAt = Date.now();
+    persistCache();
     UI.lastSync = new Date();
     setSync('ok');
     draw();
@@ -38,6 +40,7 @@ function loadAll() {
 function keepWaiting() {
   outbox().forEach(function (op) {
     var arr = DATA[op.table] = DATA[op.table] || [];
+    if (op.action === 'deleteMany') { DATA[op.table] = arr.filter(function (r) { return op.ids.indexOf(r.id) < 0; }); return; }
     var id = op.action === 'delete' ? op.id : op.row.id, i = arr.findIndex(function (r) { return r.id === id; });
     if (op.action === 'delete') { if (i > -1) arr.splice(i, 1); }
     else if (i > -1) arr[i] = op.row; else arr.push(op.row);
@@ -48,12 +51,19 @@ function post(body) {
   return fetch(apiUrl(), { method:'POST', body:JSON.stringify(body) })
     .catch(function (e) { var err = new Error('no connection'); err.offline = true; throw err; })
     .then(function (r) { return r.json(); })
-    .then(function (j) { if (!j.ok) throw new Error(j.error || 'Save failed'); return j; });
+    .then(function (j) {
+      if (!j.ok) throw new Error(j.error || 'Save failed');
+      if (j.prevRev && j.prevRev === UI.rev) UI.rev = j.rev;   // our own change: the phone's copy is still current
+      return j;
+    });
 }
 // Read everything. The key goes in the request body, not the address; a backend from before 10.11.2026
 // doesn't know "readAll" yet, so then the old way (key in the address) is used.
-function readAll() {
-  return post({ action:'readAll' }).then(function (j) { UI.backend = 'new'; UI.api = +j.api || 1; return j; }).catch(function (e) {
+function readAll(force) {
+  var body = { action:'readAll' };
+  // "anything new since then?" — and every 6 hours a full read anyway, in case a change slipped past the counter
+  if (!force && UI.rev && lsGet(MODE_KEY) !== 'classic' && Date.now() - (UI.fullAt || 0) < 6 * 3600e3) body.rev = UI.rev;
+  return post(body).then(function (j) { UI.backend = 'new'; UI.api = +j.api || 1; return j; }).catch(function (e) {
     if (e.offline || !/Unknown (table|action)/i.test(e.message)) throw e;
     UI.backend = 'old';
     return fetch(apiUrl() + '?key=' + encodeURIComponent(apiKey())).then(function (r) { return r.json(); });
@@ -66,10 +76,11 @@ function applyData(d) {
   var sd = (DATA.Settings || []).filter(function (s) { return s.key === 'period_start_day'; })[0];
   if (sd && +sd.value >= 1 && +sd.value <= 28) START_DAY = +sd.value;
 }
-function persistCache() { _cache = { data:DATA, at:Date.now() }; lsSet(CACHE_KEY, JSON.stringify(_cache)); }
+function persistCache() { _cache = { data:DATA, at:Date.now(), api:UI.api || 0, rev:UI.rev || '', fullAt:UI.fullAt || 0 }; lsSet(CACHE_KEY, JSON.stringify(_cache)); }
 
 var PENDING = {};   // temporary id → promise of the saved row, so a quick second edit updates instead of duplicating
 function saveRow(table, row) {
+  if (fastSync()) return fastSave(table, row);
   if (table === 'Transaction' && row.id && queued(row.id)) return queueSave(table, row);   // still waiting: update the waiting copy
   if (row.id && /^tmp-/.test(row.id) && PENDING[row.id]) {
     return PENDING[row.id].then(function (real) { return saveRow(table, Object.assign({}, row, { id:real.id, created_date:real.created_date })); });
@@ -137,6 +148,7 @@ function repairDuplicates() {
     .catch(function () {}).then(function () { REPAIRING = false; });
 }
 function deleteRow(table, id, quiet) {
+  if (fastSync()) return fastDelete(table, [id]);
   if (table === 'Transaction' && queued(id) && /^tmp-/.test(id)) {   // never reached the Sheet: just forget it
     setOutbox(outbox().filter(function (op) { return !(op.row && op.row.id === id); }));
     DATA[table] = (DATA[table] || []).filter(function (r) { return r.id !== id; }); persistCache(); draw(); setSync(UI.sync);
@@ -162,6 +174,7 @@ function deleteRow(table, id, quiet) {
 function deleteMany(table, ids) {
   ids = ids.filter(function (id) { return !/^tmp-/.test(id); });
   if (!ids.length) return Promise.resolve();
+  if (fastSync()) return fastDelete(table, ids);
   if ((UI.api || 1) < 3) { var chain = Promise.resolve(); ids.forEach(function (id) { chain = chain.then(function () { return deleteRow(table, id, true); }); }); return chain; }
   var arr = DATA[table] || [], gone = {}; ids.forEach(function (id) { gone[id] = true; });
   var removed = arr.filter(function (r) { return gone[r.id]; });
@@ -197,7 +210,7 @@ function flushOutbox() {
   var chain = Promise.resolve();
   list.forEach(function (op) {
     chain = chain.then(function () {
-      var send = op.action === 'delete' ? { action:'delete', table:op.table, id:op.id }
+      var send = op.action === 'deleteMany' ? { action:'deleteMany', table:op.table, ids:op.ids } : op.action === 'delete' ? { action:'delete', table:op.table, id:op.id }
         : { action:'upsert', table:op.table, row:/^tmp-/.test(op.row.id) ? Object.assign({}, op.row, { id:undefined }) : op.row };
       return post(send).then(function (j) {
         var arr = DATA[op.table] = DATA[op.table] || [];
@@ -212,7 +225,106 @@ function flushOutbox() {
     .then(function (v) { FLUSHING = null; return v; }, function (e) { FLUSHING = null; throw e; });
   return FLUSHING;
 }
-window.addEventListener('online', function () { flushOutbox().catch(function () {}); });
+window.addEventListener('online', function () { (fastSync() ? fastFlush() : flushOutbox()).catch(function () {}); });
+
+// ─── Fast sync (backend API 4) ─────────────────────────────────────────────
+// Every change lands on the phone first and goes into the outbox; the outbox is sent as one request
+// a moment later (several quick changes travel together). New rows get their id here, so there are no
+// temporary ids. Opening the app asks the Sheet "anything new since <rev>?" and usually gets "no"
+// without Google opening the Sheet. Settings can switch back to the classic way.
+var MODE_KEY = 'ff_sync_mode', NEXT = null, FAST_FLUSHING = null;
+function fastSync() { return (UI.api || 1) >= 4 && lsGet(MODE_KEY) !== 'classic'; }
+function newId() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
+}
+function sameOp(a, b) { return a.at === b.at && a.action === b.action && a.table === b.table; }
+function fastSave(table, row) {
+  var arr = DATA[table] = DATA[table] || [];
+  var isNew = !row.id || /^tmp-/.test(row.id), id = isNew ? newId() : row.id;
+  var i = arr.findIndex(function (r) { return r.id === (row.id || id); }), before = i > -1 ? arr[i] : null;
+  var local = Object.assign({}, row, { id:id });
+  if (!before && !local.created_date) local.created_date = new Date().toISOString();
+  if (i > -1) arr[i] = local; else arr.push(local);
+  var list = outbox(), j = list.findIndex(function (op) { return op.action === 'upsert' && op.table === table && op.row.id === id; });
+  // a change to a row that is still waiting replaces it (keeps what it was before the first change)
+  if (j > -1) { list[j].row = local; list[j].at = Date.now() + Math.random(); }
+  else list.push({ table:table, action:'upsert', row:local, at:Date.now() + Math.random(), before:before, fresh:isNew });
+  setOutbox(list); persistCache(); setSync('busy'); draw();
+  return scheduleFlush().then(function (out) {
+    var k = table + '|' + id;
+    if (out.errors[k]) throw new Error(out.errors[k]);
+    return out.rows[k] || (DATA[table] || []).filter(function (r) { return r.id === id; })[0] || local;
+  }, function (e) { waitingToast(e); return local; });
+}
+function fastDelete(table, ids) {
+  var arr = DATA[table] = DATA[table] || [], gone = {}; ids.forEach(function (id) { gone[id] = true; });
+  var removed = arr.filter(function (r) { return gone[r.id]; });
+  DATA[table] = arr.filter(function (r) { return !gone[r.id]; });
+  var list = outbox(), neverSent = {};
+  // rows that never reached the Sheet are simply forgotten
+  list = list.filter(function (op) {
+    if (op.table !== table || op.action !== 'upsert' || !gone[op.row.id]) return true;
+    if (op.fresh) neverSent[op.row.id] = true;   // made on this phone and not sent yet
+    return false;
+  });
+  var send = ids.filter(function (id) { return !neverSent[id] && !/^tmp-/.test(id); });
+  if (send.length) list.push(send.length === 1 ? { table:table, action:'delete', id:send[0], at:Date.now() + Math.random(), before:removed }
+                                               : { table:table, action:'deleteMany', ids:send, at:Date.now() + Math.random(), before:removed });
+  setOutbox(list); persistCache(); draw();
+  if (!send.length) return Promise.resolve();
+  setSync('busy');
+  return scheduleFlush().then(function () {}, waitingToast);
+}
+function waitingToast(e) { toast(e.offline ? 'No connection: saved on this phone, sent to the Sheet when you’re back online' : 'Saved on this phone; the Sheet answered “' + e.message + '”, trying again later'); }
+// changes made within a quarter second travel together
+function scheduleFlush() {
+  if (NEXT) return NEXT.p;
+  var d = NEXT = {}; d.p = new Promise(function (res, rej) { d.res = res; d.rej = rej; });
+  setTimeout(function () { NEXT = null; fastFlush().then(d.res, d.rej); }, 250);
+  return d.p;
+}
+function fastFlush() {
+  if (FAST_FLUSHING) return FAST_FLUSHING.catch(function () {}).then(function () { return outbox().length ? fastFlush() : { rows:{}, errors:{} }; });
+  var ops = outbox(); if (!ops.length) return Promise.resolve({ rows:{}, errors:{} });
+  var send = ops.map(function (op) {
+    if (op.action === 'upsert') { var r = Object.assign({}, op.row); if (/^tmp-/.test(r.id)) delete r.id; return { action:'upsert', table:op.table, row:r }; }
+    return op.action === 'delete' ? { action:'delete', table:op.table, id:op.id } : { action:'deleteMany', table:op.table, ids:op.ids };
+  });
+  setSync('busy');
+  FAST_FLUSHING = post({ action:'batch', ops:send }).then(function (j) {
+    var out = { rows:{}, errors:{} }, res = j.results || [], left = outbox(), failed = [];
+    ops.forEach(function (op, k) {
+      var r = res[k] || { ok:false, error:'no answer from the Sheet' };
+      left = left.filter(function (x) { return !sameOp(x, op); });
+      var arr = DATA[op.table] = DATA[op.table] || [];
+      if (r.ok) {
+        if (op.action !== 'upsert' || !r.row) return;
+        out.rows[op.table + '|' + op.row.id] = r.row;
+        var newer = left.some(function (x) { return x.action === 'upsert' && x.table === op.table && x.row.id === op.row.id; });
+        var i = arr.findIndex(function (x) { return x.id === op.row.id; });
+        if (!newer && i > -1) arr[i] = r.row;   // the Sheet's copy, with its dates
+        if (/^tmp-/.test(op.row.id) && i > -1) arr[i] = r.row;
+        return;
+      }
+      // the Sheet refused this one: put the screen back the way the Sheet has it
+      out.errors[op.table + '|' + (op.row ? op.row.id : op.id || '')] = r.error; failed.push(r.error);
+      if (op.action === 'upsert') { var i2 = arr.findIndex(function (x) { return x.id === op.row.id; }); if (i2 > -1) { if (op.before) arr[i2] = op.before; else arr.splice(i2, 1); } }
+      else DATA[op.table] = arr.concat(op.before || []);
+    });
+    setOutbox(left);
+    persistCache(); UI.lastSync = new Date();
+    if (failed.length) { setSync('err', failed[0]); toast('Not saved: ' + failed[0]); } else setSync(left.length ? 'busy' : 'ok');
+    draw();
+    return out;
+  }, function (e) { setSync('err', e.offline ? 'Offline' : e.message); throw e; })
+    .then(function (v) { FAST_FLUSHING = null; return v; }, function (e) { FAST_FLUSHING = null; throw e; });
+  return FAST_FLUSHING;
+}
+// back in the app after a while: check for changes (cheap when there are none)
+document.addEventListener('visibilitychange', function () {
+  if (document.visibilityState === 'visible' && apiKey() && (!UI.lastSync || Date.now() - UI.lastSync > 30000)) loadAll();
+});
 
 // Categories from the Sheet's Category tab (when it has rows); otherwise the built-in list
 function applyCategories() {
@@ -231,4 +343,4 @@ function applyCategories() {
   Object.keys(next).forEach(function (k) { CATEGORIES[k] = next[k]; });
 }
 
-export { readAll, applyCategories, outbox, flushOutbox, setSync, syncHTML, loadAll, post, applyData, persistCache, PENDING, saveRow, NATURAL_KEY, REPAIRING, repairDuplicates, deleteRow, deleteMany };
+export { fastSync, MODE_KEY, fastFlush, readAll, applyCategories, outbox, flushOutbox, setSync, syncHTML, loadAll, post, applyData, persistCache, PENDING, saveRow, NATURAL_KEY, REPAIRING, repairDuplicates, deleteRow, deleteMany };

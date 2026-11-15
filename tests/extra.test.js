@@ -8,8 +8,8 @@ module.exports = async function () {
   await h.test('edit a transaction and save the change', async function () {
     var app = await h.openApp({ data: demo.data, hash: 'transactions' }), pg = app.page;
     await pg.locator('.tx').first().click(); await pg.waitForTimeout(250);
-    await pg.fill('#mamt', '123.45'); await pg.click('[data-act=save]'); await pg.waitForTimeout(500);
-    h.assert(app.posts.some(function (p) { return p.table === 'Transaction' && p.row && +p.row.amount === 123.45; }), 'edit not saved');
+    await pg.fill('#mamt', '123.45'); await pg.click('[data-act=save]'); await h.settled(app);
+    h.assert(Object.values(app.store.Transaction).some(function (t) { return +t.amount === 123.45; }), 'edit not saved');
     h.noErrors(app); await app.ctx.close();
   });
   await h.test('add a goal', async function () {
@@ -24,7 +24,7 @@ module.exports = async function () {
     var data = JSON.parse(JSON.stringify(demo.data));
     data.FinancialGoal.push({ id: '6abcdd8dc07aa2a0e69e164a', name: 'Black Porche', target_amount: 80000, current_amount: 5335.25, saving_pct: 10, deadline: '2036-08-28' });
     data.GoalContribution.push({ id: 'gc1', goal_id: '6abcdd8dc07aa2a0e69e164a', period: '2026-04-10', amount: 48.67, pct: 10, net: 486.73 });
-    var app = await h.openApp({ data: data }), pg = app.page; await pg.waitForTimeout(800);
+    var app = await h.openApp({ data: data }), pg = app.page; await pg.waitForTimeout(800); await h.settled(app);
     h.assert(!app.store.FinancialGoal['6abcdd8dc07aa2a0e69e164a'], 'Black Porche should be deleted');
     h.eq(Object.keys(app.store.GoalContribution).length, 0, 'its contributions should be deleted');
     var before = app.posts.length;
@@ -399,7 +399,7 @@ module.exports = async function () {
   console.log('\nNo signal');
   await h.test('a transaction added offline waits on the phone, survives a reload and is sent once', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
-    app.state.offline = true;
+    await h.settled(app); app.state.offline = true;
     await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
     await pg.fill('#mdesc', 'Offline coffee'); await pg.fill('#mamt', '4.2'); await pg.click('[data-act=save]'); await pg.waitForTimeout(500);
     h.eq(await pg.evaluate(function () { return JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; }), 1, 'waiting items');
@@ -423,14 +423,79 @@ module.exports = async function () {
     h.eq(await pg.locator('.tx', { hasText: 'Offline coffee' }).count(), 1, 'duplicate on screen after sync');
     h.noErrors(app); await app.ctx.close();
   });
-  await h.test('a backend error (not lost signal) still says “Not saved” and keeps nothing', async function () {
-    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page;
+  await h.test('a refused save (Sheet answers with an error for that row) says “Not saved” and keeps nothing', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app);
+    await pg.route('**/script.google.com/**', function (r) {
+      var b = JSON.parse(r.request().postData() || '{}');
+      return b.action === 'batch' ? r.fulfill({ body: JSON.stringify({ ok: true, results: b.ops.map(function () { return { ok: false, error: 'Unknown table: X' }; }) }), contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' } }) : r.fallback();
+    });
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    await pg.fill('#mdesc', 'Will fail'); await pg.fill('#mamt', '1'); await pg.click('[data-act=save]'); await pg.waitForTimeout(700);
+    h.eq(await pg.evaluate(function () { return JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; }), 0, 'should not wait');
+    h.assert(/Not saved/.test(await pg.innerText('body')), 'no “Not saved” message');
+    await pg.evaluate(function () { location.hash = 'transactions'; }); await pg.waitForTimeout(300);
+    h.eq(await pg.locator('.tx', { hasText: 'Will fail' }).count(), 0, 'refused row still on screen');
+    await app.ctx.close();
+  });
+  await h.test('fast sync: when the whole Sheet is busy, the change waits on the phone and goes later', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page, busy = true; await h.settled(app);
+    await pg.route('**/script.google.com/**', function (r) { return busy && r.request().method() === 'POST' ? r.fulfill({ body: JSON.stringify({ ok: false, error: 'The Sheet is busy with another save' }), contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' } }) : r.fallback(); });
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    await pg.fill('#mdesc', 'Busy day'); await pg.fill('#mamt', '7'); await pg.click('[data-act=save]'); await pg.waitForTimeout(700);
+    h.eq(await pg.evaluate(function () { return JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; }), 1, 'kept on the phone');
+    busy = false; await pg.evaluate(function () { window.dispatchEvent(new Event('online')); }); await h.settled(app);
+    h.eq(Object.values(app.store.Transaction).filter(function (t) { return t.description === 'Busy day'; }).length, 1, 'sent once');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('classic sync: a backend error (not lost signal) still says “Not saved” and keeps nothing', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true, classic: true }), pg = app.page;
     await pg.route('**/script.google.com/**', function (r) { return r.request().method() === 'POST' ? r.fulfill({ body: JSON.stringify({ ok: false, error: 'Sheet is locked' }), contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' } }) : r.fallback(); });
     await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
     await pg.fill('#mdesc', 'Will fail'); await pg.fill('#mamt', '1'); await pg.click('[data-act=save]'); await pg.waitForTimeout(500);
     h.eq(await pg.evaluate(function () { return JSON.parse(localStorage.getItem('ff_outbox_v1') || '[]').length; }), 0, 'should not wait');
     h.assert(/Not saved/.test(await pg.innerText('body')), 'no “Not saved” message');
     await app.ctx.close();
+  });
+  console.log('\nFast sync');
+  await h.test('opening again with nothing changed: the Sheet is not opened, the phone copy is used', async function () {
+    var app = await h.openApp({ data: demo.data }), pg = app.page; await h.settled(app);
+    var n = app.gas.log.length;
+    await pg.reload(); await pg.waitForTimeout(800);
+    var reads = app.gas.log.slice(n).filter(function (x) { return /readAll/.test(x.action); });
+    h.eq(reads.length, 1, 'one check');
+    h.assert(reads[0].ms < 100, 'the check took ' + reads[0].ms + ' ms of Google time; it should not open the Sheet');
+    h.assert(await pg.locator('.tx').count() > 0 || /CHF/.test(await pg.innerText('#view')), 'page empty');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('a hand edit in the Sheet is picked up on the next opening', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'transactions' }), pg = app.page; await h.settled(app);
+    var id = await pg.locator('.tx').first().getAttribute('data-tx');
+    var sh = app.gas.ss.sheets.Transaction, col = sh.rows[0].indexOf('description');
+    sh.rows.filter(function (r) { return String(r[0]) === id; })[0][col] = 'Edited by hand'; app.gas.run('onEdit', {}, 'onEdit');
+    await pg.reload(); await pg.waitForTimeout(1000);
+    h.assert(await pg.locator('.tx', { hasText: 'Edited by hand' }).count() === 1, 'hand edit not shown');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('several quick changes travel in one request, and new rows keep the id made on the phone', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'goals' }), pg = app.page; await h.settled(app);
+    var n = app.posts.length;
+    await pg.click('[data-act=gnew]'); await pg.waitForTimeout(150);
+    await pg.fill('#gname', 'Phone id goal'); await pg.fill('#gtarget', '1000'); await pg.click('[data-act=gsave]');
+    var localId = await pg.evaluate(function () { return new Promise(function (ok) { setTimeout(function () { var c = JSON.parse(localStorage.ff_cache_v1); ok((c.data.FinancialGoal.filter(function (g) { return g.name === 'Phone id goal'; })[0] || {}).id); }, 50); }); });
+    await h.settled(app);
+    var g = Object.values(app.store.FinancialGoal).filter(function (x) { return x.name === 'Phone id goal'; });
+    h.eq(g.length, 1, 'goal rows'); h.eq(g[0].id, localId, 'id made on the phone');
+    h.assert(g[0].created_date, 'created date missing');
+    h.assert(app.posts.slice(n).every(function (p) { return p.action === 'batch'; }), 'all writes go as batches');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('classic sync still works: a new transaction goes straight to the Sheet', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true, classic: true }), pg = app.page; await pg.waitForTimeout(600);
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200); await openFullForm(pg);
+    await pg.fill('#mdesc', 'Classic coffee'); await pg.fill('#mamt', '3.9'); await pg.click('[data-act=save]'); await pg.waitForTimeout(700);
+    h.assert(app.posts.some(function (p) { return p.action === 'upsert' && p.row && p.row.description === 'Classic coffee'; }), 'not sent the classic way');
+    h.eq(Object.values(app.store.Transaction).filter(function (t) { return t.description === 'Classic coffee'; }).length, 1, 'rows in the Sheet');
+    h.noErrors(app); await app.ctx.close();
   });
   console.log('\nCategories in the Sheet');
   await h.test('first load with the new backend fills the Category tab (incl. your own subcategories)', async function () {

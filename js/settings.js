@@ -16,7 +16,7 @@ function syncModeHTML() {
     [['', 'Fast'], ['classic', 'Classic']].map(function (x) { var on = classic === (x[0] === 'classic'); return '<button role="radio" aria-checked="' + on + '" class="' + (on ? 'on' : '') + '" data-act="syncmode" data-v="' + x[0] + '">' + x[1] + '</button>'; }).join('') +
     '</div><p class="soon" style="margin:6px 0 0;font-size:12.5px">' + (classic ? 'Every save goes straight to the Sheet and the app reloads everything on opening.' :
       ok ? 'On: the app opens from this phone’s copy and only fetches when the Sheet changed; saves are sent together a moment later, also without signal.' :
-      'Waiting for the latest Code.gs (API 4). Until then the app works the classic way.') + '</p></div>';
+      'Waiting for the latest Code.gs: the Sheet answers with API ' + (UI.api || '?') + ', fast sync needs API 4. Until then the app works the classic way.') + '</p></div>';
 }
 
 // ─── Settings ─────────────────────────────────────────────────────────────

@@ -562,6 +562,22 @@ module.exports = async function () {
     h.assert(/are your big days/.test(await pg.innerText('#view')), 'weekday pattern');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Behaviour day by day: 30 days + 7 scheduled, tap a day, mix by week', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data)), t0 = new Date();
+    function dstr(n) { var d = new Date(t0); d.setDate(d.getDate() + n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    data.Transaction.push({ id: 'dd1', date: dstr(-2), description: 'TCG Cards - Cardshow', category: 'Collectibles', subcategory: 'TCG Investing', amount: 265, type: 'expense', account: 'credit_card' });
+    data.Transaction.push({ id: 'dd2', date: dstr(3), description: 'Concert tickets', category: 'Personal Cash', subcategory: 'Entertainment', amount: 80, type: 'expense', account: 'credit_card' });
+    var app = await h.openApp({ data: data, hash: 'behaviour' }), pg = app.page; await h.settled(app, 10000);
+    h.eq(await pg.locator('.bh-dayhit').count(), 37, '30 days and 7 ahead');
+    h.assert(await pg.locator('.bh-chart svg rect[fill="url(#bhHatch)"]').count() >= 1, 'scheduled day hatched');
+    await pg.locator('.bh-dayhit[data-d="' + dstr(-2) + '"]').click(); await pg.waitForTimeout(200);
+    h.assert(/TCG Cards - Cardshow/.test(await pg.innerText('.bh-daybox')), 'day details');
+    await pg.locator('.bh-dayhit[data-d="' + dstr(3) + '"]').click(); await pg.waitForTimeout(200);
+    h.assert(/scheduled/.test(await pg.innerText('.bh-daybox')) && /Concert tickets/.test(await pg.innerText('.bh-daybox')), 'scheduled day details');
+    await pg.click('[data-act=bhchart][data-v=mix]'); await pg.waitForTimeout(200);
+    h.assert(/% cards/.test(await pg.innerText('.bh-chart')) || /week of/.test(await pg.innerText('.bh-chart')), 'weekly mix');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nCategories in the Sheet');
   await h.test('first load with the new backend fills the Category tab (incl. your own subcategories)', async function () {
     var data = JSON.parse(JSON.stringify(demo.data));

@@ -5,6 +5,7 @@ import { saveSetting } from './settings.js';
 import { $, addDays, chf0, daysBetween, esc, inPeriod, isInfra, isSalary, monthlyAverages, pd, periodAt, periodFor, periodLabel, roles, today, txs, ymd } from './core.js';
 import { topbar } from './nav.js';
 import { saveMany, setting, tagsOf } from './transactions.js';
+import { normDesc, recurringItems } from './recurring.js';
 import { accounts, acctType, isLiab, mkey, monthDate, monthSnaps, snapsByEntry, wealthOn } from './wealth.js';
 
 // ─── the rules (from the 20.11.2026 conversation) ─────────────────────────
@@ -179,7 +180,8 @@ function behaviourModel() {
   var redirectTo = ta.paid < ta.max ? '3a' : months < SAFETY[0] ? 'safety' : 'growth';   // 3a first, then the safety net, then ETFs
   var sold = { n:0, sum:0 }, yr = String(today().getFullYear());
   txs().forEach(function (tx) { if ((tx.type === 'refund' || tx.type === 'income') && flowLabel(tx, ov, r) === 'spec' && String(tx.date).slice(0, 4) === yr) { sold.n++; sold.sum += +tx.amount || 0; } });
-  return { sold:sold, pattern:patternModel(ov, r), want:wantList(), money:moneyModel(ov, r, risk), lastUpdate:lastUpdateDays(),
+  var room = Math.max(0, (mean.takeHome - mean.household) / 30);
+  return { daily:dailyModel(ov, r, room), sold:sold, pattern:patternModel(ov, r), want:wantList(), money:moneyModel(ov, r, risk), lastUpdate:lastUpdateDays(),
     ov:ov, hist:hist, now:now, past:past, mean:mean, n:withIncome.length, risk:risk, outflow:outflow, months:months,
     threeA:ta, threeANext:threeA(year + 1), nextPct:nextPct, usual:usual, redirect:Math.max(0, Math.round(usual - now.cap)), redirectTo:redirectTo };
 }
@@ -204,10 +206,14 @@ function behaviourHTML() {
     ['invest', 'Invested · 3a', (src.growth || 0) + (src.stable || 0), '', ''],
     ['saved', avgView ? 'Left over' : 'Not spent yet', src.left, '≥ ' + RANGES.saved + '%', avgView && take && src.left / take * 100 < RANGES.saved ? 'neg' : avgView ? 'pos' : '']
   ];
+  var mixView = UI.bhChart === 'mix';
   h += '<section class="card bh-card"><h3>Where it went <span class="r">' +
-    '<span class="seg2" role="radiogroup" aria-label="View"><button role="radio" aria-checked="' + !avgView + '" class="' + (avgView ? '' : 'on') + '" data-act="bhview" data-v="now">This period</button>' +
-    '<button role="radio" aria-checked="' + avgView + '" class="' + (avgView ? 'on' : '') + '" data-act="bhview" data-v="avg">6-month average</button></span></span></h3>' +
-    '<div class="bh-flow" role="img" aria-label="Where the take-home pay went">' + bar([['household', src.household], ['personal', src.personal], ['spec', avgView ? src.specNet : f.specNet], ['invest', (src.growth || 0) + (src.stable || 0)], ['saved', src.left]]) + '</div>' +
+    '<span class="seg2" role="radiogroup" aria-label="Chart"><button role="radio" aria-checked="' + !mixView + '" class="' + (mixView ? '' : 'on') + '" data-act="bhchart" data-v="days">Day by day</button>' +
+    '<button role="radio" aria-checked="' + mixView + '" class="' + (mixView ? 'on' : '') + '" data-act="bhchart" data-v="mix">Mix by week</button></span></span></h3>' +
+    (mixView ? mixHTML(m.daily) : daysHTML(m.daily, m)) +
+    '<div class="bh-sub2"><span class="lbl">' + (avgView ? 'Average period' : 'This period so far') + '</span>' +
+    '<span class="seg2" role="radiogroup" aria-label="Totals"><button role="radio" aria-checked="' + !avgView + '" class="' + (avgView ? '' : 'on') + '" data-act="bhview" data-v="now">This period</button>' +
+    '<button role="radio" aria-checked="' + avgView + '" class="' + (avgView ? 'on' : '') + '" data-act="bhview" data-v="avg">6-month average</button></span></div>' +
     '<div class="bh-legend">' + rows.map(function (x) {
       var detail = avgView || x[0] === 'saved' ? '' : flowDetail(f, x[0]);
       var line = '<span class="sw ' + x[0] + '"></span><span>' + x[1] + '</span><span class="rng">' + x[3] + '</span><span class="v num ' + x[4] + '">' + (x[2] < 0 ? '−' : '') + chf0(Math.abs(x[2])) + '</span>';
@@ -306,6 +312,94 @@ function flowDetail(f, lab) {
   var tk = Object.keys(tags).sort(function (a, b) { return tags[b] - tags[a]; }).slice(0, 6);
   return '<ul class="bh-sub">' + rows.slice(0, 8).map(function (r) { return '<li><span>' + esc(r[0].replace('›', ' › ')) + '</span><span class="num">' + chf0(r[1]) + '</span></li>'; }).join('') + '</ul>' +
     (tk.length ? '<div class="bh-chips">' + tk.map(function (t) { return '<span class="chip">#' + esc(t) + ' ' + chf0(tags[t]) + '</span>'; }).join('') + '</div>' : '');
+}
+
+// ─── day by day: the last 30 days, and the next 7 days of scheduled payments ─────
+var DAY_KEYS = ['personal', 'spec', 'invest', 'household'];
+function dayBucket(lab) { return lab === 'growth' || lab === 'stable' ? 'invest' : lab; }
+function dailyModel(ov, r, room) {
+  var t = today(), from = addDays(t, -29), to = addDays(t, 7), days = [], idx = {};
+  for (var d = from; d <= to; d = addDays(d, 1)) { var k = ymd(d); idx[k] = days.length; days.push({ d:d, key:k, future:d > t, personal:0, spec:0, invest:0, household:0, items:[] }); }
+  txs().forEach(function (tx) {
+    var i = idx[String(tx.date).slice(0, 10)]; if (i === undefined || tx.type === 'income') return;
+    var day = days[i], b = dayBucket(flowLabel(tx, ov, r)), a = +tx.amount || 0;
+    if (tx.type === 'refund') a = -a;
+    day[b] += a; day.items.push({ name:tx.description || tx.category, amount:a, b:b, sched:day.future });
+  });
+  // expected recurring payments in the next 7 days (subscriptions, the household transfer…)
+  try {
+    recurringItems().forEach(function (it) {
+      if ((it.status && it.status !== 'active') || it.type === 'income' || it.type === 'refund' || !it.next) return;
+      var k = ymd(it.next), i = idx[k]; if (i === undefined || !days[i].future) return;
+      if (days[i].items.some(function (x) { return normDesc(x.name) === normDesc(it.name); })) return;
+      var b = dayBucket(flowLabel({ category:it.category, subcategory:it.subcategory, tags:'' }, ov, r));
+      days[i][b] += +it.amount || 0; days[i].items.push({ name:it.name, amount:+it.amount || 0, b:b, sched:true, approx:true });
+    });
+  } catch (e) {}
+  days.forEach(function (x) { DAY_KEYS.forEach(function (k) { if (x[k] < 0) x[k] = 0; }); x.total = DAY_KEYS.reduce(function (s, k) { return s + x[k]; }, 0); x.free = x.personal + x.spec + x.invest; });
+  var past = days.filter(function (x) { return !x.future; });
+  var sum = {}; DAY_KEYS.forEach(function (k) { sum[k] = past.reduce(function (s, x) { return s + x[k]; }, 0); });
+  return { days:days, past:past, sum:sum, room:room, spendDays:past.filter(function (x) { return x.free > 0.5; }).length };
+}
+function daysHTML(M, m) {
+  var W = 740, H = 236, top = 24, base = 192, n = M.days.length, bw = W / n;
+  var vals = M.days.map(function (x) { return x.free + (x.household > 0 ? x.household : 0); }).sort(function (a, b) { return a - b; });
+  // the scale follows your ordinary days: anything above about 3× the 90th percentile is cut and labelled
+  var p90 = vals[Math.floor(vals.length * 0.9)] || 0, maxv = Math.max(M.room * 3, Math.min(vals[vals.length - 1] || 1, Math.max(p90 * 1.6, 100)));
+  var COL = { personal:'var(--s4)', spec:'var(--signal)', invest:'var(--s2)', household:'var(--s3)' };
+  var g = '', y = function (v) { return base - v / maxv * (base - top); }, todayX = 0;
+  M.days.forEach(function (x, i) {
+    var xx = i * bw + 1.5, w = Math.max(2, bw - 3), cur = base, tot = x.total, over = tot > maxv, sc = over ? (base - top - 10) / tot : (base - top) / maxv;
+    var bars = '';
+    ['personal', 'spec', 'invest', 'household'].forEach(function (k) {
+      if (!(x[k] > 0)) return; var hh = x[k] * sc; cur -= hh;
+      bars += '<rect x="' + xx.toFixed(1) + '" y="' + cur.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="' + (x.future ? 'url(#bhHatch)' : COL[k]) + '"/>';
+    });
+    if (over) bars += '<rect x="' + xx.toFixed(1) + '" y="' + (top + 26) + '" width="' + w.toFixed(1) + '" height="5" fill="var(--bg)"/><text x="' + (xx + w / 2).toFixed(1) + '" y="' + (cur - 5).toFixed(1) + '" text-anchor="middle" class="t">' + chf0(tot) + '</text>';
+    if (UI.bhDay === x.key) bars = '<rect x="' + (xx - 1.5).toFixed(1) + '" y="' + (top - 18) + '" width="' + (w + 3).toFixed(1) + '" height="' + (base - top + 18) + '" fill="var(--shade)"/>' + bars;
+    g += '<g class="bh-dayhit" data-act="bhday" data-d="' + x.key + '" role="button" tabindex="0" aria-label="' + x.d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' }) + ': ' + chf0(tot) + (x.future ? ' scheduled' : '') + '">' +
+      '<rect x="' + (i * bw).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + (base + 18) + '" fill="transparent"/>' + bars + '</g>';
+    if (x.d.getDay() === 1) g += '<text x="' + (xx + w / 2).toFixed(1) + '" y="' + (base + 14) + '" text-anchor="middle" class="t">' + x.d.getDate() + '.' + (x.d.getMonth() + 1) + '.</text>';
+    if (!x.future) todayX = (i + 1) * bw;
+  });
+  var ry = y(M.room);
+  g += '<line x1="0" x2="' + todayX.toFixed(1) + '" y1="' + ry.toFixed(1) + '" y2="' + ry.toFixed(1) + '" stroke="var(--ink)" stroke-dasharray="4 3" stroke-width="1.2"/>' +
+    '<text x="' + (todayX - 6).toFixed(1) + '" y="' + (ry - 5).toFixed(1) + '" text-anchor="end" class="t">room ' + chf0(M.room) + ' a day</text>' +
+    '<line x1="' + todayX.toFixed(1) + '" x2="' + todayX.toFixed(1) + '" y1="' + (top - 18) + '" y2="' + base + '" stroke="var(--ink)" stroke-width="1.5"/><text x="' + (todayX - 4).toFixed(1) + '" y="' + (top - 8) + '" text-anchor="end" class="t">today</text>' +
+    '<line x1="0" x2="' + W + '" y1="' + base + '" y2="' + base + '" stroke="var(--ink)"/>';
+  var svg = '<div class="bh-chart"><svg viewBox="0 -4 ' + W + ' ' + H + '" role="img" aria-label="Spending per day: last 30 days and the next 7 scheduled">' +
+    '<defs><pattern id="bhHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--paper)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--s3)" stroke-width="3"/></pattern></defs>' + g + '</svg></div>';
+  var keys = '<div class="bh-keys"><span><i class="sw personal"></i>Personal</span><span><i class="sw spec"></i>Collectibles</span><span><i class="sw invest"></i>Invested · 3a</span><span><i class="sw household"></i>Household</span><span><i class="sw sched"></i>Scheduled</span></div>';
+  var capNow = m.now.cap, sum = M.sum;
+  var tiles = '<div class="bh-tiles"><div><b class="num">' + chf0(sum.household) + '</b><span>household · 30 days</span></div><div><b class="num">' + chf0(sum.personal) + '</b><span>personal</span></div>' +
+    '<div><b class="num' + (sum.spec > capNow ? ' neg' : '') + '">' + chf0(sum.spec) + '</b><span>collectibles · cap ' + chf0(capNow) + '</span></div><div><b class="num">' + chf0(sum.invest) + '</b><span>invested · 3a</span></div>' +
+    '<div><b class="num">' + M.spendDays + '</b><span>days with spending · ' + (M.past.length - M.spendDays) + ' without</span></div></div>';
+  var sel = M.days.filter(function (x) { return x.key === UI.bhDay; })[0], box = '';
+  if (sel) {
+    box = '<div class="bh-daybox"><div class="bh-dayhead"><b>' + sel.d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' }) + (sel.future ? ' · scheduled' : '') + '</b><button class="iconbtn" data-act="bhday" data-d="" aria-label="Close">×</button></div>' +
+      (sel.items.length ? sel.items.map(function (it) { return '<div><span>' + esc(it.name) + (it.approx ? ' <small>expected</small>' : '') + '</span><span class="num">' + (it.amount < 0 ? '−' : '') + chf0(Math.abs(it.amount)) + '</span></div>'; }).join('') : '<p class="soon">Nothing ' + (sel.future ? 'scheduled' : 'spent') + '.</p>') +
+      (!sel.future && sel.free > M.room ? '<div class="soon"><span>Over your room by</span><span class="num neg">' + chf0(sel.free - M.room) + '</span></div>' : '') + '</div>';
+  }
+  return keys + svg + tiles + box + '<p class="soon">The dashed line is your room: what’s left after the household, spread over 30 days. Tap a day to see what it was. Very tall days are cut, with their amount on top.</p>';
+}
+function mixHTML(M) {
+  // one bar per week (Monday to Sunday), each at 100%: how the mix of your own spending shifts
+  var weeks = [], t = today();
+  M.past.forEach(function (x) { var mon = addDays(x.d, -((x.d.getDay() + 6) % 7)), k = ymd(mon); var w = weeks.filter(function (q) { return q.k === k; })[0]; if (!w) { w = { k:k, d:mon, personal:0, spec:0, invest:0 }; weeks.push(w); } w.personal += x.personal; w.spec += x.spec; w.invest += x.invest; });
+  var W = 740, base = 196, top = 26, bw = W / Math.max(1, weeks.length), g = '';
+  weeks.forEach(function (w, i) {
+    var tot = w.personal + w.spec + w.invest, x = i * bw + 10, ww = bw - 20, cur = base;
+    if (tot <= 0) { g += '<text x="' + (x + ww / 2).toFixed(1) + '" y="' + (base - 6) + '" text-anchor="middle" class="t">no spending</text>'; }
+    [['personal', 'var(--s4)'], ['spec', 'var(--signal)'], ['invest', 'var(--s2)']].forEach(function (c) {
+      if (!(tot > 0) || !(w[c[0]] > 0)) return; var hh = w[c[0]] / tot * (base - top); cur -= hh;
+      g += '<rect x="' + x.toFixed(1) + '" y="' + cur.toFixed(1) + '" width="' + ww.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="' + c[1] + '"/>';
+    });
+    g += '<text x="' + (x + ww / 2).toFixed(1) + '" y="' + (top - 8) + '" text-anchor="middle" class="t">' + (tot > 0 ? Math.round(w.spec / tot * 100) + '% cards · ' + chf0(tot) : '') + '</text>' +
+      '<text x="' + (x + ww / 2).toFixed(1) + '" y="' + (base + 14) + '" text-anchor="middle" class="t">week of ' + w.d.getDate() + '.' + (w.d.getMonth() + 1) + '.' + (addDays(w.d, 6) > t ? ' (so far)' : '') + '</text>';
+  });
+  return '<div class="bh-keys"><span><i class="sw personal"></i>Personal</span><span><i class="sw spec"></i>Collectibles</span><span><i class="sw invest"></i>Invested · 3a</span></div>' +
+    '<div class="bh-chart"><svg viewBox="0 0 ' + W + ' 214" role="img" aria-label="Share of each week’s own spending by kind">' + g + '</svg></div>' +
+    '<p class="soon">Each week at 100%: how the mix of your own spending shifts (household left out). The total is on top, since a quiet week and a big one look alike here.</p>';
 }
 
 // ─── purchase sizes and weekdays (all your card buys) ──────────────────────

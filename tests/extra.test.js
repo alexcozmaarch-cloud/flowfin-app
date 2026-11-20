@@ -213,7 +213,7 @@ module.exports = async function () {
     await pg.fill('#vttext', '45 francs training shorts, hobbies, credit card'); await pg.waitForTimeout(200);
     var t = await pg.innerText('#vtOut');
     h.assert(/45 CHF/.test(t) && /Training shorts/.test(t) && /Hobbies/.test(t) && /Credit card/.test(t), t);
-    await pg.click('[data-act=vtmic]'); await pg.waitForTimeout(200);
+    await pg.click('[data-act=vtmic]'); await pg.waitForFunction(function () { return /mic/i.test(document.getElementById('vtStatus').innerText); }, null, { timeout: 3000 }).catch(function () {});
     h.assert(/mic/i.test(await pg.innerText('#vtStatus')), 'mic status shown');
     h.noErrors(app); await app.ctx.close();
   });

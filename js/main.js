@@ -13,6 +13,7 @@ import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoa
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
+import { saveLabel } from './behaviour.js';
 import { startMic, voicePreview } from './voicetest.js';
 import { FORM, addCustomSub, autofill, fxInfo, paintTagChips, searchWithout, toggleTag, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
 import { WFORM, accounts, closeWForm, deleteAcct, drawAcct, isArchived, openAcct, openUpdate, readAcct, saveAcct, saveUpdate } from './wealth.js';
@@ -117,6 +118,10 @@ document.addEventListener('click', function (e) {
   if (act === 'tagnew' && FORM) { readForm(); FORM._newtag = true; drawModal(); var nt = $('mnewtag'); if (nt) nt.focus(); return; }
   if (act === 'tagadd' && FORM) { var nv = ($('mnewtag') || {}).value || ''; readForm(); FORM._newtag = false; if (nv.trim()) toggleTag(nv.trim(), true); return drawModal(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
+  if (act === 'bhview') { UI.bhView = a.getAttribute('data-v'); return draw(); }
+  if (act === 'bh3a') { UI.bh3aEdit = !UI.bh3aEdit; return draw(); }
+  if (act === 'bh3asave' || act === 'bh3afull') { var y3 = a.getAttribute('data-y'), v3 = act === 'bh3afull' ? '7258' : String(parseFloat(String($('bh3aIn').value).replace(/[' ]/g, '').replace(',', '.')) || 0); UI.bh3aEdit = false; return saveSetting('threea_paid_' + y3, v3).then(function () { toast('3a ' + y3 + ' saved'); draw(); }); }
+  if (act === 'bhmoved') { var pk = 'bh_redirect_' + ymd(periodAt(0).start); return saveSetting(pk, a.getAttribute('data-v')).then(function () { toast('Noted: moved to savings'); draw(); }); }
   if (act === 'priceok' || act === 'priceonce') {
     var pk = a.getAttribute('data-key'), pname = a.getAttribute('data-name');
     var tr = act === 'priceok' ? (DATA.Subscription || []).filter(function (s) { return normDesc(s.name) === normDesc(pname); })[0] : null;
@@ -184,7 +189,10 @@ function openDrill(el) {
   go('transactions');
 }
 document.addEventListener('toggle', function (e) {
-  var d = e.target; if (!d.matches || !d.matches('details[data-fold]')) return;
+  var d = e.target;
+  if (d.matches && d.matches('details[data-act=bhhow]')) { UI.bhHow = d.open; return; }
+  if (d.matches && d.matches('details[data-act=bhlabels]')) { UI.bhLabels = d.open; return; }
+  if (!d.matches || !d.matches('details[data-fold]')) return;
   var st = foldState(); st[d.getAttribute('data-fold')] = d.open; lsSet(FOLD_KEY, JSON.stringify(st));
   if (d.open) { savingsChart(); netSavingsChart(); }
 }, true);
@@ -235,6 +243,7 @@ document.addEventListener('change', function (e) {
   if (id === 'fcat') { UI.tx.category = e.target.value; draw(); }
   if (id === 'facct') { UI.tx.account = e.target.value; draw(); }
   if (id === 'ftag') { UI.tx.tag = e.target.value; draw(); }
+  if (e.target.matches && e.target.matches('[data-bhlabel]')) { saveLabel(e.target.getAttribute('data-bhlabel'), e.target.value).then(function () { draw(); }); return; }
   if (id === 'importFiles' && e.target.files && e.target.files.length) importFiles(e.target.files);
   if (e.target.matches && e.target.matches('[data-act=rstatus]')) {
     var sid = e.target.getAttribute('data-id'), st = e.target.value, srow = (DATA.Subscription || []).filter(function (x) { return x.id === sid; })[0];

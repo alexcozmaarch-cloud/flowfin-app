@@ -497,6 +497,36 @@ module.exports = async function () {
     h.eq(Object.values(app.store.Transaction).filter(function (t) { return t.description === 'Classic coffee'; }).length, 1, 'rows in the Sheet');
     h.noErrors(app); await app.ctx.close();
   });
+  console.log('\nBehaviour');
+  await h.test('Behaviour: flows, the cap with its five checks, wealth by risk, 3a and the suggestion', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    var d = new Date(); d.setDate(d.getDate() - 1); var ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    data.Transaction.push({ id: 'cx1', date: ds, description: 'Booster box - Cardmarket', category: 'Collectibles', subcategory: 'TCG Investing', amount: 120, type: 'investment', account: 'credit_card', tags: 'sealed' });
+    var app = await h.openApp({ data: data, hash: 'behaviour' }), pg = app.page; await pg.waitForTimeout(800); await h.settled(app, 10000);
+    var t = await pg.innerText('#view');
+    ['Where it went', 'Collectibles this period', 'Your wealth by risk', 'Safety net and 3a'].forEach(function (x) { h.assert(t.indexOf(x) > -1, x + ' missing'); });
+    h.assert(/cap 9% · /.test(t), 'starting share 9%');
+    h.eq(app.store.Transaction.cx1.type, 'expense', 'card purchase logged as investment is now spending');
+    h.assert(/3A IN \d{4}[\s\S]*7.258 · maxed/i.test(t) || new Date().getFullYear() > 2026, '3a 2026 marked as maxed');
+    await pg.click('summary:has-text("How this cap was set")'); await pg.waitForTimeout(150);
+    h.eq(await pg.locator('.bh-checks li').count(), 5, 'five checks');
+    await pg.click('[data-act=bhview][data-v=avg]'); await pg.waitForTimeout(200);
+    h.assert(/Average of the last/.test(await pg.innerText('#view')), 'average view');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('Behaviour labels: moving Collectibles to Personal takes it out of the cap', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data));
+    var d = new Date(); var ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    data.Transaction.push({ id: 'cx2', date: ds, description: 'Graded card - Ricardo', category: 'Collectibles', subcategory: 'TCG Investing', amount: 300, type: 'expense', account: 'credit_card' });
+    var app = await h.openApp({ data: data, hash: 'behaviour' }), pg = app.page; await h.settled(app, 10000);
+    var before = await pg.innerText('.bh-big b');
+    h.assert(+before.replace(/[^0-9]/g, '') >= 300, 'card counted: ' + before);
+    await pg.click('summary:has-text("Labels")'); await pg.waitForTimeout(150);
+    await pg.selectOption('select[data-bhlabel="c:Collectibles"]', 'personal'); await h.settled(app);
+    h.eq(await pg.innerText('.bh-big b'), '0', 'not in the cap any more');
+    h.assert(/"c:Collectibles":"personal"/.test(Object.values(app.store.Settings).filter(function (r) { return r.key === 'behaviour_labels'; })[0].value), 'label saved in the Sheet');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nCategories in the Sheet');
   await h.test('first load with the new backend fills the Category tab (incl. your own subcategories)', async function () {
     var data = JSON.parse(JSON.stringify(demo.data));

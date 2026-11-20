@@ -22,7 +22,7 @@ function runJobs() {
   JOBS_RAN = true;
   var chain = Promise.resolve();
   purgeBin(); attachPending();
-  [jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories, jobDeletePorsche, jobSubNotes].forEach(function (job) {
+  [jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories, jobDeletePorsche, jobSubNotes, jobCollectiblesType, job3aPaid].forEach(function (job) {
     chain = chain.then(function () { return job(); }).catch(function (e) { toast('Setup step not saved yet (' + e.message + '); it will try again next time.'); });
   });
   return chain;
@@ -53,6 +53,23 @@ function jobSubNotes() {
   var rows = (DATA.Subscription || []).filter(function (s) { return !s.notes && want.some(function (w) { return w[0].test(s.name || ''); }); });
   return seq(rows, function (s) { var n = want.filter(function (w) { return w[0].test(s.name); })[0][1]; return saveRow('Subscription', Object.assign({}, s, { notes:n })); })
     .then(function () { return saveSetting(key, '1'); });
+}
+// 20.11.2026: card purchases logged as "investment" are Collectibles spending like the rest
+function jobCollectiblesType() {
+  var key = 'job_coll_type_2011';
+  if (done(key)) return;
+  var rows = txs().filter(function (tx) { return tx.type === 'investment' && tx.category === 'Collectibles'; });
+  return seq(rows, function (tx) { return saveRow('Transaction', Object.assign({}, tx, { type:'expense' })); })
+    .then(function () { return saveSetting(key, '1'); })
+    .then(function () { if (rows.length) toast(rows.length + ' card purchases now count as Collectibles spending'); });
+}
+// 20.11.2026: 3a for 2025 and 2026 was paid in full outside FlowFin
+function job3aPaid() {
+  var key = 'job_3a_paid_2011';
+  if (done(key)) return;
+  var c = Promise.resolve();
+  ['2025', '2026'].forEach(function (y) { if (!setting('threea_paid_' + y, '')) c = c.then(function () { return saveSetting('threea_paid_' + y, '7258'); }); });
+  return c.then(function () { return saveSetting(key, '1'); });
 }
 function seq(items, fn) { var c = Promise.resolve(); items.forEach(function (x) { c = c.then(function () { return fn(x); }); }); return c; }
 // The Sheet turns a saved "1" into the number 1, so compare as text (before 11.11.2026 this missed every flag,

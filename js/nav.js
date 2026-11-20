@@ -9,6 +9,7 @@ import { netSavingsChart } from './charts.js';
 import { $, periodAt, periodLabel, txs } from './core.js';
 import { dashboardCharts, dashboardHTML, savingsChart } from './dashboard.js';
 import { calendarHTML } from './calendar.js';
+import { behaviourHTML } from './behaviour.js';
 import { goalsHTML } from './goals.js';
 import { monthlyChart, monthlyHTML } from './monthly.js';
 import { settingsHTML, soonHTML } from './settings.js';
@@ -53,6 +54,7 @@ function draw() {
   else if (UI.page === 'monthly') v.innerHTML = monthlyHTML();
   else if (UI.page === 'calendar') v.innerHTML = calendarHTML();
   else if (UI.page === 'owed') v.innerHTML = owedHTML();
+  else if (UI.page === 'behaviour') v.innerHTML = behaviourHTML();
   else v.innerHTML = soonHTML();
   if (UI.page === 'monthly') {
     var mc = function () { if (UI.page === 'monthly') monthlyChart(); };

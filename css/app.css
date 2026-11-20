@@ -649,3 +649,25 @@ details.fold>summary:hover h3{color:var(--muted)}
 .bh .lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .bh .linkbtn{background:none;border:0;padding:0;font:inherit;font-size:inherit;color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .bh .pos{color:var(--good)}
+
+/* Behaviour upgrade (20.11.2026) */
+.bh-brk{display:grid;gap:5px}
+.bh-brk div{display:grid;grid-template-columns:62px minmax(0,1fr) 96px;gap:8px;align-items:center;font-size:12.5px}
+.bh-brk i{display:block;height:10px;background:var(--s2);min-width:2px}.bh-brk i.hot{background:var(--signal)}
+.bh-brk span:last-child{font-size:11.5px;text-align:right;color:var(--muted)}
+.bh-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;align-items:end;height:62px}
+.bh-week div{display:flex;flex-direction:column;justify-content:flex-end;gap:3px;height:100%;text-align:center}
+.bh-week i{display:block;background:var(--s3);min-height:1px}.bh-week i.hot{background:var(--ink)}
+.bh-week span{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
+.bh-pattern{display:grid;gap:8px}
+.bh-want{display:grid;gap:8px}
+.bh-wi{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 10px;border:1px solid var(--rule);padding:10px;align-items:center}
+.bh-wi.ready{border-color:var(--ink)}
+.bh-wi b{font-size:14px;display:block}.bh-wi small{color:var(--muted);font-size:12px}
+.bh-wi .bh-btns{grid-column:1/-1}
+.bh-money{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;margin:0;font-size:14px}
+.bh-money dd{margin:0;text-align:right}
+.bh-inp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,150px);gap:10px;align-items:center;font-size:13.5px;margin-top:6px}
+.bh-inp input{width:100%}
+.bh-form{border:1px solid var(--ink);padding:12px;display:grid;gap:4px;margin-top:4px}
+.bh-quick{display:grid;gap:6px}.bh-quick>summary{cursor:pointer}

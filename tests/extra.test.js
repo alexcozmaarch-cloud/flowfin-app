@@ -527,6 +527,41 @@ module.exports = async function () {
     h.assert(/"c:Collectibles":"personal"/.test(Object.values(app.store.Settings).filter(function (r) { return r.key === 'behaviour_labels'; })[0].value), 'label saved in the Sheet');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Behaviour upgrade: log a sale, want list after 48 hours, quick update, buying pattern', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data)), t0 = new Date();
+    function dstr(n) { var d = new Date(t0); d.setDate(d.getDate() - n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    for (var i = 0; i < 9; i++) data.Transaction.push({ id: 'pb' + i, date: dstr(i % 3), description: 'TCG Cards - Ricardo', category: 'Collectibles', subcategory: 'TCG Investing', amount: 10 + i * 30, type: 'expense', account: 'credit_card' });
+    data.Transaction.push({ id: 'pbf', date: dstr(1), description: 'Cardmarket credit', category: 'Collectibles', subcategory: 'TCG Investing', amount: 50, type: 'expense', account: 'credit_card' });
+    data.Settings.push({ id: 'wl', key: 'want_list', value: JSON.stringify([{ id: 'w1', name: 'Test card PSA 10', price: 240, shop: 'Cardmarket', at: new Date(Date.now() - 3 * 864e5).toISOString() }, { id: 'w2', name: 'Fresh ETB', price: 85, shop: 'Ricardo', at: new Date().toISOString() }]) });
+    data.NetWorthEntry.push({ id: 'tcg1', name: 'TCG Singles', account_type: 'tcg_investments', currency: 'CHF', current_value: 3000, total_invested: 1000, exchange_rate: 1 });
+    var app = await h.openApp({ data: data, hash: 'behaviour' }), pg = app.page; await h.settled(app, 10000);
+    var t = await pg.innerText('#view');
+    h.assert(/Fewer, better buys/.test(t) || /of 8 buys/.test(t), 'fewer, better buys');
+    h.assert(/top-ups \/ fees · 50/.test(t), 'top-up flagged');
+    h.assert(/Money in vs value/.test(t), 'money in vs value');
+    h.assert(/Want list/.test(t) && /ready /.test(t), 'want list with a waiting item');
+    // still want it → add form filled in
+    await pg.click('[data-act=bhwbuy][data-id=w1]'); await pg.waitForTimeout(300);
+    h.eq(await pg.inputValue('#mdesc'), 'Test card PSA 10 - Cardmarket'); h.eq(await pg.inputValue('#mamt'), '240');
+    await pg.click('[data-act=cancel]'); await pg.waitForTimeout(150);
+    // changed my mind on the other one → kept
+    await pg.click('[data-act=bhwskip][data-id=w2]'); await h.settled(app);
+    h.assert(/Skipped in \d{4}: 85 kept/.test(await pg.innerText('#view')), 'kept total');
+    // a sale adds to the cap
+    var capSel = 'section.bh-card:has-text("Collectibles this period") h3 .r';
+    var capBefore = +(await pg.innerText(capSel)).replace(/.*· /, '').replace(/[^0-9]/g, '');
+    await pg.click('[data-act=bhsale]'); await pg.fill('#bhfName', 'Old binder'); await pg.fill('#bhfAmt', '120'); await pg.click('[data-act=bhsalesave]'); await h.settled(app);
+    h.assert(Object.values(app.store.Transaction).some(function (x) { return x.type === 'refund' && x.category === 'Collectibles' && +x.amount === 120; }), 'sale saved');
+    var capAfter = +(await pg.innerText(capSel)).replace(/.*· /, '').replace(/[^0-9]/g, '');
+    h.eq(capAfter - capBefore, 120, 'cap grew by the sale');
+    // quick update writes Wealth
+    await pg.fill('#bhqSpec', '3600'); await pg.click('[data-act=bhqsave]'); await h.settled(app);
+    h.eq(+app.store.NetWorthEntry.tcg1.current_value, 3600, 'collection value on Wealth');
+    h.assert(Object.values(app.store.AssetSnapshot).some(function (x) { return x.entry_id === 'tcg1' && +x.value === 3600; }), 'snapshot saved');
+    await pg.click('summary:has-text("Your buying pattern")'); await pg.waitForTimeout(150);
+    h.assert(/are your big days/.test(await pg.innerText('#view')), 'weekday pattern');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nCategories in the Sheet');
   await h.test('first load with the new backend fills the Category tab (incl. your own subcategories)', async function () {
     var data = JSON.parse(JSON.stringify(demo.data));

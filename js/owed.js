@@ -8,6 +8,7 @@ import { periodDay, sw } from './dashboard.js';
 import { topbar } from './nav.js';
 import { saveSetting } from './settings.js';
 import { ico, setting, tagsOf } from './transactions.js';
+import { jointHTML } from './joint.js';
 
 var OWED_OLD_DAYS = 30, PENDING_KEY = 'ff_owed_pending_v1';
 function r2(n) { return Math.round((+n || 0) * 100) / 100; }
@@ -140,7 +141,7 @@ function owedHTML() {
       '<small>' + esc(x.tx.description) + ' · ' + periodDay(pd(x.tx.date)) + (x.rec.note ? ' · “' + esc(x.rec.note) + '”' : '') + (x.paid && x.left > 0.004 ? ' · ' + fmtCHF.format(x.paid) + ' paid back' : '') + '</small></span>' +
       '<span class="a">' + fmtCHF.format(st ? x.rec.amount : x.left) + '</span></div>';
   };
-  return topbar('Owed to you', false) +
+  return topbar('Owed to you', false) + jointHTML() +
     '<section class="card"><h3>Still owed<span class="r">' + sw(total) + '</span></h3>' + (open.length ? '<div class="txlist">' + open.map(row).join('') + '</div>' :
       '<p class="soon" style="margin:0">Nobody owes you anything. When you pay for someone, tick “Someone owes me part of this” in the add form.</p>') +
     '<p class="chartnote" style="margin:10px 0 0">Tap one to mark it paid back or write it off. Anything owed for more than ' + OWED_OLD_DAYS + ' days is marked.</p></section>' +

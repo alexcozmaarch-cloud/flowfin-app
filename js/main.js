@@ -13,6 +13,7 @@ import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoa
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
+import { addAlways, jointRefundRow, setResolved, toggleJoint } from './joint.js';
 import { quickSave, readBhForm, saleRow, saveLabel, wantPark, wantDone } from './behaviour.js';
 import { startMic, voicePreview } from './voicetest.js';
 import { FORM, addCustomSub, autofill, fxInfo, paintTagChips, searchWithout, toggleTag, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
@@ -118,6 +119,17 @@ document.addEventListener('click', function (e) {
   if (act === 'tagnew' && FORM) { readForm(); FORM._newtag = true; drawModal(); var nt = $('mnewtag'); if (nt) nt.focus(); return; }
   if (act === 'tagadd' && FORM) { var nv = ($('mnewtag') || {}).value || ''; readForm(); FORM._newtag = false; if (nv.trim()) toggleTag(nv.trim(), true); return drawModal(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
+  if (act === 'jtsettle') return setResolved(a.getAttribute('data-id'), 'settled').then(function () { toast('Marked as settled'); draw(); });
+  if (act === 'jtok') return setResolved(a.getAttribute('data-id'), 'ok').then(function () { draw(); });
+  if (act === 'jtdel') return removeWithUndo('Refund', [['Transaction', a.getAttribute('data-id')]]);
+  if (act === 'jtalways') return addAlways(a.getAttribute('data-w')).then(function () { toast('“' + a.getAttribute('data-w') + '” is now always for the household'); draw(); });
+  if (act === 'jtother') { UI.jtOther = !UI.jtOther; draw(); setTimeout(function () { var i = $('jtAmt'); if (i) i.focus(); }, 30); return; }
+  if (act === 'jtpaid' || act === 'jtpaidother') {
+    var ja = act === 'jtpaid' ? +a.getAttribute('data-v') : parseFloat(String(($('jtAmt') || {}).value || '').replace(/[' ]/g, '').replace(',', '.'));
+    if (!(ja > 0)) return toast('Enter the amount that came in');
+    UI.jtOther = false;
+    return saveRow('Transaction', jointRefundRow(ja)).then(function () { toast('Logged: joint account paid ' + fmtCHF.format(ja)); draw(); });
+  }
   if (act === 'bhview') { UI.bhView = a.getAttribute('data-v'); return draw(); }
   if (act === 'bhchart') { UI.bhChart = a.getAttribute('data-v'); UI.bhDay = ''; return draw(); }
   if (act === 'bhday') { var dk = a.getAttribute('data-d'); UI.bhDay = UI.bhDay === dk ? '' : dk; return draw(); }
@@ -268,6 +280,7 @@ document.addEventListener('change', function (e) {
     var sid = e.target.getAttribute('data-id'), st = e.target.value, srow = (DATA.Subscription || []).filter(function (x) { return x.id === sid; })[0];
     if (srow) saveRow('Subscription', Object.assign({}, srow, { status:st })).then(function () { toast(srow.name + ': ' + st); });
   }
+  if (id === 'mjoint' && FORM) { readForm(); toggleJoint(FORM, e.target.checked); drawModal(); return; }
   if (id === 'mowe' && FORM) { readForm(); drawModal(); var wh = $('mowho'); if (wh && FORM._owe && FORM._owe.on) wh.focus(); return; }
   if (id === 'mcur' && FORM) {
     var wasCHF = FORM.orig_currency !== e.target.value && (!FORM.orig_currency || FORM.orig_currency === 'CHF');

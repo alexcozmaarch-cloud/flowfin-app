@@ -1,6 +1,7 @@
 // FlowFin · Transactions: tags, rules, currency, list and the add/edit form.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
 import { afterSave, oweBoxHTML, oweButtonHTML, oweToSave, owedItems, readOwe } from './owed.js';
+import { jointButtonHTML, jointNoteHTML } from './joint.js';
 import { priceAlertHTML, priceAlerts } from './recurring.js';
 import { anomalyBody } from './anomalies.js';
 import { persistCache, post, saveRow, setSync } from './api.js';
@@ -57,7 +58,7 @@ function tagSuggestions(F) {
 }
 function tagChipsHTML(F, quick) {
   var sel = tagsOf({ tags:F.tags }), sug = tagSuggestions(F);
-  if (quick) return '<div class="field full qtags"><div class="tchips slide" id="mtagchips" aria-label="Tags">' + tagChipsInner(sel, sug) + '</div>' + oweButtonHTML(F) + '</div>';
+  if (quick) return '<div class="field full qtags"><div class="tchips slide" id="mtagchips" aria-label="Tags">' + tagChipsInner(sel, sug) + '</div><span class="qbtns">' + oweButtonHTML(F) + jointButtonHTML(F) + '</span></div>';
   return '<div class="field full tagpick"><label>Tags</label><div class="tchips" id="mtagchips">' + tagChipsInner(sel, sug) + '</div></div>';
 }
 function tagChipsInner(sel, sug) {
@@ -352,8 +353,8 @@ function drawModalNow() {
       ? '<div class="field"><label for="mamt">In CHF · ' + (FORM._chfManual ? 'your amount' : 'calculated, or type your bank’s') + '</label><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '"></div>'
       : '<div class="field"><label for="mamt">Amount</label><div class="amtrow"><input id="mamt" type="number" inputmode="decimal" step="0.01" min="0" value="' + esc(FORM.amount) + '">' + '<select id="mcur" aria-label="Currency">' + CURRENCIES.map(function (c) { return opt(c, c, FORM.orig_currency); }).join('') + '</select>' + '</div></div>') +
     (quick
-      ? quickSummary() + (FORM.type === 'income' ? '' : tagChipsHTML(FORM, true)) + oweBoxHTML(FORM, true)
-      : oweBoxHTML(FORM) + (FORM.type === 'income' ? '' : tagChipsHTML(FORM)) + fullFields(subs, tagList)) +
+      ? quickSummary() + (FORM.type === 'income' ? '' : tagChipsHTML(FORM, true)) + oweBoxHTML(FORM, true) + jointNoteHTML(FORM)
+      : oweBoxHTML(FORM) + (FORM.type === 'expense' ? '<div class="field full"><label class="switch" style="min-height:0"><input type="checkbox" id="mjoint"' + (jointNoteHTML(FORM) ? ' checked' : '') + '><span>For the household (the joint account pays it back)</span></label></div>' : '') + (FORM.type === 'income' ? '' : tagChipsHTML(FORM)) + fullFields(subs, tagList)) +
     '</div>' + (FORM._err ? '<div class="err">' + esc(FORM._err) + '</div>' : '') +
     (quick ? '' : '<div class="actions">' +
     (FORM.id ? (FORM._confirmDelete

@@ -1,6 +1,7 @@
 // FlowFin · Dashboard: day-to-day model, forecast, weeks, card invoice, free cash, projections.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
 import { owedLineHTML } from './owed.js';
+import { jointLineHTML } from './joint.js';
 import { budgetMapFor, budgetRows, catSpend, holidaysBudgeted } from './budgets.js';
 import { chartColors, netSavingsData } from './charts.js';
 import { $, addDays, calcTotals, daysBetween, esc, fmt0, fmtCHF, inPeriod, isInfra, isSalary, lsGet, pd, periodAt, periodLabel, periodModel, roles, today, txs, ymd } from './core.js';
@@ -110,7 +111,7 @@ function dashboardHTML() {
   h += waterfallHTML(m);
   // 6 · upcoming: the next three and the total still to pay
   h += upcomingHTML(m, 3);
-  if (m.isCurrent) h += priceAlerts().map(priceAlertHTML).join('') + owedLineHTML();
+  if (m.isCurrent) h += priceAlerts().map(priceAlertHTML).join('') + owedLineHTML() + jointLineHTML();
   // 7 · the goal with the nearest deadline
   h += nearestGoalHTML();
   // more detail, one tap down

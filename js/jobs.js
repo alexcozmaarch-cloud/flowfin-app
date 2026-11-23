@@ -4,7 +4,8 @@ import { attachPending } from './owed.js';
 import { purgeBin } from './bin.js';
 import { applyCategories, deleteRow, persistCache, post, saveRow } from './api.js';
 import { budgetMapFor, truthy } from './budgets.js';
-import { periodAt, toast, txs } from './core.js';
+import { periodAt, roles, toast, txs } from './core.js';
+import { firstWord } from './joint.js';
 import { goalFund } from './goals.js';
 import { saveSetting } from './settings.js';
 import { customSubs, setting } from './transactions.js';
@@ -22,7 +23,7 @@ function runJobs() {
   JOBS_RAN = true;
   var chain = Promise.resolve();
   purgeBin(); attachPending();
-  [jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories, jobDeletePorsche, jobSubNotes, jobCollectiblesType, job3aPaid].forEach(function (job) {
+  [jobGoal3a2027, jobBudgets2027, jobFamily2027, jobCategories, jobDeletePorsche, jobSubNotes, jobCollectiblesType, job3aPaid, jobJointAlways].forEach(function (job) {
     chain = chain.then(function () { return job(); }).catch(function (e) { toast('Setup step not saved yet (' + e.message + '); it will try again next time.'); });
   });
   return chain;
@@ -70,6 +71,18 @@ function job3aPaid() {
   var c = Promise.resolve();
   ['2025', '2026'].forEach(function (y) { if (!setting('threea_paid_' + y, '')) c = c.then(function () { return saveSetting('threea_paid_' + y, '7258'); }); });
   return c.then(function () { return saveSetting(key, '1'); });
+}
+// 23.11.2026: household purchases the joint account already pays back (Nespresso, Galaxus…) are "always for the household"
+function jobJointAlways() {
+  var key = 'job_joint_always_2311';
+  if (done(key)) return;
+  var r = roles(), infra = function (c) { return r.infra.length ? r.infra.indexOf(c) > -1 : c === 'Family Infrastructure'; };
+  var buyWords = {}, words = [];
+  txs().forEach(function (tx) { if (tx.type === 'expense' && infra(tx.category) && tx.account === 'credit_card') buyWords[firstWord(tx.description)] = 1; });
+  txs().forEach(function (tx) { var w = firstWord(tx.description); if (tx.type === 'refund' && infra(tx.category) && w && buyWords[w] && words.indexOf(w) < 0) words.push(w); });
+  var have = []; try { have = JSON.parse(setting('joint_always', '') || '[]'); } catch (e) {}
+  words.forEach(function (w) { if (have.indexOf(w) < 0) have.push(w); });
+  return (words.length ? saveSetting('joint_always', JSON.stringify(have)) : Promise.resolve()).then(function () { return saveSetting(key, '1'); });
 }
 function seq(items, fn) { var c = Promise.resolve(); items.forEach(function (x) { c = c.then(function () { return fn(x); }); }); return c; }
 // The Sheet turns a saved "1" into the number 1, so compare as text (before 11.11.2026 this missed every flag,

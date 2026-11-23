@@ -578,6 +578,44 @@ module.exports = async function () {
     h.assert(/% cards/.test(await pg.innerText('.bh-chart')) || /week of/.test(await pg.innerText('.bh-chart')), 'weekly mix');
     h.noErrors(app); await app.ctx.close();
   });
+  console.log('\nFor the household');
+  await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
+    var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);
+    await pg.click('#bottomnav .plus'); await pg.waitForTimeout(200);
+    await pg.fill('#mdesc', 'Galaxus desk lamp'); await pg.fill('#mamt', '79.90'); await pg.waitForTimeout(200);
+    await pg.check('#mjoint'); await pg.waitForTimeout(200);
+    h.assert(/For the household/.test(await pg.innerText('.modal')), 'household note shown');
+    await pg.click('[data-act=save]'); await h.settled(app);
+    var t = Object.values(app.store.Transaction).filter(function (x) { return x.description === 'Galaxus desk lamp'; })[0];
+    h.assert(t, 'saved'); h.eq(t.category, 'Family Infrastructure'); h.assert(/joint/.test(t.tags), 'tagged #joint: ' + t.tags);
+    await pg.evaluate(function () { location.hash = 'owed'; }); await pg.waitForTimeout(400);
+    var o = await pg.innerText('#view');
+    h.assert(/Joint owes you/.test(o) && /Galaxus desk lamp/.test(o) && /79\.90/.test(o), 'listed as owed by the joint account');
+    await pg.click('[data-act=jtpaid]'); await h.settled(app);
+    h.assert(Object.values(app.store.Transaction).some(function (x) { return x.type === 'refund' && x.description === 'Joint account transfer' && Math.abs(+x.amount - 79.9) < 0.01; }), 'joint transfer logged');
+    h.assert(!/Galaxus desk lamp/.test(await pg.innerText('#view')), 'no longer open');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('history check: double refund, short refund and a refund with no purchase are found', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data)), t0 = new Date();
+    function dstr(n) { var d = new Date(t0); d.setDate(d.getDate() - n); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    data.Transaction.push(
+      { id: 'n1', date: dstr(40), description: 'Nespresso direct debit', category: 'Family Infrastructure', subcategory: 'Groceries', amount: 55, type: 'expense', account: 'credit_card' },
+      { id: 'n2', date: dstr(40), description: 'Nespresso refund', category: 'Family Infrastructure', subcategory: 'Groceries', amount: 55, type: 'refund', account: 'debit_card' },
+      { id: 'n3', date: dstr(37), description: 'Nespresso refund', category: 'Family Infrastructure', subcategory: 'Groceries', amount: 55, type: 'refund', account: 'debit_card' },
+      { id: 'g1', date: dstr(20), description: 'Galaxus household', category: 'Family Infrastructure', subcategory: 'General Household', amount: 27.4, type: 'expense', account: 'credit_card' },
+      { id: 'g2', date: dstr(20), description: 'Galaxus refund', category: 'Family Infrastructure', subcategory: 'General Household', amount: 16.9, type: 'refund', account: 'debit_card' },
+      { id: 'tr', date: dstr(30), description: 'Train tickets CC', category: 'Family Infrastructure', subcategory: 'Transportation', amount: 60, type: 'refund', account: 'debit_card' });
+    var app = await h.openApp({ data: data, hash: 'owed' }), pg = app.page; await pg.waitForTimeout(800); await h.settled(app, 10000); await pg.waitForTimeout(300);
+    var o = await pg.innerText('#view');
+    h.assert(/Galaxus household[\s\S]*short[\s\S]*10\.50/.test(o), 'Galaxus short 10.50: ' + o.slice(0, 600));
+    h.assert(/Paid back twice or not matched/.test(o) && /Nespresso refund/.test(o) && /Train tickets CC/.test(o), 'extras listed');
+    await pg.click('[data-act=jtdel][data-id=n3]'); await h.settled(app);
+    h.assert(!app.store.Transaction.n3, 'duplicate refund deleted');
+    await pg.click('[data-act=jtok][data-id=tr]'); await h.settled(app);
+    h.assert(!/Train tickets CC/.test(await pg.innerText('#view')), 'marked fine');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nCategories in the Sheet');
   await h.test('first load with the new backend fills the Category tab (incl. your own subcategories)', async function () {
     var data = JSON.parse(JSON.stringify(demo.data));

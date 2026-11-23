@@ -130,6 +130,12 @@ document.addEventListener('click', function (e) {
     UI.jtOther = false;
     return saveRow('Transaction', jointRefundRow(ja)).then(function () { toast('Logged: joint account paid ' + fmtCHF.format(ja)); draw(); });
   }
+  if (act === 'bhsplit') return saveSetting('etf_share', a.getAttribute('data-v')).then(function () { draw(); });
+  if (act === 'bhinvest') {
+    var iv = +a.getAttribute('data-v'), ik = 'bh_invest_' + ymd(periodAt(0).start);
+    return saveRow('Transaction', { date:ymd(today()), description:'IBKR ETF transfer', category:'Financial Investing', subcategory:'ETF Investing', amount:iv, type:'investment', account:'debit_card', tags:'etf' })
+      .then(function () { return saveSetting(ik, String(iv)); }).then(function () { toast('Logged: ' + fmtCHF.format(iv) + ' to ETFs'); draw(); });
+  }
   if (act === 'bhview') { UI.bhView = a.getAttribute('data-v'); return draw(); }
   if (act === 'bhchart') { UI.bhChart = a.getAttribute('data-v'); UI.bhDay = ''; return draw(); }
   if (act === 'bhday') { var dk = a.getAttribute('data-d'); UI.bhDay = UI.bhDay === dk ? '' : dk; return draw(); }

@@ -578,6 +578,21 @@ module.exports = async function () {
     h.assert(/% cards/.test(await pg.innerText('.bh-chart')) || /week of/.test(await pg.innerText('.bh-chart')), 'weekly mix');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Investing: the pot follows daily spending, the split is yours, a transfer is logged as ETF investing', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'behaviour' }), pg = app.page; await h.settled(app, 10000);
+    var t = await pg.innerText('#view');
+    h.assert(/Investing this period/.test(t) && /saved so far/.test(t), 'investing card');
+    h.eq(await pg.locator('.bh-pot i').count() >= 28, true, 'one bar per day of the period');
+    await pg.click('[data-act=bhsplit][data-v="100"]'); await h.settled(app);
+    h.assert(Object.values(app.store.Settings).some(function (r) { return r.key === 'etf_share' && String(r.value) === '100'; }), 'split saved');
+    h.assert(/Stays as cash\s*0\.00|Stays as cash\s*0$/m.test(await pg.innerText('#view')) || /Stays as cash\n0/.test(await pg.innerText('#view')), 'all to ETFs');
+    if (await pg.locator('[data-act=bhinvest]').count()) {
+      await pg.click('[data-act=bhinvest]'); await h.settled(app);
+      h.assert(Object.values(app.store.Transaction).some(function (x) { return x.description === 'IBKR ETF transfer' && x.subcategory === 'ETF Investing'; }), 'ETF transfer logged');
+      h.assert(/Moved .* to ETFs ✓/.test(await pg.innerText('#view')), 'marked as done');
+    }
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

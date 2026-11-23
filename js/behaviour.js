@@ -15,7 +15,9 @@ var WAIT_H = 48;   // want list: hours before "still want it?"
 var WEALTH_CAP = 10;                 // collectibles: long-term line, % of counted wealth
 var SAFETY = [3, 6];                 // months of outflows in cash
 var THREEA_MAX = 7258;               // per year (2025–2027)
-var RANGES = { personal:10, saved:10 };   // personal ≤ 10% of take-home, saved ≥ 10%
+var RANGES = { personal:10, saved:10 };
+var ETF_AIM = [20, 40];               // ETFs as a share of counted wealth, over the next years
+var ETF_SPLIT = [50, 75, 90, 100];    // share of what you save that goes to ETFs (the rest stays as cash)   // personal ≤ 10% of take-home, saved ≥ 10%
 
 // Spending labels: household, personal, spec (collectibles & other speculative), growth, stable (3a)
 var FLOW = [['household', 'Household'], ['personal', 'Personal'], ['spec', 'Collectibles & speculative'], ['growth', 'Investing (growth)'], ['stable', '3a & stable']];
@@ -181,7 +183,8 @@ function behaviourModel() {
   var sold = { n:0, sum:0 }, yr = String(today().getFullYear());
   txs().forEach(function (tx) { if ((tx.type === 'refund' || tx.type === 'income') && flowLabel(tx, ov, r) === 'spec' && String(tx.date).slice(0, 4) === yr) { sold.n++; sold.sum += +tx.amount || 0; } });
   var room = Math.max(0, (mean.takeHome - mean.household) / 30);
-  return { daily:dailyModel(ov, r, room), sold:sold, pattern:patternModel(ov, r), want:wantList(), money:moneyModel(ov, r, risk), lastUpdate:lastUpdateDays(),
+  var pot = potModel(now, room, past, ov, r);
+  return { pot:pot, daily:dailyModel(ov, r, room), sold:sold, pattern:patternModel(ov, r), want:wantList(), money:moneyModel(ov, r, risk), lastUpdate:lastUpdateDays(),
     ov:ov, hist:hist, now:now, past:past, mean:mean, n:withIncome.length, risk:risk, outflow:outflow, months:months,
     threeA:ta, threeANext:threeA(year + 1), nextPct:nextPct, usual:usual, redirect:Math.max(0, Math.round(usual - now.cap)), redirectTo:redirectTo };
 }
@@ -265,7 +268,8 @@ function behaviourHTML() {
     (rk.total ? '<div class="bh-ladder" role="img" aria-label="Wealth by risk">' + bar(cnt.map(function (x) { return ['r-' + x[0], rk[x[0]]]; })) +
       '<span class="cap" style="left:' + (100 - WEALTH_CAP) + '%"><span>' + WEALTH_CAP + '% line</span></span></div>' +
     '<div class="bh-legend">' + cnt.map(function (x) { return '<div class="bh-row"><div class="bh-line"><span class="sw r-' + x[0] + '"></span><span>' + x[1] + '</span><span class="rng' + (x[0] === 'spec' && rk.specShare > WEALTH_CAP ? ' neg' : '') + '">' + pct0(rk[x[0]] / rk.total * 100) + '</span><span class="v num">' + chf0(rk[x[0]]) + '</span></div></div>'; }).join('') + '</div>' +
-    '<div class="bh-two"><div class="bh-kpi"><span>Collectibles, of all wealth</span><b class="num' + (rk.specShare > WEALTH_CAP ? ' neg' : ' pos') + '">' + pct0(rk.specShare) + '</b><span>line ' + WEALTH_CAP + '%' + (rk.overCap ? ' · ≈ ' + chf0(rk.overCap) + ' over' : ' · within') + '</span></div>' +
+    '<div class="bh-two"><div class="bh-kpi"><span>ETFs, of all wealth</span><b class="num">' + pct0(rk.total ? rk.growth / rk.total * 100 : 0) + '</b><span>aim ' + ETF_AIM[0] + '–' + ETF_AIM[1] + '% over the next years</span></div>' +
+    '<div class="bh-kpi"><span>Collectibles, of all wealth</span><b class="num' + (rk.specShare > WEALTH_CAP ? ' neg' : ' pos') + '">' + pct0(rk.specShare) + '</b><span>line ' + WEALTH_CAP + '%' + (rk.overCap ? ' · ≈ ' + chf0(rk.overCap) + ' over' : ' · within') + '</span></div>' +
       '<div class="bh-kpi"><span>Of what you can reach now</span><b class="num' + (rk.reachShare > 50 ? ' neg' : '') + '">' + pct0(rk.reachShare) + '</b><span>cash, investments, cards; pensions idle</span></div></div>' +
     (rk.cost ? '<p class="soon">Card values are your latest Wealth figures (cost ' + chf0(rk.cost) + '), not sale prices.</p>' : '')
     : '<p class="soon">Add your accounts on Wealth & Assets to see this.</p>') + '</section>';
@@ -289,14 +293,8 @@ function behaviourHTML() {
     (UI.bh3aEdit ? '<div class="bh-3a"><label for="bh3aIn">Paid into 3a outside FlowFin in ' + ta.year + '</label><div class="bh-btns"><input id="bh3aIn" inputmode="decimal" value="' + (ta.marked || '') + '" placeholder="' + ta.max + '">' +
       '<button class="btn primary" data-act="bh3asave" data-y="' + ta.year + '">Save</button><button class="btn" data-act="bh3afull" data-y="' + ta.year + '">Maxed</button><button class="btn" data-act="bh3a">Cancel</button></div></div>' : '') + '</section>';
 
-  // 5 · redirect
-  var where = { '3a':'3a', safety:'the emergency cash', growth:'IBKR' }[m.redirectTo];
-  var doneKey = 'bh_redirect_' + ymd(now.p.start), doneV = setting(doneKey, '');
-  h += '<section class="bh-redirect"><b>This period’s suggestion</b>' +
-    (m.redirect > 0 ? '<p class="soon">You usually spend ' + chf0(m.usual) + ' on collectibles; your cap is ' + chf0(cap) + '. Stay within it and move the <b class="num">' + chf0(m.redirect) + '</b> difference to ' + where + '.' +
-      (m.redirectTo !== '3a' && m.threeA.paid >= m.threeA.max ? ' (3a is maxed this year; from January it comes first.)' : '') + '</p>' +
-      (doneV ? '<p class="pos">Moved ' + chf0(+doneV || m.redirect) + ' ✓</p>' : '<div class="bh-btns"><button class="btn primary" data-act="bhmoved" data-v="' + m.redirect + '">I moved ' + chf0(m.redirect) + '</button></div>')
-      : '<p class="soon">Your usual collectibles spending already fits your cap. Anything left at the end of the period goes to ' + where + '.</p>') + '</section>';
+  // 5 · investing: the pot fills with every day under your room, and is split between ETFs and cash
+  h += investHTML(m);
 
   // labels
   h += labelsHTML(m.ov);
@@ -312,6 +310,57 @@ function flowDetail(f, lab) {
   var tk = Object.keys(tags).sort(function (a, b) { return tags[b] - tags[a]; }).slice(0, 6);
   return '<ul class="bh-sub">' + rows.slice(0, 8).map(function (r) { return '<li><span>' + esc(r[0].replace('›', ' › ')) + '</span><span class="num">' + chf0(r[1]) + '</span></li>'; }).join('') + '</ul>' +
     (tk.length ? '<div class="bh-chips">' + tk.map(function (t) { return '<span class="chip">#' + esc(t) + ' ' + chf0(tags[t]) + '</span>'; }).join('') + '</div>' : '');
+}
+
+// ─── investing: no fixed target — what goes to ETFs follows what you actually saved ───
+// Each day of the period: your room (take-home minus household, per day) minus what you spent yourself (personal and
+// collectibles). The sum so far is the pot; the pace of the days so far projects it to the end of the period.
+// The pot is split: your ETF share (50/75/90/100%) to ETFs, the rest stays as cash. ETF buys don't count as spending.
+function etfShare() { var v = parseFloat(setting('etf_share', '')); return ETF_SPLIT.indexOf(v) > -1 ? v : 75; }
+function potModel(now, room, past, ov, r) {
+  var p = now.p, t = today(), len = daysBetween(p.start, p.end) + 1, el = Math.min(len, daysBetween(p.start, t) + 1);
+  var perDay = room * 30 / len, spent = 0, days = [];
+  for (var i = 0; i < len; i++) days.push({ d:addDays(p.start, i), spent:0, future:i >= el });
+  txs().forEach(function (tx) {
+    if (!inPeriod(tx, p) || tx.type === 'income' || pd(tx.date) > t) return;
+    var lab = flowLabel(tx, ov, r); if (lab !== 'personal' && lab !== 'spec') return;
+    var a = (+tx.amount || 0) * (tx.type === 'refund' ? -1 : 1), i = daysBetween(p.start, pd(tx.date));
+    if (days[i]) { days[i].spent += a; spent += a; }
+  });
+  days.forEach(function (x) { x.net = x.future ? 0 : perDay - x.spent; });
+  var pot = el * perDay - spent, pace = el ? spent / el : 0, projected = pot + (len - el) * (perDay - pace);
+  var share = etfShare(), base = Math.max(0, projected);
+  // ETFs logged (Financial Investing › ETF…) this period and this year
+  var etfIn = function (from, to) { return txs().filter(function (tx) { var d = pd(tx.date); return d >= from && d <= to && d <= t && flowLabel(tx, ov, r) === 'growth' && tx.type !== 'income' && tx.type !== 'refund'; }).reduce(function (a, tx) { return a + (+tx.amount || 0); }, 0); };
+  var yr = new Date(t.getFullYear(), 0, 1);
+  // what earlier periods would have given (left over × your share), for the trend
+  var hist = past.slice(0, 6).reverse().map(function (f) { return { p:f.p, left:f.left, etf:Math.max(0, f.left) * share / 100 }; });
+  return { perDay:perDay, days:days, el:el, len:len, pot:pot, projected:projected, share:share, etf:base * share / 100, cash:base * (100 - share) / 100,
+    etfPeriod:etfIn(p.start, p.end), etfYear:etfIn(yr, t), hist:hist, takeHome:now.f.takeHome };
+}
+function investHTML(m) {
+  var P = m.pot, mx = Math.max.apply(null, P.days.map(function (x) { return Math.abs(x.net); }).concat([P.perDay, 1]));
+  var bars = P.days.map(function (x) {
+    if (x.future) return '<i class="fut" style="height:' + Math.round(34 * P.perDay / mx) + 'px"></i>';
+    return '<i class="' + (x.net < 0 ? 'neg' : '') + '" style="height:' + Math.max(1, Math.round(34 * Math.abs(x.net) / mx)) + 'px" title="' + x.d.getDate() + '.' + (x.d.getMonth() + 1) + '.: ' + (x.net < 0 ? '−' : '+') + chf0(Math.abs(x.net)) + '"></i>';
+  }).join('');
+  var doneKey = 'bh_invest_' + ymd(m.now.p.start), doneV = setting(doneKey, ''), pctTake = P.takeHome ? P.etf / P.takeHome * 100 : 0;
+  var hmax = Math.max.apply(null, P.hist.map(function (x) { return Math.abs(x.left); }).concat([1]));
+  return '<section class="card bh-card"><h3>Investing this period <span class="r">follows what you save</span></h3>' +
+    '<div class="bh-big"><b class="num' + (P.pot < 0 ? ' neg' : ' pos') + '">' + (P.pot < 0 ? '−' : '') + chf0(Math.abs(P.pot)) + '</b><span>saved so far · on pace for <strong class="num">' + (P.projected < 0 ? '−' : '') + chf0(Math.abs(P.projected)) + '</strong> by the ' + m.now.p.end.getDate() + 'th</span></div>' +
+    '<div class="bh-pot" role="img" aria-label="Each day: your room minus what you spent">' + bars + '</div>' +
+    '<p class="soon">Each day your room (' + chf0(P.perDay) + ') minus what you spent yourself: green adds, red takes away. Household and ETF buys don’t count.</p>' +
+    '<div class="lbl">Your split of what you save</div>' +
+    '<span class="seg2" role="radiogroup" aria-label="Share to ETFs">' + ETF_SPLIT.map(function (v) { return '<button role="radio" aria-checked="' + (P.share === v) + '" class="' + (P.share === v ? 'on' : '') + '" data-act="bhsplit" data-v="' + v + '">' + v + '% ETFs</button>'; }).join('') + '</span>' +
+    '<dl class="bh-money"><dt>To ETFs (IBKR)</dt><dd class="num"><b>' + chf0(P.etf) + '</b></dd><dt>Stays as cash</dt><dd class="num">' + chf0(P.cash) + '</dd>' +
+      '<dt>That’s of your take-home</dt><dd class="num">' + pctTake.toFixed(1) + '%</dd>' +
+      '<dt>ETFs logged this period · ' + today().getFullYear() + '</dt><dd class="num">' + chf0(P.etfPeriod) + ' · ' + chf0(P.etfYear) + '</dd></dl>' +
+    (P.projected <= 0 ? '<p class="soon">On this pace nothing is left for ETFs this period. Every day under your room changes that.</p>' :
+      (doneV ? '<p class="pos">Moved ' + chf0(+doneV) + ' to ETFs ✓</p>' : P.pot * P.share / 100 >= 1 ? '<div class="bh-btns"><button class="btn primary" data-act="bhinvest" data-v="' + Math.round(P.pot * P.share / 100) + '">I moved ' + chf0(Math.round(P.pot * P.share / 100)) + ' to ETFs</button></div>' +
+        '<p class="soon">The button uses what you’ve saved so far (' + P.share + '% of ' + chf0(P.pot) + '); the full ' + chf0(P.etf) + ' is the end-of-period estimate.</p>' : '')) +
+    (P.hist.length ? '<div class="lbl">Earlier periods · what ' + P.share + '% of what was left would have been</div><div class="bh-hbars">' + P.hist.map(function (x) {
+      return '<div><i class="' + (x.left < 0 ? 'neg' : '') + '" style="height:' + Math.max(1, Math.round(40 * Math.abs(x.left) / hmax)) + 'px"></i><b class="num">' + (x.left < 0 ? '0' : chf0(x.etf)) + '</b><span>' + x.p.start.toLocaleDateString('en-GB', { month:'short' }) + '</span></div>';
+    }).join('') + '</div>' : '') + '</section>';
 }
 
 // ─── day by day: the last 30 days, and the next 7 days of scheduled payments ─────
@@ -568,4 +617,4 @@ function saveLabel(key, value) {
 function behaviourLine() {
   try { var h = capHistory(), n = h[h.length - 1]; return 'collectibles ' + chf0(n.f.specNet) + ' of ' + chf0(n.cap) + ' · ' + n.pct + '%'; } catch (e) { return 'where your money goes'; }
 }
-export { quickSave, readForm as readBhForm, saleRow, wantPark, wantDone, wantList, behaviourLine, CAP, WEALTH_CAP, THREEA_MAX, flowLabel, defaultFlow, riskLabel, flowsFor, riskNow, capHistory, threeA, behaviourModel, behaviourHTML, saveLabel };
+export { etfShare, quickSave, readForm as readBhForm, saleRow, wantPark, wantDone, wantList, behaviourLine, CAP, WEALTH_CAP, THREEA_MAX, flowLabel, defaultFlow, riskLabel, flowsFor, riskNow, capHistory, threeA, behaviourModel, behaviourHTML, saveLabel };

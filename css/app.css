@@ -733,3 +733,21 @@ details.fold>summary:hover h3{color:var(--muted)}
 .id-add{display:grid;gap:6px;border:1px dashed var(--ink);padding:12px;margin-top:10px}
 .id-add textarea{width:100%;font-family:var(--f-mono);font-size:12px}
 .linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+
+/* Ideas · yardsticks (24.11.2026) */
+.id-li{display:grid;grid-template-columns:minmax(0,1fr) 36px;align-items:center;border-top:1px solid var(--rule)}
+.id-list .id-li:first-of-type{border-top:0}
+.id-li .id-row{border-top:0}
+.id-x{width:32px;height:32px;border:1px solid var(--rule);background:var(--paper);color:var(--muted);font-size:18px;line-height:1;cursor:pointer;justify-self:end}
+.id-x:hover{color:var(--signal);border-color:var(--signal)}
+.id-cmp{display:grid;gap:8px;margin-top:8px}
+.id-keys{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px}
+.id-keys span{display:inline-flex;align-items:center;gap:6px}
+.id-keys .ln{display:inline-block;width:22px;border-top:2px solid var(--ink)}
+.id-keys .ln.g{border-top:1.5px solid var(--s3)}.id-keys .ln.g.d6{border-top-style:dashed}.id-keys .ln.g.d2{border-top-style:dotted;border-top-width:2px}
+.id-tab{width:100%;border-collapse:collapse;font-size:13px}
+.id-tab th{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:500;text-align:right;padding:6px 4px;border-bottom:1px solid var(--rule)}
+.id-tab th:first-child,.id-tab td:first-child{text-align:left}
+.id-tab td{padding:7px 4px;border-bottom:1px solid var(--rule);text-align:right}
+.id-tab td small{color:var(--muted);font-size:11px;display:block}
+.id-tab td{white-space:nowrap}.id-tab td:first-child{white-space:normal}

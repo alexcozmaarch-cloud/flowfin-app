@@ -9,6 +9,9 @@ import { draw, topbar } from './nav.js';
 import { saveSetting } from './settings.js';
 
 var BENCH_DEFAULT = 'VWRL.SW';   // Vanguard FTSE All-World, traded in CHF on SIX
+// the yardsticks every idea is drawn and compared against (Yahoo symbols)
+var BENCHES = [{ sym:null, label:'World', short:'world', dash:'' }, { sym:'^GSPC', label:'S&P 500', short:'S&P', dash:'6 4' }, { sym:'^SSMI', label:'SMI', short:'SMI', dash:'2 3' }];
+var CORR_DAYS = 250;   // about one year of trading days for "moves with" 
 var PX_KEY = 'ff_prices_v1', PX_TTL = 12 * 3600e3;
 var VERDICTS = { pass:['pass', 'neg'], watch:['watch', ''], small:['worth a small position', 'pos'], core:['worth a core position', 'pos'] };
 var LOADING = {};
@@ -58,7 +61,9 @@ function loadPrices(force) {
   var list = ideas(), syms = {}, from = '';
   list.forEach(function (i) { if (i.ticker) { syms[i.ticker] = 1; if (!from || i.date < from) from = i.date; } });
   if (!Object.keys(syms).length) return Promise.resolve(false);
-  syms[bench()] = 1;
+  benches().forEach(function (b) { syms[b.sym] = 1; });
+  // a year before the oldest idea too, so "moves with" (correlation) has enough days
+  var yearAgo = ymd(addDays(today(), -370)); if (from > yearAgo) from = yearAgo;
   var c = pxCache(), want = Object.keys(syms).filter(function (s) { var x = c[s]; return force || !x || Date.now() - x.at > PX_TTL || (x.from || '9') > from; });
   want = want.filter(function (s) { return !LOADING[s]; });
   if (!want.length) return Promise.resolve(false);
@@ -78,12 +83,29 @@ function sinceEntry(p, date) {
   if (i >= p.dates.length) return null;
   return { dates:p.dates.slice(i), closes:p.closes.slice(i) };
 }
+function benches() { return BENCHES.map(function (b) { return Object.assign({}, b, { sym:b.sym || bench() }); }); }
+// daily returns on the days both traded, over the last ~year: correlation (−1…1) and beta (how much it moves per 1% of the index)
+function corr(a, b) {
+  if (!a || !b) return null;
+  var bm = {}; b.dates.forEach(function (d, i) { bm[d] = b.closes[i]; });
+  var xs = [], ys = [], prevA = null, prevB = null;
+  a.dates.forEach(function (d, i) { if (bm[d] === undefined) return; if (prevA !== null) { xs.push(a.closes[i] / prevA - 1); ys.push(bm[d] / prevB - 1); } prevA = a.closes[i]; prevB = bm[d]; });
+  xs = xs.slice(-CORR_DAYS); ys = ys.slice(-CORR_DAYS);
+  var n = xs.length; if (n < 20) return null;
+  var mx = xs.reduce(function (s, v) { return s + v; }, 0) / n, my = ys.reduce(function (s, v) { return s + v; }, 0) / n, sxy = 0, sxx = 0, syy = 0;
+  for (var i = 0; i < n; i++) { sxy += (xs[i] - mx) * (ys[i] - my); sxx += (xs[i] - mx) * (xs[i] - mx); syy += (ys[i] - my) * (ys[i] - my); }
+  return sxx && syy ? { r:sxy / Math.sqrt(sxx * syy), beta:sxy / syy, n:n } : null;
+}
 function stats(idea) {
-  var s = sinceEntry(px(idea.ticker), idea.date), b = sinceEntry(px(bench()), idea.date);
+  var full = px(idea.ticker), s = sinceEntry(full, idea.date);
   if (!s) return null;
   var entry = s.closes[0], last = s.closes[s.closes.length - 1], chg = (last / entry - 1) * 100;
-  var bchg = b ? (b.closes[b.closes.length - 1] / b.closes[0] - 1) * 100 : null;
-  return { s:s, b:b, entry:entry, last:last, chg:chg, bchg:bchg, lastDate:s.dates[s.dates.length - 1], cur:(px(idea.ticker) || {}).currency || '' };
+  var bs = benches().map(function (b) {
+    var bp = px(b.sym), bb = sinceEntry(bp, idea.date);
+    return Object.assign({}, b, { s:bb, chg:bb ? (bb.closes[bb.closes.length - 1] / bb.closes[0] - 1) * 100 : null, c:corr(full, bp) });
+  });
+  var w = bs[0];
+  return { s:s, b:w.s, bs:bs, entry:entry, last:last, chg:chg, bchg:w.chg, lastDate:s.dates[s.dates.length - 1], cur:(full || {}).currency || '' };
 }
 
 // ─── drawing ───────────────────────────────────────────────────────────────
@@ -96,25 +118,46 @@ function spark(st) {
   var v = st.s.closes, lo = Math.min.apply(null, v), hi = Math.max.apply(null, v);
   return '<svg class="id-spark" viewBox="0 0 120 32" aria-hidden="true"><path d="' + linePath(v, 120, 30, lo, hi) + '" fill="none" stroke="var(--ink)" stroke-width="1.5"/><circle cx="1.5" cy="' + (30 - (v[0] - lo) / (hi - lo || 1) * 30).toFixed(1) + '" r="2.5" fill="var(--signal)"/></svg>';
 }
+function rebased(st, b) {   // a yardstick rebased to the idea's entry price, on the idea's trading days
+  if (!b.s || b.s.closes.length < 2) return null;
+  var bm = {}; b.s.dates.forEach(function (d, i) { bm[d] = b.s.closes[i]; });
+  var last = b.s.closes[0]; return st.s.dates.map(function (d) { if (bm[d] !== undefined) last = bm[d]; return last / b.s.closes[0] * st.entry; });
+}
 function bigChart(st, idea) {
-  var W = 640, H = 180, v = st.s.closes, bv = null;
-  if (st.b && st.b.closes.length > 1) {   // the world ETF rebased to the idea's entry price, on the idea's trading days
-    var bm = {}; st.b.dates.forEach(function (d, i) { bm[d] = st.b.closes[i]; });
-    var last = st.b.closes[0]; bv = st.s.dates.map(function (d) { if (bm[d] !== undefined) last = bm[d]; return last / st.b.closes[0] * st.entry; });
-  }
-  var all = v.concat(bv || []), lo = Math.min.apply(null, all) * 0.98, hi = Math.max.apply(null, all) * 1.02, y = function (x) { return H - (x - lo) / (hi - lo) * H; };
+  var W = 640, H = 180, v = st.s.closes, lines = st.bs.map(function (b) { return { b:b, v:rebased(st, b) }; }).filter(function (x) { return x.v; });
+  var bv = lines.length ? lines[0].v : null;
+  var all = v.concat.apply(v, lines.map(function (x) { return x.v; })), lo = Math.min.apply(null, all) * 0.98, hi = Math.max.apply(null, all) * 1.02, y = function (x) { return H - (x - lo) / (hi - lo) * H; };
   var n = st.s.dates.length, mid = st.s.dates[Math.floor(n / 2)];
   return '<div class="id-chart"><svg viewBox="0 -14 ' + W + ' ' + (H + 34) + '" role="img" aria-label="' + esc(idea.name) + ' since you mentioned it' + (bv ? ', with the world ETF' : '') + '">' +
     '<line x1="0" x2="' + W + '" y1="' + y(st.entry).toFixed(1) + '" y2="' + y(st.entry).toFixed(1) + '" stroke="var(--rule)" stroke-dasharray="3 3"/>' +
-    (bv ? '<path d="' + linePath(bv, W, H, lo, hi) + '" fill="none" stroke="var(--s3)" stroke-width="1.5"/>' : '') +
+    lines.map(function (x) { return '<path d="' + linePath(x.v, W, H, lo, hi) + '" fill="none" stroke="var(--s3)" stroke-width="1.5"' + (x.b.dash ? ' stroke-dasharray="' + x.b.dash + '"' : '') + '/>'; }).join('') +
     '<path d="' + linePath(v, W, H, lo, hi) + '" fill="none" stroke="var(--ink)" stroke-width="2"/>' +
     '<circle cx="4" cy="' + y(st.entry).toFixed(1) + '" r="5" fill="var(--signal)"/>' +
     '<text x="12" y="' + (y(st.entry) - 8).toFixed(1) + '" class="t">entry ' + dm(st.s.dates[0]) + ' · ' + fmtP(st.entry) + '</text>' +
     '<text x="' + W + '" y="' + (y(st.last) - 8).toFixed(1) + '" text-anchor="end" class="t">' + fmtP(st.last) + ' · ' + pct(st.chg) + '</text>' +
-    (bv ? '<text x="' + W + '" y="' + (y(bv[bv.length - 1]) + 16).toFixed(1) + '" text-anchor="end" class="t">world ' + pct(st.bchg) + '</text>' : '') +
+    endLabels(lines, y, W, st) +
     '<line x1="0" x2="' + W + '" y1="' + H + '" y2="' + H + '" stroke="var(--ink)"/>' +
     '<text x="0" y="' + (H + 16) + '" class="t">' + dm(st.s.dates[0]) + '</text>' + (n > 6 ? '<text x="' + W / 2 + '" y="' + (H + 16) + '" text-anchor="middle" class="t">' + dm(mid) + '</text>' : '') +
     '<text x="' + W + '" y="' + (H + 16) + '" text-anchor="end" class="t">' + dm(st.lastDate) + '</text></svg></div>';
+}
+// labels at the right end of each yardstick line, nudged apart so they don't overlap
+function endLabels(lines, y, W, st) {
+  var ys = lines.map(function (x) { return { t:x.b.short + ' ' + pct(x.b.chg), y:y(x.v[x.v.length - 1]) + 4 }; }).sort(function (a, b) { return a.y - b.y; });
+  var own = y(st.last) - 8;
+  ys.forEach(function (l, i) { if (Math.abs(l.y - own) < 22) l.y = own + 24; if (i && l.y - ys[i - 1].y < 22) l.y = ys[i - 1].y + 22; });
+  return ys.map(function (l) { return '<text x="' + (W - 2) + '" y="' + l.y.toFixed(1) + '" text-anchor="end" class="t">' + esc(l.t) + '</text>'; }).join('');
+}
+// how the idea moved against each yardstick: since you mentioned it, and day by day over the last year
+function compareHTML(st) {
+  function cword(r) { return r === null ? '—' : r >= 0.8 ? 'very closely' : r >= 0.6 ? 'closely' : r >= 0.35 ? 'somewhat' : r >= 0.1 ? 'loosely' : 'on its own'; }
+  return '<div class="id-cmp"><div class="id-keys"><span><i class="ln"></i>this idea</span>' + st.bs.map(function (b) { return '<span><i class="ln g' + (b.dash ? ' d' + b.dash.split(' ')[0] : '') + '"></i>' + esc(b.label) + '</span>'; }).join('') + '</div>' +
+    '<table class="id-tab"><thead><tr><th></th><th>Since mentioned</th><th>Gap</th><th>Moves with it · 1 yr</th><th>Beta</th></tr></thead><tbody>' +
+    st.bs.map(function (b) {
+      var gap = b.chg === null ? null : st.chg - b.chg, c = b.c;
+      return '<tr><td>' + esc(b.label) + '</td><td class="num">' + (b.chg === null ? '—' : pct(b.chg)) + '</td><td class="num ' + (gap === null ? '' : gap >= 0 ? 'pos' : 'neg') + '">' + (gap === null ? '—' : (gap >= 0 ? '+' : '−') + Math.abs(gap).toFixed(1) + ' pts') + '</td>' +
+        '<td class="num">' + (c ? c.r.toFixed(2) + ' <small>' + cword(c.r) + '</small>' : '—') + '</td><td class="num">' + (c ? c.beta.toFixed(2) : '—') + '</td></tr>';
+    }).join('') + '</tbody></table>' +
+    '<p class="chartnote" style="margin:8px 0 0">“Moves with it” is the correlation of daily moves over the last year: 1 = in lockstep, 0 = unrelated. Beta: how much it moved for every 1% of the index (1.5 = half as much again). A high correlation with a fund you already own means it adds little diversification.</p></div>';
 }
 function verdictPill(v) { var x = VERDICTS[v] || VERDICTS.watch; return '<span class="otag id-v ' + x[1] + '">' + x[0] + '</span>'; }
 // a little formatting for views written in the chat: blank line = new paragraph, **bold**
@@ -130,9 +173,10 @@ function ideasHTML() {
   h += '<section class="card id-list"><h3>Your ideas<span class="r">since mentioned · vs world (' + esc(bench()) + ')</span></h3>';
   h += list.length ? list.map(function (i) {
     var st = i.ticker ? stats(i) : null, v = (i.views || [])[0];
-    return '<button class="id-row" data-act="idopen" data-id="' + esc(i.id) + '"><span class="id-n"><b>' + esc(i.name) + (i.ticker ? ' · ' + esc(i.ticker) : '') + '</b>' +
+    return '<div class="id-li"><button class="id-row" data-act="idopen" data-id="' + esc(i.id) + '"><span class="id-n"><b>' + esc(i.name) + (i.ticker ? ' · ' + esc(i.ticker) : '') + '</b>' +
       '<small>' + dm(i.date) + (i.source ? ' · ' + esc(i.source) : '') + '</small>' + (v ? verdictPill(v.verdict) : '<span class="otag id-v">no view yet</span>') + '</span>' + spark(st) +
-      '<span class="id-c num">' + (st ? '<span class="' + (st.chg >= 0 ? 'pos' : 'neg') + '">' + pct(st.chg) + '</span>' + (st.bchg !== null ? '<small>world ' + pct(st.bchg) + '</small>' : '') : '<small>' + (i.ticker ? 'price…' : 'no ticker') + '</small>') + '</span></button>';
+      '<span class="id-c num">' + (st ? '<span class="' + (st.chg >= 0 ? 'pos' : 'neg') + '">' + pct(st.chg) + '</span>' + (st.bchg !== null ? '<small>world ' + pct(st.bchg) + '</small>' : '') : '<small>' + (i.ticker ? 'price…' : 'no ticker') + '</small>') + '</span></button>' +
+      '<button class="iconbtn id-x" data-act="iddel" data-id="' + esc(i.id) + '" aria-label="Delete ' + esc(i.name) + '" title="Delete">×</button></div>';
   }).join('') : '<p class="soon">No ideas yet. Tell me about one in the chat, or add it here.</p>';
   h += '<div class="bh-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" data-act="idadd">+ Add an idea</button></div>' + (UI.idAdd ? addHTML() : '') + '</section>';
   if (UI.ideasErr) h += '<p class="neg">Prices: ' + esc(UI.ideasErr) + '</p>';
@@ -156,7 +200,7 @@ function ideaHTML(i) {
   if (st) {
     h += '<div class="id-facts"><div><b class="num">' + fmtP(st.entry) + '</b><span>price when mentioned' + (st.cur ? ' · ' + esc(st.cur) : '') + '</span></div><div><b class="num">' + fmtP(st.last) + '</b><span>' + dm(st.lastDate) + '</span></div>' +
       '<div><b class="num ' + (st.chg >= 0 ? 'pos' : 'neg') + '">' + pct(st.chg) + '</b><span>since mentioned</span></div>' +
-      '<div><b class="num">' + (st.bchg !== null ? (st.chg - st.bchg >= 0 ? '+' : '−') + Math.abs(st.chg - st.bchg).toFixed(1) + ' pts' : '—') + '</b><span>vs world ETF</span></div></div>' + bigChart(st, i);
+      '<div><b class="num">' + (st.bchg !== null ? (st.chg - st.bchg >= 0 ? '+' : '−') + Math.abs(st.chg - st.bchg).toFixed(1) + ' pts' : '—') + '</b><span>vs world ETF</span></div></div>' + bigChart(st, i) + compareHTML(st);
   } else h += '<p class="soon">' + (i.ticker ? ((UI.api || 1) < 5 ? 'Prices need the latest Code.gs (API 5).' : (pxCache()[i.ticker] && pxCache()[i.ticker].error ? 'No prices for ' + esc(i.ticker) + ': ' + esc(pxCache()[i.ticker].error) + '. Check the ticker as Yahoo Finance writes it (e.g. NOVN.SW, VWRL.SW, AAPL).' : 'Loading prices…')) : 'No ticker: nothing to chart. Add one to follow the price.') + '</p>';
   h += '</section>';
   var views = i.views || [];

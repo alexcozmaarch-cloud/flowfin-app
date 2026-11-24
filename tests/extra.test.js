@@ -603,6 +603,9 @@ module.exports = async function () {
     var t = await pg.innerText('#view');
     h.assert(/Novartis · NOVN\.SW/.test(t) && /price when mentioned/.test(t) && /since mentioned/.test(t) && /vs world ETF/.test(t), 'detail with facts: ' + t.slice(0, 400));
     h.assert(await pg.locator('.id-chart svg circle').count() === 1, 'entry marked');
+    h.eq(await pg.locator('.id-tab tbody tr').count(), 3, 'world, S&P 500 and SMI');
+    h.assert(/S&P 500[\s\S]*SMI/.test(await pg.innerText('.id-tab')) && /-?\d\.\d\d/.test(await pg.innerText('.id-tab')), 'correlation numbers');
+    h.eq(await pg.locator('.id-chart svg path').count(), 4, 'idea + three yardstick lines');
     h.assert(/worth a small position/.test(t) && /Patent cliffs — and “CHF” strength/.test(t), 'view kept, accents intact');
     // a second code for the same ticker adds a newer view on top
     await pg.fill('#idCode', code({ n: 'Novartis', t: 'NOVN.SW', d: ds, v: { d: new Date().toISOString().slice(0, 10), r: 'watch', x: 'Valuation caught up.' } }));
@@ -618,6 +621,10 @@ module.exports = async function () {
     h.assert(/No prices for BADX/.test(await pg.innerText('#view')), 'unknown ticker explained');
     await pg.click('[data-act=iddel]'); await h.settled(app);
     h.eq(Object.values(app.store.Settings).filter(function (r) { return /^idea_/.test(r.key); }).length, 2, 'deleted');
+    await pg.click('[data-act=idopen][data-id=""]').catch(function () {}); await pg.waitForTimeout(200);
+    var nBefore = await pg.locator('.id-li').count();
+    await pg.locator('.id-li:has-text("CHF dividend carry") .id-x').click(); await h.settled(app);
+    h.eq(await pg.locator('.id-li').count(), nBefore - 1, 'deleted from the list');
     var list = await pg.innerText('#view');
     h.assert(/Novartis/.test(list) && /world/.test(list), 'list shows change vs world');
     h.noErrors(app); await app.ctx.close();

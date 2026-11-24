@@ -118,10 +118,12 @@ function riskNow(ov) {
 }
 
 // ─── the cap, period by period ────────────────────────────────────────────
-// Each finished period is judged on five checks; each 👍 adds 0.5% to the next period's share, each 👎 takes 0.5% off.
+// Each finished period is judged on six checks; each 👍 adds 0.5% to the next period's share, each 👎 takes 0.5% off.
 // Cards sold add 1:1 to that period's cap; going over is borrowed from the next period.
-function judge(f, cap, ov, live) {
+function judge(f, cap, ov, live, r) {
   var startD = ymd(addDays(f.p.start, -1)), endD = ymd(live ? today() : f.p.end);
+  var endDay = live ? today() : f.p.end, first = firstTxDay(), mp = spendByDay(ov, r, addDays(endDay, -89), endDay);
+  var s30 = movingAvg(mp, 'spec', endDay, 30, first), s90 = movingAvg(mp, 'spec', endDay, 90, first), enough = daysBetween(first, endDay) >= 89;
   var a = riskOn(startD, ov), b = riskOn(endD, ov), known = b.total > 0 && a.total > 0 && (a.safe !== b.safe || a.spec !== b.spec);
   var checks = [
     { k:'cap', t:'Within the cap', s:f.specNet <= cap ? 'ok' : 'bad', d:chf0(f.specNet) + ' of ' + chf0(cap) },
@@ -129,12 +131,37 @@ function judge(f, cap, ov, live) {
     { k:'few', t:'Fewer, better buys: at most ' + CAP.maxBuys + ' purchases', s:f.buyCount <= CAP.maxBuys ? 'ok' : 'bad', d:f.buyCount + (live ? ' so far' : '') },
     { k:'share', t:'Collection share didn’t grow', s:f.back >= f.spec && f.spec > 0 ? 'ok' : !known ? 'wait' : b.specShare <= a.specShare ? 'ok' : 'bad',
       d:known ? a.specShare.toFixed(1) + '% → ' + b.specShare.toFixed(1) + '%' : (f.back ? 'sold ' + chf0(f.back) : 'needs a Wealth update') },
+    { k:'trend', t:'Collectibles pace: 30-day average at or below the 90-day', s:!enough ? 'wait' : s30 <= s90 + 0.05 ? 'ok' : 'bad',
+      d:enough ? s30.toFixed(1) + ' vs ' + s90.toFixed(1) + ' a day' + (live ? ' so far' : '') : 'needs 90 days of history' },
     { k:'saved', t:'Saved something', s:live ? 'wait' : f.left > 0 ? 'ok' : 'bad', d:live ? 'decided on the ' + f.p.end.getDate() + 'th' : sg(f.left) }
   ];
   // while the period runs, "within the cap" and "fewer buys" can still change: show them as on track / not
   if (live && checks[0].s === 'ok') checks[0].d += ' · on track';
   var good = checks.filter(function (c) { return c.s === 'ok'; }).length, bad = checks.filter(function (c) { return c.s === 'bad'; }).length;
   return { checks:checks, good:good, bad:bad, delta:(good - bad) * CAP.step };
+}
+// ─── moving averages: CHF per calendar day, days without spending count as 0 ──
+function firstTxDay() {
+  if (_ffFirst && _ffFirst.n === txs().length) return _ffFirst.d;
+  var m = ''; txs().forEach(function (tx) { var d = String(tx.date || '').slice(0, 10); if (/^\d{4}-\d\d-\d\d$/.test(d) && (!m || d < m)) m = d; });
+  _ffFirst = { n:txs().length, d:m ? pd(m) : today() }; return _ffFirst.d;
+}
+var _ffFirst = null;
+function spendByDay(ov, r, from, to) {   // { 'YYYY-MM-DD': { personal, spec } }
+  var out = {}, a = ymd(from), b = ymd(to);
+  txs().forEach(function (tx) {
+    var k = String(tx.date).slice(0, 10); if (k < a || k > b || tx.type === 'income') return;
+    var bk = dayBucket(flowLabel(tx, ov, r)); if (bk !== 'personal' && bk !== 'spec') return;
+    var v = +tx.amount || 0; if (tx.type === 'refund') v = -v;
+    (out[k] = out[k] || { personal:0, spec:0 })[bk] += v;
+  });
+  return out;
+}
+// average over the last n days up to `end` (fewer if your history starts later); null before the first transaction
+function movingAvg(map, k, end, n, first) {
+  var len = Math.min(n, daysBetween(first, end) + 1), s = 0; if (len < 1) return null;
+  for (var i = 0; i < len; i++) { var x = map[ymd(addDays(end, -i))]; if (x) s += x[k]; }
+  return Math.max(0, s / len);
 }
 function sg(v) { return (v >= 0 ? '+ ' : '− ') + chf0(Math.abs(v)); }
 function clampPct(x) { return Math.max(CAP.min, Math.min(CAP.max, Math.round(x * 2) / 2)); }
@@ -146,7 +173,7 @@ function capHistory() {
     var p = periodFor(s), live = p.start.getTime() === cur.start.getTime();
     var f = flowsFor(p, live ? t : p.end, ov, r, avg, av.avgInfra);
     var base = f.takeHome * pct / 100, cap = Math.max(0, base + f.back - owed);
-    var j = judge(f, cap, ov, live);
+    var j = judge(f, cap, ov, live, r);
     out.push({ p:p, f:f, pct:pct, base:base, borrowed:owed, cap:cap, judge:j, live:live });
     owed = Math.max(0, f.specNet - (base - owed));   // over the cap (sales already netted in specNet)
     pct = clampPct(pct + j.delta);
@@ -388,48 +415,110 @@ function dailyModel(ov, r, room) {
   days.forEach(function (x) { DAY_KEYS.forEach(function (k) { if (x[k] < 0) x[k] = 0; }); x.total = DAY_KEYS.reduce(function (s, k) { return s + x[k]; }, 0); x.free = x.personal + x.spec + x.invest; });
   var past = days.filter(function (x) { return !x.future; });
   var sum = {}; DAY_KEYS.forEach(function (k) { sum[k] = past.reduce(function (s, x) { return s + x[k]; }, 0); });
-  return { days:days, past:past, sum:sum, room:room, spendDays:past.filter(function (x) { return x.free > 0.5; }).length };
+  var first = firstTxDay(), mp = spendByDay(ov, r, addDays(from, -89), t);
+  past.forEach(function (x) { ['personal', 'spec'].forEach(function (k) { x[k + '30'] = movingAvg(mp, k, x.d, 30, first); x[k + '90'] = movingAvg(mp, k, x.d, 90, first); }); });
+  return { days:days, past:past, sum:sum, room:room, first:first, full90:daysBetween(first, t) >= 89, spendDays:past.filter(function (x) { return x.free > 0.5; }).length };
 }
+// Two panes, like a price chart: top = what went out each day (stacked), bottom = 30- and 90-day averages per day
+// for personal (all cards and cash) and collectibles, with the collectibles cap spread per day. Approved 24.11.2026 (mockup "FlowFin Trend Lines").
+function niceStep(v, steps) { for (var i = 0; i < steps.length; i++) if (steps[i] * 4 >= v) return steps[i]; return Math.ceil(v / 4 / 100) * 100; }
 function daysHTML(M, m) {
-  var W = 740, H = 236, top = 24, base = 192, n = M.days.length, bw = W / n;
-  var vals = M.days.map(function (x) { return x.free + (x.household > 0 ? x.household : 0); }).sort(function (a, b) { return a - b; });
-  // the scale follows your ordinary days: anything above about 3× the 90th percentile is cut and labelled
-  var p90 = vals[Math.floor(vals.length * 0.9)] || 0, maxv = Math.max(M.room * 3, Math.min(vals[vals.length - 1] || 1, Math.max(p90 * 1.6, 100)));
+  var W = 760, R = 58, PW = W - R, n = M.days.length, bw = PW / n;
+  var T1 = 26, B1 = 190, T2 = 226, B2 = 352, H = B2 + 24;
+  var X = function (i) { return i * bw + bw / 2; };
+  var mode = UI.bhMa || 'both', capDay = (m.now.cap || 0) / 30;
   var COL = { personal:'var(--s4)', spec:'var(--signal)', invest:'var(--s2)', household:'var(--s3)' };
-  var g = '', y = function (v) { return base - v / maxv * (base - top); }, todayX = 0;
+  // top scale follows ordinary days; anything far above is cut and labelled
+  var vals = M.days.map(function (x) { return x.total; }).sort(function (a, b) { return a - b; });
+  var p90 = vals[Math.floor(vals.length * 0.9)] || 0, st1 = niceStep(Math.max(M.room * 2.5, p90 * 1.3, 40), [10, 20, 25, 50, 75, 100, 150, 200, 250]), max1 = st1 * 4;
+  var y1 = function (v) { return B1 - Math.min(v, max1) / max1 * (B1 - T1); };
+  // bottom scale: the averages shown, and the cap per day
+  var lines = [];
+  if (mode !== 'spec') lines.push({ k:'personal30', c:'var(--ink)', w:2 }, { k:'personal90', c:'var(--ink)', w:1.6, dash:'5 3' });
+  if (mode !== 'personal') lines.push({ k:'spec30', c:'var(--signal)', w:2 }, { k:'spec90', c:'var(--signal)', w:1.6, dash:'5 3' });
+  var mx = mode === 'personal' ? 1 : capDay;
+  M.past.forEach(function (x) { lines.forEach(function (l) { if (x[l.k] > mx) mx = x[l.k]; }); });
+  var st2 = niceStep(mx * 1.12, [2, 5, 10, 15, 20, 25, 50, 75, 100]), max2 = st2 * 4, y2 = function (v) { return B2 - Math.min(v, max2) / max2 * (B2 - T2); };
+  var g = '', todayI = M.past.length - 1, tx = (todayI + 1) * bw, v, selI = -1;
+  // grid and right-hand scale
+  for (v = 0; v <= max1; v += st1) g += '<line x1="0" x2="' + PW + '" y1="' + y1(v).toFixed(1) + '" y2="' + y1(v).toFixed(1) + '" stroke="var(--rule)"/><text x="' + (PW + 6) + '" y="' + (y1(v) + 3.5).toFixed(1) + '" class="t">' + chf0(v) + '</text>';
+  for (v = 0; v <= max2; v += st2) g += '<line x1="0" x2="' + PW + '" y1="' + y2(v).toFixed(1) + '" y2="' + y2(v).toFixed(1) + '" stroke="var(--rule)"/>';
+  g += '<text x="0" y="' + (T1 - 8) + '" class="t">CHF a day</text><text x="0" y="' + (T2 - 8) + '" class="t">average a day · 30 d solid · 90 d dashed</text>';
+  // bars
   M.days.forEach(function (x, i) {
-    var xx = i * bw + 1.5, w = Math.max(2, bw - 3), cur = base, tot = x.total, over = tot > maxv, sc = over ? (base - top - 10) / tot : (base - top) / maxv;
-    var bars = '';
-    ['personal', 'spec', 'invest', 'household'].forEach(function (k) {
+    var xx = i * bw + 1.5, w = Math.max(2, bw - 3), cur = B1, tot = x.total, over = tot > max1, sc = over ? (B1 - T1 - 12) / tot : (B1 - T1) / max1, bars = '';
+    DAY_KEYS.forEach(function (k) {
       if (!(x[k] > 0)) return; var hh = x[k] * sc; cur -= hh;
       bars += '<rect x="' + xx.toFixed(1) + '" y="' + cur.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="' + (x.future ? 'url(#bhHatch)' : COL[k]) + '"/>';
     });
-    if (over) bars += '<rect x="' + xx.toFixed(1) + '" y="' + (top + 26) + '" width="' + w.toFixed(1) + '" height="5" fill="var(--bg)"/><text x="' + (xx + w / 2).toFixed(1) + '" y="' + (cur - 5).toFixed(1) + '" text-anchor="middle" class="t">' + chf0(tot) + '</text>';
-    if (UI.bhDay === x.key) bars = '<rect x="' + (xx - 1.5).toFixed(1) + '" y="' + (top - 18) + '" width="' + (w + 3).toFixed(1) + '" height="' + (base - top + 18) + '" fill="var(--shade)"/>' + bars;
+    if (over) bars += '<rect x="' + xx.toFixed(1) + '" y="' + (T1 + 22) + '" width="' + w.toFixed(1) + '" height="4" fill="var(--paper)"/><text x="' + (xx + w / 2).toFixed(1) + '" y="' + (cur - 4).toFixed(1) + '" text-anchor="middle" class="t">' + chf0(tot) + '</text>';
+    if (UI.bhDay === x.key) selI = i;
     g += '<g class="bh-dayhit" data-act="bhday" data-d="' + x.key + '" role="button" tabindex="0" aria-label="' + x.d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' }) + ': ' + chf0(tot) + (x.future ? ' scheduled' : '') + '">' +
-      '<rect x="' + (i * bw).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + (base + 18) + '" fill="transparent"/>' + bars + '</g>';
-    if (x.d.getDay() === 1) g += '<text x="' + (xx + w / 2).toFixed(1) + '" y="' + (base + 14) + '" text-anchor="middle" class="t">' + x.d.getDate() + '.' + (x.d.getMonth() + 1) + '.</text>';
-    if (!x.future) todayX = (i + 1) * bw;
+      '<rect x="' + (i * bw).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + H + '" fill="transparent"/>' + bars + '</g>';
+    if (i === 0 || x.d.getDay() === 1) g += '<line x1="' + X(i).toFixed(1) + '" x2="' + X(i).toFixed(1) + '" y1="' + B2 + '" y2="' + (B2 + 4) + '" stroke="var(--ink)"/><text x="' + (i === 0 ? 0 : X(i)).toFixed(1) + '" y="' + (B2 + 17) + '" text-anchor="' + (i === 0 ? 'start' : 'middle') + '" class="t">' + x.d.getDate() + '.' + (x.d.getMonth() + 1) + '.</text>';
   });
-  var ry = y(M.room);
-  g += '<line x1="0" x2="' + todayX.toFixed(1) + '" y1="' + ry.toFixed(1) + '" y2="' + ry.toFixed(1) + '" stroke="var(--ink)" stroke-dasharray="4 3" stroke-width="1.2"/>' +
-    '<text x="' + (todayX - 6).toFixed(1) + '" y="' + (ry - 5).toFixed(1) + '" text-anchor="end" class="t">room ' + chf0(M.room) + ' a day</text>' +
-    '<line x1="' + todayX.toFixed(1) + '" x2="' + todayX.toFixed(1) + '" y1="' + (top - 18) + '" y2="' + base + '" stroke="var(--ink)" stroke-width="1.5"/><text x="' + (todayX - 4).toFixed(1) + '" y="' + (top - 8) + '" text-anchor="end" class="t">today</text>' +
-    '<line x1="0" x2="' + W + '" y1="' + base + '" y2="' + base + '" stroke="var(--ink)"/>';
-  var svg = '<div class="bh-chart"><svg viewBox="0 -4 ' + W + ' ' + H + '" role="img" aria-label="Spending per day: last 30 days and the next 7 scheduled">' +
+  // room, today, baselines
+  var ry = y1(M.room);
+  g += '<line x1="0" x2="' + tx.toFixed(1) + '" y1="' + ry.toFixed(1) + '" y2="' + ry.toFixed(1) + '" stroke="var(--ink)" stroke-dasharray="4 3" stroke-width="1.2"/>' +
+    '<text x="' + (tx - 6).toFixed(1) + '" y="' + (ry - 5).toFixed(1) + '" text-anchor="end" class="t bh-halo">room ' + chf0(M.room) + '</text>' +
+    '<line x1="' + tx.toFixed(1) + '" x2="' + tx.toFixed(1) + '" y1="' + (T1 - 18) + '" y2="' + B2 + '" stroke="var(--ink)" stroke-width="1.5"/><text x="' + (tx + 4).toFixed(1) + '" y="' + (T1 - 8) + '" class="t">today</text>' +
+    '<line x1="0" x2="' + PW + '" y1="' + B1 + '" y2="' + B1 + '" stroke="var(--ink)"/><line x1="0" x2="' + PW + '" y1="' + B2 + '" y2="' + B2 + '" stroke="var(--ink)"/>';
+  // collectibles: shade where the 30-day pace runs above the 90-day one; cap per day
+  if (mode !== 'personal') {
+    var top = [], bot = [];
+    M.past.forEach(function (x, i) { if (x.spec30 === null || x.spec90 === null) return; top.push(X(i).toFixed(1) + ',' + y2(Math.max(x.spec30, x.spec90)).toFixed(1)); bot.unshift(X(i).toFixed(1) + ',' + y2(x.spec90).toFixed(1)); });
+    if (top.length > 1) g += '<polygon points="' + top.concat(bot).join(' ') + '" fill="var(--signal)" opacity=".12"/>';
+    if (capDay > 0) g += '<line x1="0" x2="' + tx.toFixed(1) + '" y1="' + y2(capDay).toFixed(1) + '" y2="' + y2(capDay).toFixed(1) + '" stroke="var(--signal)" stroke-dasharray="1.5 3" stroke-width="1.5"/>';
+  }
+  var tags = [], last = M.past[todayI];
+  lines.forEach(function (l) {
+    var pts = []; M.past.forEach(function (x, i) { if (x[l.k] !== null && x[l.k] !== undefined) pts.push(X(i).toFixed(1) + ',' + y2(x[l.k]).toFixed(1)); });
+    if (pts.length > 1) g += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + l.c + '" stroke-width="' + l.w + '"' + (l.dash ? ' stroke-dasharray="' + l.dash + '"' : '') + ' stroke-linejoin="round"/>';
+    if (last && last[l.k] !== null) tags.push({ y:y2(last[l.k]), t:last[l.k].toFixed(1), c:l.c, solid:!l.dash });
+  });
+  if (mode !== 'personal' && capDay > 0) tags.push({ y:y2(capDay), t:capDay.toFixed(1), c:'var(--signal)', cap:true });
+  tags.sort(function (a, b) { return a.y - b.y; });
+  for (var q = 1; q < tags.length; q++) if (tags[q].y - tags[q - 1].y < 19) tags[q].y = tags[q - 1].y + 19;
+  for (q = tags.length - 1; q >= 0; q--) { var lim = q === tags.length - 1 ? B2 - 9 : tags[q + 1].y - 19; if (tags[q].y > lim) tags[q].y = lim; }
+  tags.forEach(function (t) {
+    g += '<rect x="' + (PW + 1.5) + '" y="' + (t.y - 9).toFixed(1) + '" width="' + (R - 2) + '" height="18" ' + (t.solid ? 'fill="' + t.c + '"' : 'fill="var(--paper)" stroke="' + t.c + '" stroke-dasharray="' + (t.cap ? '1.5 2' : '3 2') + '"') + '/>' +
+      '<text x="' + (PW + 6) + '" y="' + (t.y + 4).toFixed(1) + '" class="tg" style="fill:' + (t.solid ? 'var(--paper)' : t.c) + '">' + t.t + '</text>';
+  });
+  // crosshair on the day you tapped
+  if (selI > -1) { var sx = X(selI).toFixed(1); g += '<line x1="' + sx + '" x2="' + sx + '" y1="' + (T1 - 18) + '" y2="' + B2 + '" stroke="var(--muted)" stroke-dasharray="2 2" pointer-events="none"/>'; }
+  var svg = '<div class="bh-chart"><svg viewBox="0 -4 ' + W + ' ' + H + '" role="img" aria-label="Spending per day for the last 30 days and the next 7 scheduled, with 30- and 90-day averages">' +
     '<defs><pattern id="bhHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--paper)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--s3)" stroke-width="3"/></pattern></defs>' + g + '</svg></div>';
-  var keys = '<div class="bh-keys"><span><i class="sw personal"></i>Personal</span><span><i class="sw spec"></i>Collectibles</span><span><i class="sw invest"></i>Invested · 3a</span><span><i class="sw household"></i>Household</span><span><i class="sw sched"></i>Scheduled</span></div>';
+  var seg = '<span class="seg2 bh-maseg" role="radiogroup" aria-label="Average lines">' + [['both', 'Both'], ['personal', 'Personal'], ['spec', 'Collectibles']].map(function (o) {
+    return '<button role="radio" aria-checked="' + (mode === o[0]) + '" class="' + (mode === o[0] ? 'on' : '') + '" data-act="bhma" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</span>';
+  var keys = '<div class="bh-keys"><span><i class="sw personal"></i>Personal</span><span><i class="sw spec"></i>Collectibles</span><span><i class="sw invest"></i>Invested · 3a</span><span><i class="sw household"></i>Household</span><span><i class="sw sched"></i>Scheduled</span>' +
+    '<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="var(--ink)" stroke-width="2"/></svg>30-day avg</span>' +
+    '<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="var(--ink)" stroke-width="1.6" stroke-dasharray="5 3"/></svg>90-day avg</span>' +
+    '<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="var(--signal)" stroke-width="1.6" stroke-dasharray="1.5 3"/></svg>Cap a day</span></div>';
   var capNow = m.now.cap, sum = M.sum;
   var tiles = '<div class="bh-tiles"><div><b class="num">' + chf0(sum.household) + '</b><span>household · 30 days</span></div><div><b class="num">' + chf0(sum.personal) + '</b><span>personal</span></div>' +
     '<div><b class="num' + (sum.spec > capNow ? ' neg' : '') + '">' + chf0(sum.spec) + '</b><span>collectibles · cap ' + chf0(capNow) + '</span></div><div><b class="num">' + chf0(sum.invest) + '</b><span>invested · 3a</span></div>' +
     '<div><b class="num">' + M.spendDays + '</b><span>days with spending · ' + (M.past.length - M.spendDays) + ' without</span></div></div>';
-  var sel = M.days.filter(function (x) { return x.key === UI.bhDay; })[0], box = '';
+  function sig(name, k, red, extra) {
+    if (!last || last[k + '30'] === null || last[k + '90'] === null) return '<div><span class="lbl">' + name + '</span><span class="soon">Not enough history yet.</span></div>';
+    var a = last[k + '30'], b = last[k + '90'], d = b ? (a / b - 1) * 100 : a > 0 ? 100 : 0, up = d > 0.5, dn = d < -0.5;
+    return '<div><span class="lbl">' + name + ' <i class="tag ' + (up && red ? 'neg' : dn ? 'pos' : '') + '">' + (up ? '▲ faster +' : dn ? '▼ slower −' : '= steady ') + Math.abs(d).toFixed(0) + '%</i></span>' +
+      '<b class="num' + (up && red ? ' neg' : '') + '">' + a.toFixed(1) + ' <small>vs ' + b.toFixed(1) + ' a day</small></b><span class="soon">' + extra(a) + '</span></div>';
+  }
+  var sigs = '<div class="bh-sig">' +
+    sig('Personal · all cards & cash', 'personal', false, function (a) { return '30-day pace ≈ ' + chf0(a * 30) + ' a month'; }) +
+    sig('Collectibles', 'spec', true, function (a) { return capDay > 0 ? 'cap ' + capDay.toFixed(1) + ' a day · ' + (a > capDay ? 'pace ' + Math.round((a / capDay - 1) * 100) + '% over it' : 'pace within it') : ''; }) + '</div>';
+  var sel = selI > -1 ? M.days[selI] : null, box = '';
   if (sel) {
     box = '<div class="bh-daybox"><div class="bh-dayhead"><b>' + sel.d.toLocaleDateString('en-GB', { weekday:'short', day:'numeric', month:'short' }) + (sel.future ? ' · scheduled' : '') + '</b><button class="iconbtn" data-act="bhday" data-d="" aria-label="Close">×</button></div>' +
       (sel.items.length ? sel.items.map(function (it) { return '<div><span>' + esc(it.name) + (it.approx ? ' <small>expected</small>' : '') + '</span><span class="num">' + (it.amount < 0 ? '−' : '') + chf0(Math.abs(it.amount)) + '</span></div>'; }).join('') : '<p class="soon">Nothing ' + (sel.future ? 'scheduled' : 'spent') + '.</p>') +
-      (!sel.future && sel.free > M.room ? '<div class="soon"><span>Over your room by</span><span class="num neg">' + chf0(sel.free - M.room) + '</span></div>' : '') + '</div>';
+      (!sel.future && sel.free > M.room ? '<div class="soon"><span>Over your room by</span><span class="num neg">' + chf0(sel.free - M.room) + '</span></div>' : '') +
+      (!sel.future && sel.personal30 !== null ? '<div class="soon"><span>Personal average · 30 / 90 days</span><span class="num">' + sel.personal30.toFixed(1) + ' / ' + sel.personal90.toFixed(1) + '</span></div>' +
+        '<div class="soon"><span>Collectibles average · 30 / 90 days</span><span class="num">' + sel.spec30.toFixed(1) + ' / ' + sel.spec90.toFixed(1) + '</span></div>' : '') + '</div>';
   }
-  return keys + svg + tiles + box + '<p class="soon">The dashed line is your room: what’s left after the household, spread over 30 days. Tap a day to see what it was. Very tall days are cut, with their amount on top.</p>';
+  return '<div class="bh-mahead">' + keys + seg + '</div>' + svg + sigs + tiles + box +
+    '<p class="soon">Bottom pane: what you spend on an average day, over the last 30 days (solid) and 90 days (dashed); days without spending count as 0. When the solid line runs above the dashed one you are spending faster than usual. The dotted red line is your collectibles cap spread over 30 days.' +
+    (M.full90 ? '' : ' Your history starts ' + M.first.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) + ', so early averages use fewer days.') +
+    ' Tap a day to see what it was; very tall days are cut, with their amount on top.</p>';
 }
 function mixHTML(M) {
   // one bar per week (Monday to Sunday), each at 100%: how the mix of your own spending shifts

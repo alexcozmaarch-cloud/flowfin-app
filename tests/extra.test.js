@@ -498,7 +498,7 @@ module.exports = async function () {
     h.noErrors(app); await app.ctx.close();
   });
   console.log('\nBehaviour');
-  await h.test('Behaviour: flows, the cap with its five checks, wealth by risk, 3a and the suggestion', async function () {
+  await h.test('Behaviour: flows, the cap with its six checks, wealth by risk, 3a and the suggestion', async function () {
     var data = JSON.parse(JSON.stringify(demo.data));
     var d = new Date(); d.setDate(d.getDate() - 1); var ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
     data.Transaction.push({ id: 'cx1', date: ds, description: 'Booster box - Cardmarket', category: 'Collectibles', subcategory: 'TCG Investing', amount: 120, type: 'investment', account: 'credit_card', tags: 'sealed' });
@@ -509,7 +509,7 @@ module.exports = async function () {
     h.eq(app.store.Transaction.cx1.type, 'expense', 'card purchase logged as investment is now spending');
     h.assert(/3A IN \d{4}[\s\S]*7.258 · maxed/i.test(t) || new Date().getFullYear() > 2026, '3a 2026 marked as maxed');
     await pg.click('summary:has-text("How this cap was set")'); await pg.waitForTimeout(150);
-    h.eq(await pg.locator('.bh-checks li').count(), 5, 'five checks');
+    h.eq(await pg.locator('.bh-checks li').count(), 6, 'six checks');
     await pg.click('[data-act=bhview][data-v=avg]'); await pg.waitForTimeout(200);
     h.assert(/Average of the last/.test(await pg.innerText('#view')), 'average view');
     h.noErrors(app); await app.ctx.close();

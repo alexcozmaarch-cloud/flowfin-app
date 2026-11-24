@@ -155,6 +155,7 @@ document.addEventListener('click', function (e) {
   }
   if (act === 'bhview') { UI.bhView = a.getAttribute('data-v'); return draw(); }
   if (act === 'bhchart') { UI.bhChart = a.getAttribute('data-v'); UI.bhDay = ''; return draw(); }
+  if (act === 'bhma') { UI.bhMa = a.getAttribute('data-v'); return draw(); }
   if (act === 'bhday') { var dk = a.getAttribute('data-d'); UI.bhDay = UI.bhDay === dk ? '' : dk; return draw(); }
   if (act === 'bhsale' || act === 'bhwant') { var fk = act === 'bhsale' ? 'sale' : 'want'; UI.bhForm = UI.bhForm === fk ? '' : fk; UI.bhErr = ''; draw(); setTimeout(function () { var n = $('bhfName'); if (n) n.focus(); }, 30); return; }
   if (act === 'bhformx') { UI.bhForm = ''; UI.bhErr = ''; return draw(); }

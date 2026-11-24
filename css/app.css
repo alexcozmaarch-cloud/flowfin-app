@@ -677,6 +677,17 @@ details.fold>summary:hover h3{color:var(--muted)}
 .bh-chart{overflow-x:auto}
 .bh-chart svg{width:100%;min-width:560px;height:auto;display:block}
 .bh-chart .t{font-family:var(--f-mono);font-size:10px;fill:var(--muted)}
+.bh-chart .tg{font-family:var(--f-mono);font-size:11px;font-weight:500}
+.bh-chart .bh-halo{paint-order:stroke;stroke:var(--paper);stroke-width:4px;fill:var(--ink)}
+.bh-mahead{display:flex;justify-content:space-between;align-items:flex-start;gap:10px 16px;flex-wrap:wrap}
+.bh-mahead .bh-keys{flex:1 1 320px;min-width:0}.bh-keys svg{display:block}
+.bh-sig{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-top:1px solid var(--rule)}
+.bh-sig>div{padding:10px 12px 8px 0;display:grid;gap:3px;min-width:0}
+.bh-sig>div+div{padding-left:12px;border-left:1px solid var(--rule)}
+.bh-sig b{font-size:20px;font-weight:500}.bh-sig b small{font-size:12px;color:var(--muted);font-weight:400}
+.bh-sig .lbl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.bh-sig .tag{font-style:normal;font-family:var(--f-mono);font-size:10.5px;padding:0 5px;border:1px solid currentColor;letter-spacing:0;text-transform:none}
+.bh-sig .tag.neg{color:var(--signal)}.bh-sig .tag.pos{color:var(--good)}
 .bh-dayhit{cursor:pointer}.bh-dayhit:focus{outline:none}.bh-dayhit:focus-visible rect:first-child{fill:var(--shade)}
 .bh-keys{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px}
 .bh-keys span{display:inline-flex;gap:6px;align-items:center}.bh-keys .sw{width:12px;height:12px;display:inline-block}
@@ -690,7 +701,7 @@ details.fold>summary:hover h3{color:var(--muted)}
 .bh-daybox small{color:var(--muted)}
 .bh-dayhead{align-items:center}
 .bh-sub2{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px;border-top:1px solid var(--rule);padding-top:10px}
-@media (max-width:640px){.bh-chart svg{min-width:0}.bh-chart .t{font-size:19px}}
+@media (max-width:640px){.bh-chart svg{min-width:0}.bh-chart .t{font-size:19px}.bh-chart .tg{font-size:15px}.bh-sig{grid-template-columns:minmax(0,1fr)}.bh-sig>div+div{padding-left:0;border-left:0;border-top:1px solid var(--rule)}}
 
 /* Joint owes you (23.11.2026) */
 .jt .jt-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 10px;align-items:baseline;padding:8px 0;border-top:1px solid var(--rule);font-size:14px}

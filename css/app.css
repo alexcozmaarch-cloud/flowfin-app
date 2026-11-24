@@ -829,6 +829,9 @@ details.fold>summary:hover h3{color:var(--muted)}
 .br-bar{display:block;height:5px;background:var(--s3);margin:5px 0 0 auto}.br-bar.best{background:var(--ink)}.br-bar.bad{background:var(--signal)}
 .br-fit{font-family:var(--f-mono);font-size:11px;white-space:nowrap}.br-fit.yes{color:var(--good)}.br-fit.no{color:var(--signal)}
 .br-note{font-size:13.5px;margin:0;border-left:3px solid var(--ink);padding-left:10px}
-.br-subm{display:none}
+.br-tab td small.br-subm{display:none}
 @media (max-width:640px){.br-tab{min-width:0;font-size:12.5px}.br-tab th:nth-child(4),.br-tab td:nth-child(4),.br-tab th:nth-child(5),.br-tab td:nth-child(5){display:none}
-  .br-subm{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}}
+  .br-tab td small.br-subm{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}}
+.br-tab tr.br-warn td{padding-top:0;font-size:12px;color:var(--muted)}.br-tab tr.br-warn td span{color:var(--signal);font-family:var(--f-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
+.br-tab tr:has(+ tr.br-warn) td{border-bottom:0}
+@media (max-width:640px){.br-tab tr.br-warn td{display:table-cell!important}}

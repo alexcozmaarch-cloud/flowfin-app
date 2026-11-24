@@ -683,7 +683,8 @@ module.exports = async function () {
     var app = await h.openApp({ data: demo.data, hash: 'ideas' }), pg = app.page; await h.settled(app, 10000); await pg.waitForTimeout(500);
     var t = await pg.innerText('.br-card');
     h.assert(/Where to buy/i.test(t) && /Interactive Brokers/.test(t) && /UBS e-banking/.test(t), 'shortlist shown');
-    h.eq(await pg.locator('.br-tab tbody tr').count(), 9, 'nine brokers');
+    h.eq(await pg.locator('.br-tab tbody tr:not(.br-warn)').count(), 9, 'nine brokers');
+    h.assert(/EUR 22,000/.test(t) && /your plan/.test(t), 'Revolut caveats shown, CHF 500 plan selected');
     await pg.click('[data-act="bramt"][data-v="3000"]'); await pg.waitForTimeout(200);
     var ib = await pg.locator('.br-tab tbody tr').first().locator('td').nth(2).innerText();
     h.assert(/^18\b/.test(ib.trim()), 'IBKR at CHF 3,000 a month: 12 × CHF 1.50 = 18, got ' + ib);

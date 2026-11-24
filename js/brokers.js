@@ -13,7 +13,8 @@ var DEFAULT = { d:'2026-11-24', note:'', list:[
   { n:'Yuh', have:1, sub:'CHF 0 in a monthly plan (31 ETFs) · no custody · 0.95% FX unless CHF-traded', fit:'auto', stamp:true },
   { n:'Saxo AutoInvest', sub:'CHF 0 on 100+ iShares/Amundi ETFs · no custody · whole shares only', fit:'alt', stamp:true },
   { n:'neon invest', sub:'0% on 8 partner ETFs (incl. FTSE All-World) · no custody · all in CHF', fit:'alt', stamp:true },
-  { n:'Revolut', have:1, sub:'commission-free plans · FX 1% above CHF 1,250 a month · Lithuanian broker, no Swiss tax statement', fit:'side', fxFree:1250, fxPct:0.01, stamp:false },
+  { n:'Revolut', have:1, sub:'commission-free plan buys on weekdays · EUR-traded ETFs: FX free up to CHF 1,250 a month, then 1% (+1% at weekends)', fit:'side', fxFree:1250, fxPct:0.01, stamp:false,
+    warn:'Lithuanian broker (Revolut Securities Europe): compensation only up to EUR 22,000 if it fails · selling 0.25% (min EUR 1) plus FX back to CHF · no Swiss tax statement · moving ETFs out may mean selling' },
   { n:'finpension Invest', have:1, sub:'no trading fee · 0.39% a year (custody 0.30% + management 0.09%)', fit:'hands', cPct:0.0039, stamp:true },
   { n:'Swissquote', have:1, sub:'CHF 3 (≤500) / CHF 9 a buy + 0.85 data · custody CHF 80–200 a year · 0.95% FX', fit:'no', bTiers:[[500, 3], [1e12, 9]], bFlat:0.85, cFlat:80, cFlatHi:200, stamp:true },
   { n:'PostFinance', sub:'about 1% a buy · custody credited back as trading', fit:'no', bPct:0.01, stamp:true },
@@ -34,9 +35,10 @@ function perBuy(b, a) {
 function custody(b, v) { return v * (b.cPct || 0) + (v <= 50000 ? (b.cFlat || 0) : (b.cFlatHi === undefined ? (b.cFlat || 0) : b.cFlatHi)); }
 function yearCost(b, a, v) { return 12 * perBuy(b, a) + custody(b, v) + (b.stamp ? 12 * a * STAMP : 0); }
 
-var AMTS = [300, 750, 1500, 3000];
+var AMTS = [300, 500, 750, 1500, 3000];
+var PLAN = 500;   // Alex: at most CHF 500 a month (24.11.2026)
 function brokersHTML(inv) {
-  var T = table(), mine = Math.round((inv || 0) / 50) * 50, a = UI.brAmt || mine || 750;
+  var T = table(), mine = Math.round((inv || 0) / 50) * 50, a = UI.brAmt || PLAN;
   var chips = (mine && AMTS.indexOf(mine) < 0 ? [mine] : []).concat(AMTS).sort(function (x, y) { return x - y; });
   var rows = T.list.map(function (b) { return { b:b, y1:yearCost(b, a, a * 6.5), y50:yearCost(b, a, 50000) }; });
   var max = Math.max.apply(null, rows.map(function (r) { return r.y50; })) || 1, min = Math.min.apply(null, rows.filter(function (r) { return r.b.fit !== 'side'; }).map(function (r) { return r.y50; }));
@@ -45,18 +47,22 @@ function brokersHTML(inv) {
   var stop = worst.filter(function (r) { return !/UBS/.test(r.b.n); })[0] || worst[0];
   var h = '<section class="card br-card"><h3>Where to buy<span class="r">checked monthly · ' + esc(T.d.split('-').reverse().join('.')) + '</span></h3>' +
     '<div class="br-amt"><span class="lbl">A month</span><span class="seg2" role="radiogroup" aria-label="Monthly amount">' + chips.map(function (x) {
-      return '<button role="radio" aria-checked="' + (x === a) + '" class="' + (x === a ? 'on' : '') + '" data-act="bramt" data-v="' + x + '">' + chf0(x) + (x === mine ? ' · yours' : '') + '</button>'; }).join('') + '</span></div>';
+      return '<button role="radio" aria-checked="' + (x === a) + '" class="' + (x === a ? 'on' : '') + '" data-act="bramt" data-v="' + x + '">' + chf0(x) + (x === PLAN ? ' · your plan' : x === mine ? ' · pot' : '') + '</button>'; }).join('') + '</span></div>';
   h += '<div class="br-picks">';
   if (main) h += '<div class="br-pick main"><span class="lbl">Main account</span><b>' + esc(main.b.n) + '</b><span class="num br-cost">' + chf0(main.y50) + ' <small>a year at CHF 50k</small></span><p>' +
     (auto && main.y50 <= auto.y50 ? 'Cheapest at this amount, and' : 'Within a few francs of the free plans at this amount, cheapest from about CHF 1,000 a month, and') + ' the place for single stocks. No Swiss stamp duty.</p></div>';
   if (auto) h += '<div class="br-pick"><span class="lbl">Autopilot' + (auto.b.have ? ' · you have it' : '') + '</span><b>' + esc(auto.b.n) + ' savings plan</b><span class="num br-cost">' + chf0(auto.y50) + ' <small>a year</small></span><p>A monthly plan in a CHF-traded world ETF, no effort. Swiss bank, Swiss tax statement.</p></div>';
   if (stop) h += '<div class="br-pick"><span class="lbl">Stop using for this</span><b>' + esc(stop.b.n) + '</b><span class="num br-cost">' + chf0(stop.y50) + ' <small>a year</small></span><p>Custody and per-buy fees eat small monthly amounts.</p></div>';
+  var rev = rows.filter(function (r) { return /Revolut/.test(r.b.n); })[0];
+  if (rev && main && rev.y50 < main.y50) h += '<div class="br-pick"><span class="lbl">Cheapest on paper' + (rev.b.have ? ' · you have it' : '') + '</span><b>' + esc(rev.b.n) + '</b><span class="num br-cost">' + chf0(rev.y50) + ' <small>a year</small></span><p>' +
+    (a <= (rev.b.fxFree || 0) ? 'Fine for the monthly plan at this amount: buy on weekdays, an accumulating Irish world ETF, and enter it in your tax return by hand. Above about EUR 20,000, move the core to IBKR or Yuh.' : 'Above CHF ' + chf0(rev.b.fxFree) + ' a month the 1% exchange fee makes it dearer than IBKR.') + '</p></div>';
   h += '</div><div class="cp-tw"><table class="id-tab br-tab"><thead><tr><th>Broker</th><th class="r">Year 1</th><th class="r">At CHF 50k</th><th>Per buy · custody · FX</th><th>Fit</th></tr></thead><tbody>' +
     rows.map(function (r) {
       var f = FIT[r.b.fit] || ['', r.b.fit || ''], w = Math.max(2, r.y50 / max * 100);
       return '<tr class="' + (f[0] === 'no' ? 'dim' : '') + '"><td><b>' + esc(r.b.n) + '</b>' + (r.b.have ? ' <i class="br-have">you have it</i>' : '') + '<small class="br-subm">' + esc(r.b.sub || '') + '</small></td><td class="r num">' + chf0(r.y1) + '</td>' +
         '<td class="r num">' + chf0(r.y50) + '<span class="br-bar ' + (r.y50 <= min + 1 ? 'best' : f[0] === 'no' ? 'bad' : '') + '" style="width:' + w.toFixed(0) + '%"></span></td>' +
-        '<td><small>' + esc(r.b.sub || '') + '</small></td><td><span class="br-fit ' + f[0] + '">' + esc(f[1]) + '</span></td></tr>';
+        '<td><small>' + esc(r.b.sub || '') + '</small></td><td><span class="br-fit ' + f[0] + '">' + esc(f[1]) + '</span></td></tr>' +
+        (r.b.warn ? '<tr class="br-warn"><td colspan="5"><span>Watch out:</span> ' + esc(r.b.warn) + '</td></tr>' : '');
     }).join('') + '</tbody></table></div>';
   if (T.note) h += '<p class="br-note"><b>This month:</b> ' + esc(T.note) + '</p>';
   h += '<p class="soon">Year 1 = 12 buys with custody on the growing balance; "at CHF 50k" = the same buys once the account holds CHF 50,000. Stamp duty (0.15%) is charged by Swiss banks and finpension, not by Interactive Brokers or Revolut. ' +

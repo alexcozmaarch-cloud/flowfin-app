@@ -650,6 +650,33 @@ module.exports = async function () {
     h.eq(Object.values(app.store.Settings).filter(function (r) { return /^idea_/.test(r.key) && !/benchmark/.test(r.key); }).length, 2, 'still two ideas');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Capitulation gauge: market signs from prices with volume, flow readings from Claude’s Friday file, a weekly score', async function () {
+    var app = await h.openApp({ data: demo.data }), pg = app.page; await h.settled(app, 10000);
+    var today = new Date().toISOString().slice(0, 10);
+    app.gas.drive.push({ id: 'g1', name: 'FlowFin ideas inbox ' + today + ' check.json', created: new Date(), text: JSON.stringify({
+      ideas: [{ n: 'Nvidia', t: 'NVDA', d: today, v: { d: today, r: 'small', p: 3, x: 'Small.' } }],
+      market: { d: today, items: [{ k: 'vanda', v: 'net selling', p: 15, note: 'fastest selling since March 2020', src: 'Seeking Alpha', url: 'https://example.com/v' }, { k: 'aaii', v: '44%', p: 0 }, { k: 'jpm', v: 'mixed', p: 99 }] } }) });
+    await pg.evaluate(function () { location.hash = 'ideas'; }); await pg.waitForTimeout(1500); await h.settled(app, 10000); await pg.waitForTimeout(800);
+    var t = await pg.innerText('.cp-card');
+    h.assert(/Capitulation gauge/.test(t) && /\/100/.test(t), 'score shown: ' + t.slice(0, 300));
+    h.assert(/Volatility \(VIX\)/.test(t) && /Selling-volume flush/.test(t) && /\d\.\d×/.test(t), 'market signs measured, volume used');
+    h.assert(/fastest selling since March 2020/.test(t) && /15 \/ 15/.test(t), 'Vanda reading from the file');
+    h.assert(/10 \/ 10/.test(t) && !/99/.test(t), 'points capped at the sign’s maximum');
+    h.assert(/no data/.test(t), 'BofA missing is shown as no data');
+    h.eq(await pg.locator('.cp-weeks i').count(), 12, 'twelve Fridays');
+    h.assert(/NVDA/.test(await pg.innerText('.cp-ideas')), 'ideas listed with their own signs');
+    h.assert(/\(NVDA\)/.test(await pg.innerText('.cp-act')), 'what it means names the small ideas');
+    var row = Object.values(app.store.Settings).filter(function (r) { return r.key === 'cap_flows'; })[0];
+    h.assert(row && /vanda/.test(row.value), 'flow readings saved in the Sheet');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('Capitulation gauge waits for API 7 on an older backend', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'ideas' }), pg = app.page; await h.settled(app, 10000);
+    await pg.evaluate(function () { UI.api = 6; location.hash = 'dashboard'; }); await pg.waitForTimeout(200);
+    await pg.evaluate(function () { location.hash = 'ideas'; }); await pg.waitForTimeout(500);
+    h.assert(/API 7/.test(await pg.innerText('.cp-card')), 'asks for the new Code.gs');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

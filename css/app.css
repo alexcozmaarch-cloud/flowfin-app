@@ -770,3 +770,39 @@ details.fold>summary:hover h3{color:var(--muted)}
 .id-rec{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:15px}
 .id-track tr.note td{font-size:12.5px;color:var(--muted);text-align:left;white-space:normal;border-bottom:1px solid var(--rule);padding-top:0}
 .id-track td:nth-child(2){text-align:left}
+
+/* capitulation gauge (Ideas) */
+.cp-card{display:grid;gap:14px}
+.cp-score{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 18px;align-items:end}
+.cp-score>b{font-size:50px;font-weight:500;line-height:.9;letter-spacing:-.04em}.cp-score>b small{font-size:17px;color:var(--muted)}
+.cp-score div{display:grid;gap:2px}.cp-score div b{font-size:18px;font-weight:800}.cp-score div span{font-size:13px;color:var(--muted)}
+.cp-gauge{position:relative;padding-top:12px}
+.cp-bands{display:grid;grid-template-columns:30fr 20fr 20fr 30fr;height:14px;border:1px solid var(--ink)}
+.cp-bands i{border-right:1px solid var(--ink)}.cp-bands i:last-child{border-right:0}
+.cp-bands i:nth-child(1){background:var(--paper)}.cp-bands i:nth-child(2){background:var(--shade)}.cp-bands i:nth-child(3){background:var(--s4)}
+.cp-bands i:nth-child(4){background:repeating-linear-gradient(45deg,var(--signal) 0 3px,transparent 3px 7px)}
+.cp-needle{position:absolute;top:0;width:3px;margin-left:-1px;height:32px;background:var(--ink)}
+.cp-ticks{display:grid;grid-template-columns:30fr 20fr 20fr 30fr;font-family:var(--f-mono);font-size:11px;color:var(--muted);margin-top:4px}
+.cp-tw{overflow-x:auto}.cp-tab{width:100%;min-width:480px}
+.cp-tab td small{display:block;color:var(--muted);font-size:12px}
+.cp-tab td.r,.cp-tab th.r{text-align:right}
+.cp-grp td{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:14px}
+.cp-pill{font-family:var(--f-mono);font-size:11px;padding:1px 6px;border:1px solid currentColor;white-space:nowrap}
+.cp-pill.on{background:var(--signal);border-color:var(--signal);color:var(--paper)}.cp-pill.half{color:var(--signal)}.cp-pill.off,.cp-pill.na{color:var(--muted)}.cp-pill.na{border-style:dashed}
+.cp-weeks{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;align-items:end;height:84px;border-bottom:1px solid var(--ink);position:relative}
+.cp-weeks i{display:block;background:var(--s3)}.cp-weeks i.warm{background:var(--s2)}.cp-weeks i.hot{background:var(--signal)}
+.cp-line{position:absolute;left:0;right:0;bottom:70%;border-top:1px dashed var(--signal)}
+.cp-line span{position:absolute;right:0;top:-14px;font-family:var(--f-mono);font-size:10.5px;color:var(--signal);background:var(--paper);padding-left:4px}
+.cp-wl{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:4px;font-family:var(--f-mono);font-size:10px;color:var(--muted);text-align:center}
+.cp-act{border:1px solid var(--ink);padding:12px 14px;display:grid;gap:4px}.cp-act b{font-size:14px}.cp-act p{font-size:13.5px;color:var(--muted);margin:0}
+@media (max-width:640px){
+  .cp-tab{min-width:0}
+  .cp-tab:not(.cp-ideas) thead{display:none}
+  .cp-tab:not(.cp-ideas) tr{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:10px;border-bottom:1px solid var(--rule)}
+  .cp-tab:not(.cp-ideas) td{border-bottom:0}
+  .cp-tab:not(.cp-ideas) td:first-child{grid-column:1 / -1;padding-bottom:2px}
+  .cp-tab:not(.cp-ideas) td.num{text-align:left!important;padding-top:0}
+  .cp-tab:not(.cp-ideas) td.r{padding-top:0}
+  .cp-tab:not(.cp-ideas) tr.cp-grp{display:block}
+  .cp-ideas{font-size:12px}.cp-ideas th{font-size:9.5px;padding:6px 2px}.cp-ideas td{padding:8px 2px}
+}

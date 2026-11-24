@@ -35,7 +35,7 @@ var BOOLEAN = ['is_default','rollover_enabled','is_liability','auto_detected'];
 
 var SS_ = null;
 function ss_() { return SS_ || (SS_ = SpreadsheetApp.openById(SHEET_ID)); }   // opened once per request
-var API_VERSION = 6;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written · 4: fast sync (change counter, batch) · 5: daily prices for Ideas · 6: ideas inbox in Drive
+var API_VERSION = 7;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written · 4: fast sync (change counter, batch) · 5: daily prices for Ideas · 6: ideas inbox in Drive · 7: daily volume with prices (capitulation gauge)
 
 function setup() {
   var ss = ss_();
@@ -264,21 +264,21 @@ function ideasSync_(done, exportJson) {
 
 // ---------- daily prices for the Ideas tab (API 5) ----------
 // Yahoo Finance's public chart data (no account). One request per symbol, kept for 6 hours.
-// Returns { SYMBOL: { currency, name, dates:[yyyy-mm-dd], closes:[number] } } or { SYMBOL: { error } }.
+// Returns { SYMBOL: { currency, name, dates:[yyyy-mm-dd], closes:[number], vols:[number] } } or { SYMBOL: { error } }.
 function prices_(symbols, from) {
   var cache = CacheService.getScriptCache(), out = {};
   var start = from ? Math.floor(new Date(from + 'T00:00:00Z').getTime() / 1000) - 7 * 86400 : Math.floor(Date.now() / 1000) - 400 * 86400;
   symbols.slice(0, 20).forEach(function (sym) {
     sym = String(sym || '').trim().toUpperCase(); if (!sym || out[sym]) return;
-    var key = 'px_' + sym + '_' + start, hit = cache.get(key);
+    var key = 'px2_' + sym + '_' + start, hit = cache.get(key);
     if (hit) { out[sym] = JSON.parse(hit); return; }
     try {
       var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&period1=' + start + '&period2=' + Math.floor(Date.now() / 1000);
       var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (res.getResponseCode() !== 200) throw new Error('price service answered ' + res.getResponseCode());
-      var r = JSON.parse(res.getContentText()).chart.result[0], q = r.indicators.quote[0], ts = r.timestamp || [], d = [], c = [];
-      ts.forEach(function (t, i) { var v = q.close[i]; if (v === null || v === undefined) return; d.push(Utilities.formatDate(new Date(t * 1000), 'UTC', 'yyyy-MM-dd')); c.push(Math.round(v * 10000) / 10000); });
-      out[sym] = { currency: r.meta.currency || '', name: r.meta.longName || r.meta.shortName || '', dates: d, closes: c };
+      var r = JSON.parse(res.getContentText()).chart.result[0], q = r.indicators.quote[0], ts = r.timestamp || [], d = [], c = [], vo = [], qv = q.volume || [];
+      ts.forEach(function (t, i) { var v = q.close[i]; if (v === null || v === undefined) return; d.push(Utilities.formatDate(new Date(t * 1000), 'UTC', 'yyyy-MM-dd')); c.push(Math.round(v * 10000) / 10000); vo.push(+qv[i] || 0); });
+      out[sym] = { currency: r.meta.currency || '', name: r.meta.longName || r.meta.shortName || '', dates: d, closes: c, vols: vo };
       try { cache.put(key, JSON.stringify(out[sym]), 6 * 3600); } catch (e) {}
     } catch (err) { out[sym] = { error: String(err.message || err) }; }
   });

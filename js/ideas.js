@@ -8,6 +8,7 @@ import { $, addDays, daysBetween, esc, fmtCHF, lsGet, lsSet, pd, toast, today, y
 import { draw, topbar } from './nav.js';
 import { saveSetting } from './settings.js';
 import { behaviourModel } from './behaviour.js';
+import { capHTML, VIX, SPX } from './capitulation.js';
 
 var BENCH_DEFAULT = 'VWRL.SW';   // Vanguard FTSE All-World, traded in CHF on SIX
 // the yardsticks every idea is drawn and compared against (Yahoo symbols)
@@ -61,11 +62,14 @@ function loadPrices(force) {
   if ((UI.api || 1) < 5) return Promise.resolve(false);
   var list = ideas(), syms = {}, from = '';
   list.forEach(function (i) { if (i.ticker) { syms[i.ticker] = 1; if (!from || i.date < from) from = i.date; } });
-  if (!Object.keys(syms).length) return Promise.resolve(false);
+  var gaugeOn = (UI.api || 1) >= 7;   // the capitulation gauge needs the VIX and the S&P 500, with volume
+  if (!Object.keys(syms).length && !gaugeOn) return Promise.resolve(false);
   benches().forEach(function (b) { syms[b.sym] = 1; });
+  if (gaugeOn) { syms[VIX] = 1; syms[SPX] = 1; }
+  if (!from) from = ymd(today());
   // a year before the oldest idea too, so "moves with" (correlation) has enough days
   var yearAgo = ymd(addDays(today(), -370)); if (from > yearAgo) from = yearAgo;
-  var c = pxCache(), want = Object.keys(syms).filter(function (s) { var x = c[s]; return force || !x || Date.now() - x.at > PX_TTL || (x.from || '9') > from; });
+  var c = pxCache(), want = Object.keys(syms).filter(function (s) { var x = c[s]; return force || !x || Date.now() - x.at > PX_TTL || (x.from || '9') > from || (gaugeOn && !x.vols && !x.error); });
   want = want.filter(function (s) { return !LOADING[s]; });
   if (!want.length) return Promise.resolve(false);
   want.forEach(function (s) { LOADING[s] = 1; });
@@ -179,6 +183,7 @@ function applyInbox(obj, list, changed) {
     else if (v) have.views = [v].concat(have.views || []);
     changed[have.id] = have;
   });
+  if (obj.market && obj.market.d && changed) { changed._market = (changed._market || []).concat([{ d:obj.market.d, items:obj.market.items || [] }]); }
   (obj.checks || []).forEach(function (c) {
     var have = findIdea(list, c.t, c.n); if (!have) return;
     have.checks = have.checks || [];
@@ -197,13 +202,20 @@ function syncInbox(force) {
     var files = j.files || [], changed = {};
     files.forEach(function (f) { try { applyInbox(JSON.parse(f.text), list, changed); } catch (e) {} done.push(f.id); });
     if (!files.length) return 0;
+    var market = changed._market; delete changed._market;
     var ids = Object.keys(changed), chain = Promise.resolve();
+    if (market) chain = chain.then(function () {   // Friday flow readings for the capitulation gauge, newest first, half a year kept
+      var hist = []; try { hist = JSON.parse(((DATA.Settings || []).filter(function (r) { return r.key === 'cap_flows'; })[0] || {}).value || '[]'); } catch (e) {}
+      market.forEach(function (m) { hist = hist.filter(function (x) { return x.d !== m.d; }); hist.push(m); });
+      hist.sort(function (a, b) { return a.d < b.d ? 1 : -1; });
+      return saveSetting('cap_flows', JSON.stringify(hist.slice(0, 26)));
+    });
     ids.forEach(function (id) { chain = chain.then(function () { return saveIdea(changed[id]); }); });
     return chain.then(function () { return saveSetting('ideas_inbox_done', JSON.stringify(done.slice(-300))); })
       .then(function () {   // send the updated list back, so Claude's next check sees what's in the app now
         var now = ideas().map(function (i) { var c = Object.assign({}, i); delete c._sid; delete c._key; return c; });
         return post({ action:'ideasSync', done:done, export:JSON.stringify({ exported:new Date().toISOString(), ideas:now }) }).catch(function () {});
-      }).then(function () { return ids.length; });
+      }).then(function () { return ids.length + (market ? 1 : 0); });
   }).catch(function (e) { UI.ideasErr = e.message; return 0; });
 }
 // the latest call on an idea: a Friday check or a full view, whichever is newer
@@ -226,7 +238,7 @@ function ideasHTML() {
   var list = ideas(), h = topbar('Ideas', false);
   if ((UI.api || 1) < 5 && list.some(function (i) { return i.ticker; })) h += '<p class="soon" style="margin:-4px 0 16px">Prices need the latest Code.gs (API 5); until then ideas are listed without charts.</p>';
   else loadPrices().then(function (changed) { if (changed && UI.page === 'ideas') draw(); });
-  syncInbox().then(function (n) { if (n && UI.page === 'ideas') { toast(n + ' idea' + (n === 1 ? '' : 's') + ' updated by Claude'); loadPrices(true).then(function () { draw(); }); draw(); } });
+  syncInbox().then(function (n) { if (n && UI.page === 'ideas') { toast('Claude’s updates arrived'); loadPrices(true).then(function () { draw(); }); draw(); } });
   if (UI.idea) { var one = list.filter(function (i) { return i.id === UI.idea; })[0]; if (one) return h + ideaHTML(one); UI.idea = ''; }
   h += '<section class="card id-list"><h3>Your ideas<span class="r">since mentioned · vs world (' + esc(bench()) + ')</span></h3>';
   h += list.length ? list.map(function (i) {
@@ -239,6 +251,7 @@ function ideasHTML() {
   h += '<div class="bh-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" data-act="idadd">+ Add an idea</button>' +
     ((UI.api || 1) >= 6 ? '<button class="btn" data-act="idsync">Check for Claude’s updates</button>' : '') + '</div>' + (UI.idAdd ? addHTML() : '') + '</section>';
   if (list.length) h += '<section class="card"><h3>Claude’s split<span class="r">checked every Friday</span></h3>' + allocHTML(list) + '</section>';
+  h += capHTML(list, latest);
   if (UI.ideasErr) h += '<p class="neg">Prices: ' + esc(UI.ideasErr) + '</p>';
   return h;
 }

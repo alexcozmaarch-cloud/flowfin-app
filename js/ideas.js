@@ -8,7 +8,7 @@ import { $, addDays, daysBetween, esc, fmtCHF, lsGet, lsSet, pd, toast, today, y
 import { draw, topbar } from './nav.js';
 import { saveSetting } from './settings.js';
 import { behaviourModel } from './behaviour.js';
-import { capHTML, VIX, SPX } from './capitulation.js';
+import { capHTML, VIX, SPX, GAUGE_FROM } from './capitulation.js';
 
 var BENCH_DEFAULT = 'VWRL.SW';   // Vanguard FTSE All-World, traded in CHF on SIX
 // the yardsticks every idea is drawn and compared against (Yahoo symbols)
@@ -62,24 +62,28 @@ function loadPrices(force) {
   if ((UI.api || 1) < 5) return Promise.resolve(false);
   var list = ideas(), syms = {}, from = '';
   list.forEach(function (i) { if (i.ticker) { syms[i.ticker] = 1; if (!from || i.date < from) from = i.date; } });
-  var gaugeOn = (UI.api || 1) >= 7;   // the capitulation gauge needs the VIX and the S&P 500, with volume
+  var gaugeOn = (UI.api || 1) >= 7;   // the capitulation gauge needs the VIX and the S&P 500 with volume, back to 2019 for the backtest
   if (!Object.keys(syms).length && !gaugeOn) return Promise.resolve(false);
   benches().forEach(function (b) { syms[b.sym] = 1; });
-  if (gaugeOn) { syms[VIX] = 1; syms[SPX] = 1; }
   if (!from) from = ymd(today());
   // a year before the oldest idea too, so "moves with" (correlation) has enough days
   var yearAgo = ymd(addDays(today(), -370)); if (from > yearAgo) from = yearAgo;
-  var c = pxCache(), want = Object.keys(syms).filter(function (s) { var x = c[s]; return force || !x || Date.now() - x.at > PX_TTL || (x.from || '9') > from || (gaugeOn && !x.vols && !x.error); });
-  want = want.filter(function (s) { return !LOADING[s]; });
-  if (!want.length) return Promise.resolve(false);
-  want.forEach(function (s) { LOADING[s] = 1; });
-  return post({ action:'prices', symbols:want, from:from }).then(function (j) {
-    var c2 = pxCache();
-    Object.keys(j.prices || {}).forEach(function (s) { c2[s] = Object.assign({ at:Date.now(), from:from }, j.prices[s]); });
-    lsSet(PX_KEY, JSON.stringify(c2));
-    return true;
-  }).catch(function (e) { UI.ideasErr = e.message; return false; })
-    .then(function (v) { want.forEach(function (s) { delete LOADING[s]; }); return v; });
+  var groups = [];
+  if (gaugeOn) { delete syms[VIX]; delete syms[SPX]; groups.push({ syms:[VIX, SPX], from:GAUGE_FROM }); }
+  groups.push({ syms:Object.keys(syms), from:from });
+  var c = pxCache();
+  return Promise.all(groups.map(function (g) {
+    var want = g.syms.filter(function (s) { var x = c[s]; return !LOADING[s] && (force || !x || Date.now() - x.at > PX_TTL || (x.from || '9') > g.from || (gaugeOn && !x.vols && !x.error)); });
+    if (!want.length) return false;
+    want.forEach(function (s) { LOADING[s] = 1; });
+    return post({ action:'prices', symbols:want, from:g.from }).then(function (j) {
+      var c2 = pxCache();
+      Object.keys(j.prices || {}).forEach(function (s) { c2[s] = Object.assign({ at:Date.now(), from:g.from }, j.prices[s]); });
+      lsSet(PX_KEY, JSON.stringify(c2));
+      return true;
+    }).catch(function (e) { UI.ideasErr = e.message; return false; })
+      .then(function (v) { want.forEach(function (s) { delete LOADING[s]; }); return v; });
+  })).then(function (r) { return r.some(Boolean); });
 }
 // closes from the idea's date on (the first trading day on or after it)
 function sinceEntry(p, date) {

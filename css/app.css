@@ -806,3 +806,9 @@ details.fold>summary:hover h3{color:var(--muted)}
   .cp-tab:not(.cp-ideas) tr.cp-grp{display:block}
   .cp-ideas{font-size:12px}.cp-ideas th{font-size:9.5px;padding:6px 2px}.cp-ideas td{padding:8px 2px}
 }
+
+.cp-btv{font-size:14px;margin:0}
+.cp-bttab td small{display:block}
+.cp-now td{border-top:1px solid var(--ink)}
+.cp-bttab th:nth-child(2),.cp-bttab td:nth-child(2){text-align:left}
+@media (max-width:640px){.cp-bttab th:nth-child(6),.cp-bttab td:nth-child(6){display:none}}

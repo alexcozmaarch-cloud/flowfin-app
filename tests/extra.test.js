@@ -666,6 +666,8 @@ module.exports = async function () {
     h.eq(await pg.locator('.cp-weeks i').count(), 12, 'twelve Fridays');
     h.assert(/NVDA/.test(await pg.innerText('.cp-ideas')), 'ideas listed with their own signs');
     h.assert(/\(NVDA\)/.test(await pg.innerText('.cp-act')), 'what it means names the small ideas');
+    h.assert(/Backtest · earlier lows since 2019/i.test(await pg.innerText('.cp-card')) && await pg.locator('.cp-bt svg path').count() === 2, 'backtest chart from the S&P 500 and VIX since 2019');
+    h.assert(/Now/.test(await pg.innerText('.cp-bttab')), 'today compared with earlier lows');
     var row = Object.values(app.store.Settings).filter(function (r) { return r.key === 'cap_flows'; })[0];
     h.assert(row && /vanda/.test(row.value), 'flow readings saved in the Sheet');
     h.noErrors(app); await app.ctx.close();

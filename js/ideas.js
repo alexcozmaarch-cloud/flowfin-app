@@ -4,9 +4,10 @@
 // Prices come from your Apps Script (API 5), which asks Yahoo Finance; they're kept on this phone for 12 hours.
 // Claude's views arrive as a paste code "FFIDEA:<base64 JSON>" written in the chat.
 import { post } from './api.js';
-import { $, addDays, daysBetween, esc, fmtCHF, lsGet, lsSet, pd, today, ymd } from './core.js';
+import { $, addDays, daysBetween, esc, fmtCHF, lsGet, lsSet, pd, toast, today, ymd } from './core.js';
 import { draw, topbar } from './nav.js';
 import { saveSetting } from './settings.js';
+import { behaviourModel } from './behaviour.js';
 
 var BENCH_DEFAULT = 'VWRL.SW';   // Vanguard FTSE All-World, traded in CHF on SIX
 // the yardsticks every idea is drawn and compared against (Yahoo symbols)
@@ -33,7 +34,7 @@ function decodeCode(text) {
     for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     var o = JSON.parse(new TextDecoder().decode(bytes));
     return { name:o.n || o.name || '', ticker:String(o.t || o.ticker || '').toUpperCase(), date:o.d || o.date || ymd(today()), source:o.s || o.source || '',
-      view:(o.v || o.view) ? { date:(o.v || o.view).d || o.d || ymd(today()), verdict:(o.v || o.view).r || (o.v || o.view).verdict || 'watch', text:(o.v || o.view).x || (o.v || o.view).text || '' } : null };
+      view:(o.v || o.view) ? { date:(o.v || o.view).d || o.d || ymd(today()), verdict:(o.v || o.view).r || (o.v || o.view).verdict || 'watch', text:(o.v || o.view).x || (o.v || o.view).text || '', pct:(o.v || o.view).p === undefined ? null : +(o.v || o.view).p } : null };
   } catch (e) { return null; }
 }
 // a code for an idea you already have adds the new view on top; otherwise it's a new idea
@@ -165,20 +166,77 @@ function viewText(t) {
   return String(t || '').split(/\n\s*\n/).map(function (p) { return '<p>' + esc(p.trim()).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>') + '</p>'; }).join('');
 }
 
+// ─── the inbox in Drive: Claude's new ideas and Friday checks (API 6) ─────────
+// file: { ideas:[{ n, t, d, s, v:{ d, r, p, x } }], checks:[{ t, n, d, r, p, note, price }] }
+function doneList() { try { return JSON.parse(((DATA.Settings || []).filter(function (r) { return r.key === 'ideas_inbox_done'; })[0] || {}).value || '[]'); } catch (e) { return []; } }
+function findIdea(list, t, n) { return list.filter(function (x) { return (t && x.ticker === String(t).toUpperCase()) || (!t && n && x.name.toLowerCase() === String(n).toLowerCase()); })[0]; }
+function applyInbox(obj, list, changed) {
+  (obj.ideas || []).forEach(function (o) {
+    var t = String(o.t || '').toUpperCase(), have = findIdea(list, t, o.n), v = o.v ? { date:o.v.d || o.d, verdict:o.v.r || 'watch', text:o.v.x || '', pct:o.v.p === undefined ? null : +o.v.p } : null;
+    if (!have) { have = { id:Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name:o.n, ticker:t, date:o.d, source:o.s || '', views:[], checks:[] }; list.push(have); }
+    if (v && !(have.views || []).some(function (x) { return x.date === v.date && x.text === v.text; })) { have.views = [v].concat(have.views || []); }
+    changed[have.id] = have;
+  });
+  (obj.checks || []).forEach(function (c) {
+    var have = findIdea(list, c.t, c.n); if (!have) return;
+    have.checks = have.checks || [];
+    if (have.checks.some(function (x) { return x.date === c.d; })) return;
+    have.checks.unshift({ date:c.d, verdict:c.r, pct:c.p === undefined ? null : +c.p, note:c.note || '', price:c.price === undefined ? null : +c.price });
+    changed[have.id] = have;
+  });
+}
+var SYNCED = false;
+function syncInbox(force) {
+  if ((UI.api || 1) < 6 || (SYNCED && !force)) return Promise.resolve(0);
+  SYNCED = true;
+  var list = ideas(), done = doneList();
+  var exp = JSON.stringify({ exported:new Date().toISOString(), ideas:list.map(function (i) { var c = Object.assign({}, i); delete c._sid; delete c._key; return c; }) });
+  return post({ action:'ideasSync', done:done, export:exp }).then(function (j) {
+    var files = j.files || [], changed = {};
+    files.forEach(function (f) { try { applyInbox(JSON.parse(f.text), list, changed); } catch (e) {} done.push(f.id); });
+    if (!files.length) return 0;
+    var ids = Object.keys(changed), chain = Promise.resolve();
+    ids.forEach(function (id) { chain = chain.then(function () { return saveIdea(changed[id]); }); });
+    return chain.then(function () { return saveSetting('ideas_inbox_done', JSON.stringify(done.slice(-300))); })
+      .then(function () {   // send the updated list back, so Claude's next check sees what's in the app now
+        var now = ideas().map(function (i) { var c = Object.assign({}, i); delete c._sid; delete c._key; return c; });
+        return post({ action:'ideasSync', done:done, export:JSON.stringify({ exported:new Date().toISOString(), ideas:now }) }).catch(function () {});
+      }).then(function () { return ids.length; });
+  }).catch(function (e) { UI.ideasErr = e.message; return 0; });
+}
+// the latest call on an idea: a Friday check or a full view, whichever is newer
+function latest(i) {
+  var c = (i.checks || [])[0], v = (i.views || [])[0];
+  if (c && (!v || c.date >= v.date)) return { verdict:c.verdict, pct:c.pct, date:c.date };
+  return v ? { verdict:v.verdict, pct:v.pct === undefined ? null : v.pct, date:v.date } : null;
+}
+function investable() { try { var p = behaviourModel().pot; return Math.max(0, p.etf || 0); } catch (e) { return 0; } }
+function allocHTML(list) {
+  var inv = investable(), rows = list.map(function (i) { return { i:i, l:latest(i) }; }).filter(function (x) { return x.l && x.l.pct > 0; });
+  var tot = rows.reduce(function (a, x) { return a + x.l.pct; }, 0);
+  if (!rows.length) return '<p class="soon">No idea has a recommended share right now: everything you invest goes to the world ETF.</p>';
+  return '<div class="id-alloc"><div class="lbl">Of what you invest this period' + (inv ? ' (' + fmtCHF.format(Math.round(inv)) + ')' : '') + '</div>' +
+    rows.map(function (x) { return '<div><span>' + esc(x.i.name) + '</span><span class="num">' + x.l.pct + '%</span><span class="num">' + (inv ? fmtCHF.format(Math.round(inv * x.l.pct / 100)) : '—') + '</span></div>'; }).join('') +
+    '<div class="rest"><span>World ETF (the rest)</span><span class="num">' + Math.max(0, 100 - tot) + '%</span><span class="num">' + (inv ? fmtCHF.format(Math.round(inv * Math.max(0, 100 - tot) / 100)) : '—') + '</span></div></div>';
+}
+
 function ideasHTML() {
   var list = ideas(), h = topbar('Ideas', false);
   if ((UI.api || 1) < 5 && list.some(function (i) { return i.ticker; })) h += '<p class="soon" style="margin:-4px 0 16px">Prices need the latest Code.gs (API 5); until then ideas are listed without charts.</p>';
   else loadPrices().then(function (changed) { if (changed && UI.page === 'ideas') draw(); });
+  syncInbox().then(function (n) { if (n && UI.page === 'ideas') { toast(n + ' idea' + (n === 1 ? '' : 's') + ' updated by Claude'); loadPrices(true).then(function () { draw(); }); draw(); } });
   if (UI.idea) { var one = list.filter(function (i) { return i.id === UI.idea; })[0]; if (one) return h + ideaHTML(one); UI.idea = ''; }
   h += '<section class="card id-list"><h3>Your ideas<span class="r">since mentioned · vs world (' + esc(bench()) + ')</span></h3>';
   h += list.length ? list.map(function (i) {
-    var st = i.ticker ? stats(i) : null, v = (i.views || [])[0];
+    var st = i.ticker ? stats(i) : null, v = latest(i);
     return '<div class="id-li"><button class="id-row" data-act="idopen" data-id="' + esc(i.id) + '"><span class="id-n"><b>' + esc(i.name) + (i.ticker ? ' · ' + esc(i.ticker) : '') + '</b>' +
-      '<small>' + dm(i.date) + (i.source ? ' · ' + esc(i.source) : '') + '</small>' + (v ? verdictPill(v.verdict) : '<span class="otag id-v">no view yet</span>') + '</span>' + spark(st) +
+      '<small>' + dm(i.date) + (i.source ? ' · ' + esc(i.source) : '') + '</small>' + (v ? verdictPill(v.verdict) + (v.pct > 0 ? ' <small class="num">' + v.pct + '% of investing</small>' : '') : '<span class="otag id-v">no view yet</span>') + '</span>' + spark(st) +
       '<span class="id-c num">' + (st ? '<span class="' + (st.chg >= 0 ? 'pos' : 'neg') + '">' + pct(st.chg) + '</span>' + (st.bchg !== null ? '<small>world ' + pct(st.bchg) + '</small>' : '') : '<small>' + (i.ticker ? 'price…' : 'no ticker') + '</small>') + '</span></button>' +
       '<button class="iconbtn id-x" data-act="iddel" data-id="' + esc(i.id) + '" aria-label="Delete ' + esc(i.name) + '" title="Delete">×</button></div>';
   }).join('') : '<p class="soon">No ideas yet. Tell me about one in the chat, or add it here.</p>';
-  h += '<div class="bh-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" data-act="idadd">+ Add an idea</button></div>' + (UI.idAdd ? addHTML() : '') + '</section>';
+  h += '<div class="bh-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" data-act="idadd">+ Add an idea</button>' +
+    ((UI.api || 1) >= 6 ? '<button class="btn" data-act="idsync">Check for Claude’s updates</button>' : '') + '</div>' + (UI.idAdd ? addHTML() : '') + '</section>';
+  if (list.length) h += '<section class="card"><h3>Claude’s split<span class="r">checked every Friday</span></h3>' + allocHTML(list) + '</section>';
   if (UI.ideasErr) h += '<p class="neg">Prices: ' + esc(UI.ideasErr) + '</p>';
   return h;
 }
@@ -203,6 +261,15 @@ function ideaHTML(i) {
       '<div><b class="num">' + (st.bchg !== null ? (st.chg - st.bchg >= 0 ? '+' : '−') + Math.abs(st.chg - st.bchg).toFixed(1) + ' pts' : '—') + '</b><span>vs world ETF</span></div></div>' + bigChart(st, i) + compareHTML(st);
   } else h += '<p class="soon">' + (i.ticker ? ((UI.api || 1) < 5 ? 'Prices need the latest Code.gs (API 5).' : (pxCache()[i.ticker] && pxCache()[i.ticker].error ? 'No prices for ' + esc(i.ticker) + ': ' + esc(pxCache()[i.ticker].error) + '. Check the ticker as Yahoo Finance writes it (e.g. NOVN.SW, VWRL.SW, AAPL).' : 'Loading prices…')) : 'No ticker: nothing to chart. Add one to follow the price.') + '</p>';
   h += '</section>';
+  var L = latest(i), inv = investable(), checks = i.checks || [];
+  h += '<section class="card"><h3>Recommendation<span class="r">' + (L ? 'as of ' + dm(L.date) : '') + '</span></h3>' +
+    (L ? '<div class="id-rec">' + verdictPill(L.verdict) + '<span><b class="num">' + (L.pct > 0 ? L.pct + '%' : '0%') + '</b> of what you invest' + (L.pct > 0 && inv ? ' → <b class="num">' + fmtCHF.format(Math.round(inv * L.pct / 100)) + '</b> this period' : '') + '</span></div>' : '<p class="soon">No recommendation yet.</p>') +
+    (checks.length ? '<div class="lbl" style="margin-top:12px">Verdict track · every Friday</div><table class="id-tab id-track"><thead><tr><th>Date</th><th>Verdict</th><th>Share</th><th>Price</th></tr></thead><tbody>' +
+      checks.map(function (c, k) {
+        var prev = checks[k + 1] || (i.views || []).slice(-1)[0], moved = prev && prev.verdict !== c.verdict;
+        return '<tr><td>' + dm(c.date) + '</td><td>' + (moved ? '<b>' + esc((VERDICTS[c.verdict] || VERDICTS.watch)[0]) + '</b> <small>changed</small>' : esc((VERDICTS[c.verdict] || VERDICTS.watch)[0])) + '</td><td class="num">' + (c.pct === null ? '—' : c.pct + '%') + '</td><td class="num">' + (c.price ? fmtP(c.price) : '—') + '</td></tr>' +
+          (c.note ? '<tr class="note"><td colspan="4">' + esc(c.note) + '</td></tr>' : '');
+      }).join('') + '</tbody></table>' : '') + '</section>';
   var views = i.views || [];
   h += '<section class="card id-views"><h3>Claude’s view' + (views.length > 1 ? 's' : '') + '<span class="r">' + (views.length ? 'latest first' : '') + '</span></h3>';
   h += views.length ? views.map(function (v, k) {
@@ -215,4 +282,4 @@ function ideaHTML(i) {
 }
 function ideasLine() { var n = ideas().length; return n ? n + ' idea' + (n === 1 ? '' : 's') + ' tracked' : 'investing ideas you hear about'; }
 
-export { ideas, ideasHTML, ideasLine, addFromCode, addManual, decodeCode, loadPrices, BENCH_DEFAULT };
+export { syncInbox, latest, ideas, ideasHTML, ideasLine, addFromCode, addManual, decodeCode, loadPrices, BENCH_DEFAULT };

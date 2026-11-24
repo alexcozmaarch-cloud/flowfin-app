@@ -35,7 +35,7 @@ var BOOLEAN = ['is_default','rollover_enabled','is_liability','auto_detected'];
 
 var SS_ = null;
 function ss_() { return SS_ || (SS_ = SpreadsheetApp.openById(SHEET_ID)); }   // opened once per request
-var API_VERSION = 5;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written · 4: fast sync (change counter, batch) · 5: daily prices for Ideas
+var API_VERSION = 6;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written · 4: fast sync (change counter, batch) · 5: daily prices for Ideas · 6: ideas inbox in Drive
 
 function setup() {
   var ss = ss_();
@@ -129,6 +129,7 @@ function doPost(e) {
       return json_({ ok: true, api: API_VERSION, rev: rev, data: readAll_() });
     }
     if (body.action === 'syncBase44') return json_({ ok: true, result: syncFromBase44() });
+    if (body.action === 'ideasSync') return json_({ ok: true, api: API_VERSION, files: ideasSync_(body.done || [], body.export) });
     if (body.action === 'prices') return json_({ ok: true, api: API_VERSION, prices: prices_(body.symbols || [], body.from) });
     lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) { lock = null; throw new Error('The Sheet is busy with another save; try again in a minute'); }
@@ -240,6 +241,25 @@ function stopHourlySync() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'syncFromBase44') ScriptApp.deleteTrigger(t);
   });
+}
+
+// ---------- ideas inbox (API 6) ----------
+// Claude writes ideas and weekly verdict checks as JSON files named "FlowFin ideas inbox …" into your Drive.
+// The app picks up the ones it hasn't seen and, in return, keeps "FlowFin ideas (from app).json" up to date
+// so Claude can see the ideas you added yourself. Nothing else in your Drive is read or changed.
+var IDEAS_INBOX = 'FlowFin ideas inbox', IDEAS_EXPORT = 'FlowFin ideas (from app).json';
+function ideasSync_(done, exportJson) {
+  var seen = {}; (done || []).forEach(function (id) { seen[id] = true; });
+  var out = [], it = DriveApp.searchFiles('title contains "' + IDEAS_INBOX + '" and trashed = false');
+  while (it.hasNext() && out.length < 30) {
+    var f = it.next(); if (seen[f.getId()]) continue;
+    out.push({ id: f.getId(), name: f.getName(), created: f.getDateCreated().toISOString(), text: f.getBlob().getDataAsString() });
+  }
+  if (exportJson) {
+    var ex = DriveApp.getFilesByName(IDEAS_EXPORT);
+    if (ex.hasNext()) ex.next().setContent(String(exportJson)); else DriveApp.createFile(IDEAS_EXPORT, String(exportJson), MimeType.PLAIN_TEXT);
+  }
+  return out.sort(function (a, b) { return a.created < b.created ? -1 : 1; });
 }
 
 // ---------- daily prices for the Ideas tab (API 5) ----------

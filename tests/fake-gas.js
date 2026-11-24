@@ -64,10 +64,13 @@ function FakeGas(opts) {
   this.props = { SHEET_ID:'test-sheet', FF_KEY:opts.key || 'test-key' };
   this.cache = {};
   this.log = [];   // { action, ms } per request
-  this.fetch = opts.fetch || null;   // pretend internet for UrlFetchApp (prices)
+  this.fetch = opts.fetch || null;
+  this.drive = [];   // pretend Google Drive for the ideas inbox   // pretend internet for UrlFetchApp (prices)
 }
 FakeGas.prototype.context = function () {
   var self = this, clock = this.clockRef.c = new Clock();
+  function wrap(f) { return { getId:function () { return f.id; }, getName:function () { return f.name; }, getDateCreated:function () { return f.created; },
+    getBlob:function () { return { getDataAsString:function () { return f.text; } }; }, setContent:function (t) { f.text = t; } }; }
   Object.keys(self.ss.sheets).forEach(function (k) { self.ss.sheets[k].clock = clock; });
   var ctx = {
     console:console, JSON:JSON, Date:Date, Math:Math, String:String, Number:Number, Object:Object, Array:Array, Error:Error, isNaN:isNaN,
@@ -79,7 +82,15 @@ FakeGas.prototype.context = function () {
     Utilities:{ getUuid:function () { return crypto.randomUUID(); }, formatDate:function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); } },
     ScriptApp:{ getProjectTriggers:function () { return []; }, newTrigger:function () { var t = { timeBased:function () { return t; }, everyHours:function () { return t; }, everyDays:function () { return t; }, atHour:function () { return t; }, create:function () { return t; } }; return t; }, deleteTrigger:function () {} },
     UrlFetchApp:{ fetch:function (url) { if (self.fetch) return self.fetch(url); throw new Error('no network in tests'); } },
-    Logger:{ log:function () {} }
+    Logger:{ log:function () {} },
+    MimeType:{ PLAIN_TEXT:'text/plain' },
+    // a tiny Drive: files are { id, name, text, created }
+    DriveApp:{
+      searchFiles:function (q) { var m = /title contains "([^"]+)"/.exec(q), list = self.drive.filter(function (f) { return !m || f.name.indexOf(m[1]) > -1; }), i = 0;
+        return { hasNext:function () { return i < list.length; }, next:function () { return wrap(list[i++]); } }; },
+      getFilesByName:function (n) { var list = self.drive.filter(function (f) { return f.name === n; }), i = 0; return { hasNext:function () { return i < list.length; }, next:function () { return wrap(list[i++]); } }; },
+      createFile:function (n, text) { var f = { id:'d' + (self.drive.length + 1), name:n, text:text, created:new Date() }; self.drive.push(f); return wrap(f); }
+    }
   };
   vm.createContext(ctx);
   vm.runInContext(CODE, ctx, { filename:'Code.gs' });

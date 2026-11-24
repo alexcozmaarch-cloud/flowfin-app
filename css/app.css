@@ -751,3 +751,11 @@ details.fold>summary:hover h3{color:var(--muted)}
 .id-tab td{padding:7px 4px;border-bottom:1px solid var(--rule);text-align:right}
 .id-tab td small{color:var(--muted);font-size:11px;display:block}
 .id-tab td{white-space:nowrap}.id-tab td:first-child{white-space:normal}
+
+.id-alloc{display:grid;gap:4px;font-size:14px}
+.id-alloc>div:not(.lbl){display:grid;grid-template-columns:minmax(0,1fr) 60px 80px;gap:8px;padding:5px 0;border-top:1px solid var(--rule)}
+.id-alloc .num{text-align:right}.id-alloc .rest{color:var(--muted)}
+.id-alloc .lbl,.id-cmp .lbl,.card .lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.id-rec{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:15px}
+.id-track tr.note td{font-size:12.5px;color:var(--muted);text-align:left;white-space:normal;border-bottom:1px solid var(--rule);padding-top:0}
+.id-track td:nth-child(2){text-align:left}

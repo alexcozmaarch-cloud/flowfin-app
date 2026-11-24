@@ -629,6 +629,27 @@ module.exports = async function () {
     h.assert(/Novartis/.test(list) && /world/.test(list), 'list shows change vs world');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Ideas inbox: Claude’s file in Drive adds ideas and Friday checks; the app exports its ideas back', async function () {
+    var app = await h.openApp({ data: demo.data }), pg = app.page; await h.settled(app, 10000);
+    app.gas.drive.push({ id: 'f1', name: 'FlowFin ideas inbox 2026-11-24.json', created: new Date('2026-11-24T16:00:00Z'), text: JSON.stringify({ ideas: [
+      { n: 'Invesco QQQ', t: 'QQQ', d: '2026-11-24', s: 'chat', v: { d: '2026-11-24', r: 'small', p: 10, x: '**What it is.** Nasdaq-100.' } },
+      { n: 'Meta Platforms', t: 'META', d: '2026-11-24', v: { d: '2026-11-24', r: 'watch', p: 0, x: 'Watch.' } }] }) });
+    app.gas.drive.push({ id: 'f2', name: 'FlowFin ideas inbox 2026-11-27 check.json', created: new Date('2026-11-27T21:30:00Z'), text: JSON.stringify({ checks: [
+      { t: 'META', d: '2026-11-27', r: 'small', p: 5, price: 590.1, note: 'Capex guidance trimmed.' }, { t: 'QQQ', d: '2026-11-27', r: 'small', p: 10, price: 610 }] }) });
+    await pg.evaluate(function () { location.hash = 'ideas'; }); await pg.waitForTimeout(1500); await h.settled(app, 10000);
+    var t = await pg.innerText('#view');
+    h.assert(/Invesco QQQ/.test(t) && /Meta Platforms/.test(t), 'ideas from the inbox: ' + t.slice(0, 300));
+    h.assert(/Claude’s split/.test(t) && /World ETF \(the rest\)/.test(t) && /85%/.test(t), 'split: 10% QQQ + 5% META, rest 85%');
+    await pg.click('.id-li:has-text("Meta Platforms") .id-row'); await pg.waitForTimeout(400);
+    var d = await pg.innerText('#view');
+    h.assert(/worth a small position/.test(d) && /changed/.test(d) && /Capex guidance trimmed/.test(d) && /590\.10/.test(d), 'verdict track with the change: ' + d.slice(0, 600));
+    var ex = app.gas.drive.filter(function (f) { return f.name === 'FlowFin ideas (from app).json'; })[0];
+    h.assert(ex && /QQQ/.test(ex.text), 'ideas exported to Drive for Claude');
+    // nothing is imported twice
+    await pg.click('[data-act=idopen][data-id=""]'); await pg.click('[data-act=idsync]'); await h.settled(app); await pg.waitForTimeout(300);
+    h.eq(Object.values(app.store.Settings).filter(function (r) { return /^idea_/.test(r.key) && !/benchmark/.test(r.key); }).length, 2, 'still two ideas');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

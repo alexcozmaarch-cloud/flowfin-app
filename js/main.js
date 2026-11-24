@@ -13,7 +13,7 @@ import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoa
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
-import { addFromCode, addManual, ideas, loadPrices } from './ideas.js';
+import { addFromCode, addManual, ideas, loadPrices, syncInbox } from './ideas.js';
 import { addAlways, jointRefundRow, setResolved, toggleJoint } from './joint.js';
 import { quickSave, readBhForm, saleRow, saveLabel, wantPark, wantDone } from './behaviour.js';
 import { startMic, voicePreview } from './voicetest.js';
@@ -121,6 +121,7 @@ document.addEventListener('click', function (e) {
   if (act === 'tagadd' && FORM) { var nv = ($('mnewtag') || {}).value || ''; readForm(); FORM._newtag = false; if (nv.trim()) toggleTag(nv.trim(), true); return drawModal(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
   if (act === 'idopen') { UI.idea = a.getAttribute('data-id'); UI.idErr = ''; draw(); window.scrollTo(0, 0); return; }
+  if (act === 'idsync') return syncInbox(true).then(function (n) { toast(n ? n + ' idea' + (n === 1 ? '' : 's') + ' updated by Claude' : 'Nothing new from Claude'); return loadPrices(true); }).then(function () { draw(); });
   if (act === 'idadd') { UI.idAdd = !UI.idAdd; UI.idErr = ''; draw(); return; }
   if (act === 'idpaste') {
     return addFromCode(($('idCode') || {}).value).then(function (r) {

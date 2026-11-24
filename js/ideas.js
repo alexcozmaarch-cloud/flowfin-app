@@ -9,6 +9,7 @@ import { draw, topbar } from './nav.js';
 import { saveSetting } from './settings.js';
 import { behaviourModel } from './behaviour.js';
 import { capHTML, VIX, SPX, GAUGE_FROM } from './capitulation.js';
+import { brokersHTML } from './brokers.js';
 
 var BENCH_DEFAULT = 'VWRL.SW';   // Vanguard FTSE All-World, traded in CHF on SIX
 // the yardsticks every idea is drawn and compared against (Yahoo symbols)
@@ -187,6 +188,7 @@ function applyInbox(obj, list, changed) {
     else if (v) have.views = [v].concat(have.views || []);
     changed[have.id] = have;
   });
+  if (obj.brokers && obj.brokers.d && obj.brokers.list && changed && (!changed._brokers || changed._brokers.d < obj.brokers.d)) changed._brokers = obj.brokers;
   if (obj.market && obj.market.d && changed) { changed._market = (changed._market || []).concat([{ d:obj.market.d, items:obj.market.items || [] }]); }
   (obj.checks || []).forEach(function (c) {
     var have = findIdea(list, c.t, c.n); if (!have) return;
@@ -207,7 +209,13 @@ function syncInbox(force) {
     files.forEach(function (f) { try { applyInbox(JSON.parse(f.text), list, changed); } catch (e) {} done.push(f.id); });
     if (!files.length) return 0;
     var market = changed._market; delete changed._market;
+    var brokers = changed._brokers; delete changed._brokers;
     var ids = Object.keys(changed), chain = Promise.resolve();
+    if (brokers) chain = chain.then(function () {   // the monthly broker check: newer table replaces the old one
+      var cur = null; try { cur = JSON.parse(((DATA.Settings || []).filter(function (r) { return r.key === 'brokers_v'; })[0] || {}).value || 'null'); } catch (e) {}
+      if (cur && cur.d >= brokers.d) return;
+      return saveSetting('brokers_v', JSON.stringify({ d:brokers.d, note:brokers.note || '', list:brokers.list }));
+    });
     if (market) chain = chain.then(function () {   // Friday flow readings for the capitulation gauge, newest first, half a year kept
       var hist = []; try { hist = JSON.parse(((DATA.Settings || []).filter(function (r) { return r.key === 'cap_flows'; })[0] || {}).value || '[]'); } catch (e) {}
       market.forEach(function (m) { hist = hist.filter(function (x) { return x.d !== m.d; }); hist.push(m); });
@@ -219,7 +227,7 @@ function syncInbox(force) {
       .then(function () {   // send the updated list back, so Claude's next check sees what's in the app now
         var now = ideas().map(function (i) { var c = Object.assign({}, i); delete c._sid; delete c._key; return c; });
         return post({ action:'ideasSync', done:done, export:JSON.stringify({ exported:new Date().toISOString(), ideas:now }) }).catch(function () {});
-      }).then(function () { return ids.length + (market ? 1 : 0); });
+      }).then(function () { return ids.length + (market ? 1 : 0) + (brokers ? 1 : 0); });
   }).catch(function (e) { UI.ideasErr = e.message; return 0; });
 }
 // the latest call on an idea: a Friday check or a full view, whichever is newer
@@ -256,6 +264,7 @@ function ideasHTML() {
     ((UI.api || 1) >= 6 ? '<button class="btn" data-act="idsync">Check for Claude’s updates</button>' : '') + '</div>' + (UI.idAdd ? addHTML() : '') + '</section>';
   if (list.length) h += '<section class="card"><h3>Claude’s split<span class="r">checked every Friday</span></h3>' + allocHTML(list) + '</section>';
   h += capHTML(list, latest);
+  h += brokersHTML(investable());
   if (UI.ideasErr) h += '<p class="neg">Prices: ' + esc(UI.ideasErr) + '</p>';
   return h;
 }

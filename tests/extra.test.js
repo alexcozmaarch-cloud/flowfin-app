@@ -679,6 +679,24 @@ module.exports = async function () {
     h.assert(/API 7/.test(await pg.innerText('.cp-card')), 'asks for the new Code.gs');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Where to buy: brokers costed on the same monthly buy, amount switch, monthly check replaces the fee table', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'ideas' }), pg = app.page; await h.settled(app, 10000); await pg.waitForTimeout(500);
+    var t = await pg.innerText('.br-card');
+    h.assert(/Where to buy/i.test(t) && /Interactive Brokers/.test(t) && /UBS e-banking/.test(t), 'shortlist shown');
+    h.eq(await pg.locator('.br-tab tbody tr').count(), 9, 'nine brokers');
+    await pg.click('[data-act="bramt"][data-v="3000"]'); await pg.waitForTimeout(200);
+    var ib = await pg.locator('.br-tab tbody tr').first().locator('td').nth(2).innerText();
+    h.assert(/^18\b/.test(ib.trim()), 'IBKR at CHF 3,000 a month: 12 × CHF 1.50 = 18, got ' + ib);
+    var today = new Date().toISOString().slice(0, 10);
+    app.gas.drive.push({ id: 'b1', name: 'FlowFin ideas inbox ' + today + ' brokers.json', created: new Date(), text: JSON.stringify({ brokers: { d: today, note: 'Saxo cut its FX fee.',
+      list: [{ n: 'Interactive Brokers', fit: 'main', bPct: 0.0005, bMin: 1.5, stamp: false, sub: 'x' }, { n: 'Yuh', have: 1, fit: 'auto', stamp: true, sub: 'y' }, { n: 'NewBank', fit: 'alt', bFlat: 1, stamp: true, sub: 'z' }] } }) });
+    await pg.click('[data-act="idsync"]'); await pg.waitForTimeout(1500); await h.settled(app, 10000); await pg.waitForTimeout(500);
+    t = await pg.innerText('.br-card');
+    h.assert(/NewBank/.test(t) && /Saxo cut its FX fee/.test(t), 'monthly check replaced the table: ' + t.slice(0, 200));
+    var row = Object.values(app.store.Settings).filter(function (r) { return r.key === 'brokers_v'; })[0];
+    h.assert(row && /NewBank/.test(row.value), 'fee table saved in the Sheet');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

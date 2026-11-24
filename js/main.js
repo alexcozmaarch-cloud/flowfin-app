@@ -121,7 +121,7 @@ document.addEventListener('click', function (e) {
   if (act === 'tagadd' && FORM) { var nv = ($('mnewtag') || {}).value || ''; readForm(); FORM._newtag = false; if (nv.trim()) toggleTag(nv.trim(), true); return drawModal(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
   if (act === 'idopen') { UI.idea = a.getAttribute('data-id'); UI.idErr = ''; draw(); window.scrollTo(0, 0); return; }
-  if (act === 'idsync') return syncInbox(true).then(function (n) { toast(n ? n + ' idea' + (n === 1 ? '' : 's') + ' updated by Claude' : 'Nothing new from Claude'); return loadPrices(true); }).then(function () { draw(); });
+  if (act === 'idsync') return syncInbox(true).then(function (n) { toast(n ? 'Claude’s updates arrived' : 'Nothing new from Claude'); return loadPrices(true); }).then(function () { draw(); });
   if (act === 'idadd') { UI.idAdd = !UI.idAdd; UI.idErr = ''; draw(); return; }
   if (act === 'idpaste') {
     return addFromCode(($('idCode') || {}).value).then(function (r) {
@@ -155,6 +155,7 @@ document.addEventListener('click', function (e) {
   }
   if (act === 'bhview') { UI.bhView = a.getAttribute('data-v'); return draw(); }
   if (act === 'bhchart') { UI.bhChart = a.getAttribute('data-v'); UI.bhDay = ''; return draw(); }
+  if (act === 'bramt') { UI.brAmt = +a.getAttribute('data-v'); return draw(); }
   if (act === 'bhma') { UI.bhMa = a.getAttribute('data-v'); return draw(); }
   if (act === 'bhday') { var dk = a.getAttribute('data-d'); UI.bhDay = UI.bhDay === dk ? '' : dk; return draw(); }
   if (act === 'bhsale' || act === 'bhwant') { var fk = act === 'bhsale' ? 'sale' : 'want'; UI.bhForm = UI.bhForm === fk ? '' : fk; UI.bhErr = ''; draw(); setTimeout(function () { var n = $('bhfName'); if (n) n.focus(); }, 30); return; }

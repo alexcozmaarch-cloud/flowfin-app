@@ -13,7 +13,17 @@ function chartPath() {   // the package's exports hide dist/, so look for the fi
 }
 var CORS = { 'Access-Control-Allow-Origin': '*' };
 var { FakeGas } = require('./fake-gas');
-var SLOW_MS = 60 * 1000;   // a single request that would take Google over a minute is a bug waiting to happen
+var SLOW_MS = 60 * 1000;
+// pretend Yahoo Finance: a smooth made-up daily series per symbol (weekdays only), enough to draw the Ideas charts
+function fakeYahoo(url) {
+  var m = /chart\/([^?]+)\?.*period1=(\d+)/.exec(url); var sym = decodeURIComponent(m[1]), from = +m[2], now = Math.floor(Date.now() / 1000);
+  if (/^BAD/.test(sym)) return { getResponseCode: function () { return 404; }, getContentText: function () { return '{}'; } };
+  var seed = 0; for (var i = 0; i < sym.length; i++) seed += sym.charCodeAt(i);
+  var ts = [], close = [], v = 50 + seed % 100;
+  for (var t = from; t <= now; t += 86400) { var d = new Date(t * 1000).getUTCDay(); if (d === 0 || d === 6) continue; v *= 1 + Math.sin(t / 864000 + seed) * 0.004 + (seed % 3 - 1) * 0.001; ts.push(t); close.push(Math.round(v * 100) / 100); }
+  var body = JSON.stringify({ chart: { result: [{ meta: { currency: /\.SW$/.test(sym) ? 'CHF' : 'USD', shortName: sym }, timestamp: ts, indicators: { quote: [{ close: close }] } }] } });
+  return { getResponseCode: function () { return 200; }, getContentText: function () { return body; } };
+}   // a single request that would take Google over a minute is a bug waiting to happen
 
 var browser = null;
 async function getBrowser() { if (!browser) browser = await chromium.launch(); return browser; }
@@ -29,7 +39,7 @@ async function openApp(opts) {
   var page = await ctx.newPage();
   var posts = [], errors = [], state = { offline: false, fail: 0, getCount: 0 };
   // the real backend/Code.gs runs against a fake Sheet; app.store is a read-only view of what the Sheet holds
-  var gas = new FakeGas(), store = {};
+  var gas = new FakeGas({ fetch: fakeYahoo }), store = {};
   gas.setup();
   if (opts.oldBackend || (opts.data && !opts.data.Category && opts.noCategoryTab)) gas.dropSheet('Category');
   gas.seed(opts.data || {});

@@ -711,3 +711,25 @@ details.fold>summary:hover h3{color:var(--muted)}
 .bh-hbars i{display:block;background:var(--good)}.bh-hbars i.neg{background:var(--signal)}
 .bh-hbars b{font-size:12px;font-weight:500}.bh-hbars span{font-family:var(--f-mono);font-size:10px;color:var(--muted)}
 .bh-card .bh-two{grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+
+/* Ideas (24.11.2026) */
+.id-row{display:grid;grid-template-columns:minmax(0,1fr) 120px 80px;gap:12px;align-items:center;padding:12px 0;border:0;border-top:1px solid var(--rule);background:none;width:100%;text-align:left;font:inherit;color:inherit;cursor:pointer}
+.id-list .id-row:first-of-type{border-top:0}
+.id-n{min-width:0;display:grid;gap:2px;justify-items:start}.id-n b{font-size:15px;font-weight:600}.id-n small{color:var(--muted);font-size:12px}
+.id-v{font-size:11px;margin-top:3px}
+.id-spark{width:120px;height:32px;display:block}
+.id-c{text-align:right;display:grid;gap:2px;font-size:14px}.id-c small{font-size:11px;color:var(--muted)}
+@media (max-width:560px){.id-row{grid-template-columns:minmax(0,1fr) 78px}.id-row .id-spark{display:none}}
+.id-facts{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border-top:2px solid var(--ink);margin-bottom:10px}
+.id-facts div{padding:10px 10px 10px 0;border-right:1px solid var(--rule);display:grid;gap:2px;min-width:0}.id-facts div:last-child{border-right:0}
+.id-facts b{font-size:17px;font-weight:500}.id-facts span{font-size:11.5px;color:var(--muted)}
+@media (max-width:560px){.id-facts{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.id-chart svg{width:100%;height:auto;display:block}.id-chart .t{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+@media (max-width:640px){.id-chart .t{font-size:20px}}
+.id-view{display:grid;gap:8px;padding:10px 0;border-top:1px solid var(--rule)}.id-view:first-of-type{border-top:0}
+.id-view.old{opacity:.75}.id-view p{margin:0;font-size:14px;line-height:1.55;max-width:65ch}
+.id-vh{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.id-vh .lbl{font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.id-add{display:grid;gap:6px;border:1px dashed var(--ink);padding:12px;margin-top:10px}
+.id-add textarea{width:100%;font-family:var(--f-mono);font-size:12px}
+.linkbtn{background:none;border:0;padding:0;font:inherit;color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer}

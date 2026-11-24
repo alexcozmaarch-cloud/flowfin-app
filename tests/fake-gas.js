@@ -64,6 +64,7 @@ function FakeGas(opts) {
   this.props = { SHEET_ID:'test-sheet', FF_KEY:opts.key || 'test-key' };
   this.cache = {};
   this.log = [];   // { action, ms } per request
+  this.fetch = opts.fetch || null;   // pretend internet for UrlFetchApp (prices)
 }
 FakeGas.prototype.context = function () {
   var self = this, clock = this.clockRef.c = new Clock();
@@ -77,7 +78,7 @@ FakeGas.prototype.context = function () {
     ContentService:{ MimeType:{ JSON:'json' }, createTextOutput:function (s) { return { text:s, setMimeType:function () { return this; } }; } },
     Utilities:{ getUuid:function () { return crypto.randomUUID(); }, formatDate:function (d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); } },
     ScriptApp:{ getProjectTriggers:function () { return []; }, newTrigger:function () { var t = { timeBased:function () { return t; }, everyHours:function () { return t; }, everyDays:function () { return t; }, atHour:function () { return t; }, create:function () { return t; } }; return t; }, deleteTrigger:function () {} },
-    UrlFetchApp:{ fetch:function () { throw new Error('no network in tests'); } },
+    UrlFetchApp:{ fetch:function (url) { if (self.fetch) return self.fetch(url); throw new Error('no network in tests'); } },
     Logger:{ log:function () {} }
   };
   vm.createContext(ctx);

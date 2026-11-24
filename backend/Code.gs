@@ -35,7 +35,7 @@ var BOOLEAN = ['is_default','rollover_enabled','is_liability','auto_detected'];
 
 var SS_ = null;
 function ss_() { return SS_ || (SS_ = SpreadsheetApp.openById(SHEET_ID)); }   // opened once per request
-var API_VERSION = 4;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written · 4: fast sync (change counter, batch)
+var API_VERSION = 5;   // 2: readAll without the lock, upsertMany in one write · 3: Settings values come back as written · 4: fast sync (change counter, batch) · 5: daily prices for Ideas
 
 function setup() {
   var ss = ss_();
@@ -129,6 +129,7 @@ function doPost(e) {
       return json_({ ok: true, api: API_VERSION, rev: rev, data: readAll_() });
     }
     if (body.action === 'syncBase44') return json_({ ok: true, result: syncFromBase44() });
+    if (body.action === 'prices') return json_({ ok: true, api: API_VERSION, prices: prices_(body.symbols || [], body.from) });
     lock = LockService.getScriptLock();
     if (!lock.tryLock(20000)) { lock = null; throw new Error('The Sheet is busy with another save; try again in a minute'); }
     if (body.action === 'batch') { var prev = rev_(); out = { ok: true, prevRev: prev, results: batch_(body.ops || []) }; out.rev = bumpRev_(); return json_(out); }
@@ -239,6 +240,29 @@ function stopHourlySync() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'syncFromBase44') ScriptApp.deleteTrigger(t);
   });
+}
+
+// ---------- daily prices for the Ideas tab (API 5) ----------
+// Yahoo Finance's public chart data (no account). One request per symbol, kept for 6 hours.
+// Returns { SYMBOL: { currency, name, dates:[yyyy-mm-dd], closes:[number] } } or { SYMBOL: { error } }.
+function prices_(symbols, from) {
+  var cache = CacheService.getScriptCache(), out = {};
+  var start = from ? Math.floor(new Date(from + 'T00:00:00Z').getTime() / 1000) - 7 * 86400 : Math.floor(Date.now() / 1000) - 400 * 86400;
+  symbols.slice(0, 20).forEach(function (sym) {
+    sym = String(sym || '').trim().toUpperCase(); if (!sym || out[sym]) return;
+    var key = 'px_' + sym + '_' + start, hit = cache.get(key);
+    if (hit) { out[sym] = JSON.parse(hit); return; }
+    try {
+      var url = 'https://query1.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(sym) + '?interval=1d&period1=' + start + '&period2=' + Math.floor(Date.now() / 1000);
+      var res = UrlFetchApp.fetch(url, { muteHttpExceptions: true, headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (res.getResponseCode() !== 200) throw new Error('price service answered ' + res.getResponseCode());
+      var r = JSON.parse(res.getContentText()).chart.result[0], q = r.indicators.quote[0], ts = r.timestamp || [], d = [], c = [];
+      ts.forEach(function (t, i) { var v = q.close[i]; if (v === null || v === undefined) return; d.push(Utilities.formatDate(new Date(t * 1000), 'UTC', 'yyyy-MM-dd')); c.push(Math.round(v * 10000) / 10000); });
+      out[sym] = { currency: r.meta.currency || '', name: r.meta.longName || r.meta.shortName || '', dates: d, closes: c };
+      try { cache.put(key, JSON.stringify(out[sym]), 6 * 3600); } catch (e) {}
+    } catch (err) { out[sym] = { error: String(err.message || err) }; }
+  });
+  return out;
 }
 
 // ---------- fast sync (API 4) ----------

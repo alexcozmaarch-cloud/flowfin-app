@@ -41,13 +41,13 @@ var ACCOUNTS = [['credit_card','Credit card'],['debit_card','Debit card']];
 var NAV = [
   { label:'Overview', items:[['dashboard','Dashboard'],['transactions','Transactions']] },
   { label:'Planning', items:[['budgets','Budgets'],['goals','Goals']] },
-  { label:'Analysis', items:[['monthly','Monthly'],['behaviour','Behaviour']] },
+  { label:'Analysis', items:[['monthly','Monthly'],['behaviour','Behaviour'],['ideas','Ideas']] },
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '23.11.2026 · 2';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '24.11.2026 · 1';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
-var BUILT = { behaviour:1, dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
+var BUILT = { ideas:1, behaviour:1, dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 
 // Day / Evening / Automatic (follows the phone). Applied here, before anything is drawn, so the page never flashes.
 var THEME_KEY = 'ff_theme_v1';

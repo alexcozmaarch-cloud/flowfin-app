@@ -13,6 +13,7 @@ import { GFORM, addFixed, closeGForm, deleteGoal, drawGoal, goalPeriods, openGoa
 import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
+import { addFromCode, addManual, ideas, loadPrices } from './ideas.js';
 import { addAlways, jointRefundRow, setResolved, toggleJoint } from './joint.js';
 import { quickSave, readBhForm, saleRow, saveLabel, wantPark, wantDone } from './behaviour.js';
 import { startMic, voicePreview } from './voicetest.js';
@@ -119,6 +120,21 @@ document.addEventListener('click', function (e) {
   if (act === 'tagnew' && FORM) { readForm(); FORM._newtag = true; drawModal(); var nt = $('mnewtag'); if (nt) nt.focus(); return; }
   if (act === 'tagadd' && FORM) { var nv = ($('mnewtag') || {}).value || ''; readForm(); FORM._newtag = false; if (nv.trim()) toggleTag(nv.trim(), true); return drawModal(); }
   if (act === 'calday') { UI.calDay = a.getAttribute('data-d'); return draw(); }
+  if (act === 'idopen') { UI.idea = a.getAttribute('data-id'); UI.idErr = ''; draw(); window.scrollTo(0, 0); return; }
+  if (act === 'idadd') { UI.idAdd = !UI.idAdd; UI.idErr = ''; draw(); return; }
+  if (act === 'idpaste') {
+    return addFromCode(($('idCode') || {}).value).then(function (r) {
+      UI.idAdd = false; UI.idErr = ''; UI.idea = r.idea.id; toast(r.added ? 'Idea added: ' + r.idea.name : 'New view added to ' + r.idea.name);
+      draw(); return loadPrices(true).then(function () { draw(); });
+    }, function (e) { UI.idErr = e.message; draw(); });
+  }
+  if (act === 'idsave') {
+    var nm = String(($('idName') || {}).value || '').trim(); if (!nm) { UI.idErr = 'Give the idea a name.'; return draw(); }
+    return addManual({ name:nm, ticker:($('idTicker') || {}).value, date:($('idDate') || {}).value, source:($('idSource') || {}).value }).then(function (o) {
+      UI.idAdd = false; UI.idErr = ''; UI.idea = o.id; toast('Idea saved'); draw(); return loadPrices(true).then(function () { draw(); });
+    });
+  }
+  if (act === 'iddel') { var di = ideas().filter(function (x) { return x.id === a.getAttribute('data-id'); })[0]; if (!di) return; UI.idea = ''; return removeWithUndo('Idea “' + di.name + '”', [['Settings', di._sid]]); }
   if (act === 'jtsettle') return setResolved(a.getAttribute('data-id'), 'settled').then(function () { toast('Marked as settled'); draw(); });
   if (act === 'jtok') return setResolved(a.getAttribute('data-id'), 'ok').then(function () { draw(); });
   if (act === 'jtdel') return removeWithUndo('Refund', [['Transaction', a.getAttribute('data-id')]]);

@@ -593,6 +593,35 @@ module.exports = async function () {
     }
     h.noErrors(app); await app.ctx.close();
   });
+  console.log('\nIdeas');
+  await h.test('Ideas: a code from Claude adds the idea with its view, prices chart from the day mentioned, vs the world ETF', async function () {
+    function code(o) { return 'FFIDEA:' + Buffer.from(JSON.stringify(o), 'utf8').toString('base64'); }
+    var d0 = new Date(); d0.setDate(d0.getDate() - 40); var ds = d0.toISOString().slice(0, 10);
+    var app = await h.openApp({ data: demo.data, hash: 'ideas' }), pg = app.page; await h.settled(app, 10000);
+    await pg.click('[data-act=idadd]'); await pg.fill('#idCode', code({ n: 'Novartis', t: 'NOVN.SW', d: ds, s: 'colleague', v: { d: ds, r: 'small', x: '**What it is.** Swiss pharma.\n\n**Against.** Patent cliffs — and “CHF” strength.' } }));
+    await pg.click('[data-act=idpaste]'); await h.settled(app); await pg.waitForTimeout(1200);
+    var t = await pg.innerText('#view');
+    h.assert(/Novartis · NOVN\.SW/.test(t) && /price when mentioned/.test(t) && /since mentioned/.test(t) && /vs world ETF/.test(t), 'detail with facts: ' + t.slice(0, 400));
+    h.assert(await pg.locator('.id-chart svg circle').count() === 1, 'entry marked');
+    h.assert(/worth a small position/.test(t) && /Patent cliffs — and “CHF” strength/.test(t), 'view kept, accents intact');
+    // a second code for the same ticker adds a newer view on top
+    await pg.fill('#idCode', code({ n: 'Novartis', t: 'NOVN.SW', d: ds, v: { d: new Date().toISOString().slice(0, 10), r: 'watch', x: 'Valuation caught up.' } }));
+    await pg.click('[data-act=idpaste]'); await h.settled(app);
+    h.eq(await pg.locator('.id-view').count(), 2, 'two views');
+    var rows = Object.values(app.store.Settings).filter(function (r) { return /^idea_/.test(r.key); });
+    h.eq(rows.length, 1, 'one idea row in the Sheet');
+    // list, then one without a ticker and one with a ticker Yahoo doesn't know
+    await pg.click('[data-act=idopen][data-id=""]'); await pg.waitForTimeout(200);
+    await pg.click('[data-act=idadd]'); await pg.fill('#idName', 'CHF dividend carry'); await pg.click('[data-act=idsave]'); await h.settled(app);
+    h.assert(/No ticker/.test(await pg.innerText('#view')), 'no ticker note');
+    await pg.click('[data-act=idopen][data-id=""]'); await pg.click('[data-act=idadd]'); await pg.fill('#idName', 'Mystery'); await pg.fill('#idTicker', 'BADX'); await pg.click('[data-act=idsave]'); await h.settled(app); await pg.waitForTimeout(800);
+    h.assert(/No prices for BADX/.test(await pg.innerText('#view')), 'unknown ticker explained');
+    await pg.click('[data-act=iddel]'); await h.settled(app);
+    h.eq(Object.values(app.store.Settings).filter(function (r) { return /^idea_/.test(r.key); }).length, 2, 'deleted');
+    var list = await pg.innerText('#view');
+    h.assert(/Novartis/.test(list) && /world/.test(list), 'list shows change vs world');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

@@ -174,7 +174,9 @@ function applyInbox(obj, list, changed) {
   (obj.ideas || []).forEach(function (o) {
     var t = String(o.t || '').toUpperCase(), have = findIdea(list, t, o.n), v = o.v ? { date:o.v.d || o.d, verdict:o.v.r || 'watch', text:o.v.x || '', pct:o.v.p === undefined ? null : +o.v.p } : null;
     if (!have) { have = { id:Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name:o.n, ticker:t, date:o.d, source:o.s || '', views:[], checks:[] }; list.push(have); }
-    if (v && !(have.views || []).some(function (x) { return x.date === v.date && x.text === v.text; })) { have.views = [v].concat(have.views || []); }
+    var same = v && (have.views || []).filter(function (x) { return x.date === v.date && x.text === v.text; })[0];
+    if (same) { if ((same.pct === null || same.pct === undefined) && v.pct !== null) same.pct = v.pct; }   // pasted earlier as a code: just add the share
+    else if (v) have.views = [v].concat(have.views || []);
     changed[have.id] = have;
   });
   (obj.checks || []).forEach(function (c) {

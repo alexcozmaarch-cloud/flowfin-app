@@ -711,6 +711,27 @@ module.exports = async function () {
     h.assert(row && /NewBank/.test(row.value), 'fee table saved in the Sheet');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Holdings: paste a buy from the broker, value in CHF, tax sheet with ISIN, linked to its idea, delete with undo', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'ideas' }), pg = app.page; await h.settled(app, 10000);
+    await pg.click('[data-act="idview"][data-v="holdings"]'); await pg.waitForTimeout(200);
+    h.assert(/Nothing recorded yet/.test(await pg.innerText('#view')), 'empty state');
+    await pg.click('[data-act="hdform"]'); await pg.waitForTimeout(200);
+    var d = new Date(Date.now() - 10 * 864e5), ds = ('0' + d.getDate()).slice(-2) + '.' + ('0' + (d.getMonth() + 1)).slice(-2) + '.' + d.getFullYear();
+    await pg.fill('#hd-paste', 'Bought 0.4120 NVDA @ 152.30 USD, commission 0.35 USD, ' + ds); await pg.click('[data-act="hdparse"]'); await pg.waitForTimeout(200);
+    h.eq(await pg.inputValue('#hd-t'), 'NVDA', 'ticker read'); h.eq(await pg.inputValue('#hd-sh'), '0.412', 'shares read'); h.eq(await pg.inputValue('#hd-fee'), '0.35', 'fee read');
+    await pg.click('[data-act="hdsave"]'); await h.settled(app, 10000); await pg.waitForTimeout(800);
+    var row = Object.values(app.store.Settings).filter(function (r) { return /^trade_/.test(r.key); })[0];
+    h.assert(row && /"t":"NVDA"/.test(row.value) && /US67066G1040/.test(row.value), 'trade saved with its ISIN');
+    var t = await pg.innerText('#view');
+    h.assert(/worth today/.test(t) && /NVDA/.test(t) && /NVIDIA Corp\./.test(t), 'holding listed: ' + t.slice(0, 300));
+    await pg.click('[data-act="idview"][data-v="tax"]'); await pg.waitForTimeout(300);
+    t = await pg.innerText('#hd-tax');
+    h.assert(/Tax year/.test(t) && /US67066G1040/.test(t) && /Total/.test(t), 'tax sheet');
+    await pg.click('[data-act="idview"][data-v="holdings"]'); await pg.waitForTimeout(200);
+    await pg.click('[data-act="hddel"]'); await h.settled(app, 10000);
+    h.assert(!Object.values(app.store.Settings).some(function (r) { return /^trade_/.test(r.key); }), 'deleted');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

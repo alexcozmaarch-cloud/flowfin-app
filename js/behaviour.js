@@ -7,6 +7,7 @@ import { topbar } from './nav.js';
 import { saveMany, setting, tagsOf } from './transactions.js';
 import { normDesc, recurringItems } from './recurring.js';
 import { accounts, acctType, isLiab, mkey, monthDate, monthSnaps, snapsByEntry, wealthOn } from './wealth.js';
+import { holdingsValue } from './holdings.js';
 
 // ─── the rules (from the 20.11.2026 conversation) ─────────────────────────
 var CAP = { start:'2026-11-10', pct:9, min:5, max:12, step:0.5, maxBuys:8 };   // % of take-home; at most 8 purchases a period
@@ -111,6 +112,9 @@ function riskNow(ov) {
     r[lab] = (r[lab] || 0) + v; if (lab !== 'out') r.total += v;
     if (lab === 'spec') r.cost += (+e.total_invested || 0) * rate;
   });
+  // holdings recorded on the Ideas tab count as growth, unless a Wealth account already holds the broker
+  var hv = 0; try { hv = holdingsValue(); } catch (e) {}
+  if (hv > 0 && !accounts().some(function (e) { return /interactive|ibkr|holdings|depot|broker/i.test(e.name || ''); })) { r.growth += hv; r.total += hv; r.holdings = hv; r.list.push({ e:{ name:'Holdings (Ideas tab)' }, lab:'growth', v:hv }); }
   r.specShare = r.total ? r.spec / r.total * 100 : 0;
   var reach = r.safe + r.growth + r.spec; r.reachShare = reach ? r.spec / reach * 100 : 0;
   r.overCap = Math.max(0, r.spec - r.total * WEALTH_CAP / 100);
@@ -295,7 +299,7 @@ function behaviourHTML() {
     (rk.total ? '<div class="bh-ladder" role="img" aria-label="Wealth by risk">' + bar(cnt.map(function (x) { return ['r-' + x[0], rk[x[0]]]; })) +
       '<span class="cap" style="left:' + (100 - WEALTH_CAP) + '%"><span>' + WEALTH_CAP + '% line</span></span></div>' +
     '<div class="bh-legend">' + cnt.map(function (x) { return '<div class="bh-row"><div class="bh-line"><span class="sw r-' + x[0] + '"></span><span>' + x[1] + '</span><span class="rng' + (x[0] === 'spec' && rk.specShare > WEALTH_CAP ? ' neg' : '') + '">' + pct0(rk[x[0]] / rk.total * 100) + '</span><span class="v num">' + chf0(rk[x[0]]) + '</span></div></div>'; }).join('') + '</div>' +
-    '<div class="bh-two"><div class="bh-kpi"><span>ETFs, of all wealth</span><b class="num">' + pct0(rk.total ? rk.growth / rk.total * 100 : 0) + '</b><span>aim ' + ETF_AIM[0] + '–' + ETF_AIM[1] + '% over the next years</span></div>' +
+    '<div class="bh-two"><div class="bh-kpi"><span>Invested (growth), of all wealth' + (rk.holdings ? ' · incl. holdings ' + chf0(rk.holdings) : '') + '</span><b class="num">' + pct0(rk.total ? rk.growth / rk.total * 100 : 0) + '</b><span>aim ' + ETF_AIM[0] + '–' + ETF_AIM[1] + '% over the next years</span></div>' +
     '<div class="bh-kpi"><span>Collectibles, of all wealth</span><b class="num' + (rk.specShare > WEALTH_CAP ? ' neg' : ' pos') + '">' + pct0(rk.specShare) + '</b><span>line ' + WEALTH_CAP + '%' + (rk.overCap ? ' · ≈ ' + chf0(rk.overCap) + ' over' : ' · within') + '</span></div>' +
       '<div class="bh-kpi"><span>Of what you can reach now</span><b class="num' + (rk.reachShare > 50 ? ' neg' : '') + '">' + pct0(rk.reachShare) + '</b><span>cash, investments, cards; pensions idle</span></div></div>' +
     (rk.cost ? '<p class="soon">Card values are your latest Wealth figures (cost ' + chf0(rk.cost) + '), not sale prices.</p>' : '')

@@ -10,6 +10,7 @@ import { saveSetting } from './settings.js';
 import { behaviourModel } from './behaviour.js';
 import { capHTML, VIX, SPX, GAUGE_FROM } from './capitulation.js';
 import { brokersHTML, sliceAdvice } from './brokers.js';
+import { holdingsHTML, taxHTML, holdingSymbols, buysOf } from './holdings.js';
 
 var BENCH_DEFAULT = 'VWRL.SW';   // Vanguard FTSE All-World, traded in CHF on SIX
 // the yardsticks every idea is drawn and compared against (Yahoo symbols)
@@ -64,8 +65,9 @@ function loadPrices(force) {
   var list = ideas(), syms = {}, from = '';
   list.forEach(function (i) { if (i.ticker) { syms[i.ticker] = 1; if (!from || i.date < from) from = i.date; } });
   var gaugeOn = (UI.api || 1) >= 7;   // the capitulation gauge needs the VIX and the S&P 500 with volume, back to 2019 for the backtest
-  if (!Object.keys(syms).length && !gaugeOn) return Promise.resolve(false);
+  if (!Object.keys(syms).length && !gaugeOn && !holdingSymbols().syms.length) return Promise.resolve(false);
   benches().forEach(function (b) { syms[b.sym] = 1; });
+  var HS = holdingSymbols(); HS.syms.forEach(function (x) { syms[x] = 1; }); if (HS.from && (!from || HS.from < from)) from = HS.from;
   if (!from) from = ymd(today());
   // a year before the oldest idea too, so "moves with" (correlation) has enough days
   var yearAgo = ymd(addDays(today(), -370)); if (from > yearAgo) from = yearAgo;
@@ -143,6 +145,8 @@ function bigChart(st, idea) {
     lines.map(function (x) { return '<path d="' + linePath(x.v, W, H, lo, hi) + '" fill="none" stroke="var(--s3)" stroke-width="1.5"' + (x.b.dash ? ' stroke-dasharray="' + x.b.dash + '"' : '') + '/>'; }).join('') +
     '<path d="' + linePath(v, W, H, lo, hi) + '" fill="none" stroke="var(--ink)" stroke-width="2"/>' +
     '<circle cx="4" cy="' + y(st.entry).toFixed(1) + '" r="5" fill="var(--signal)"/>' +
+    buysOf(idea.ticker).map(function (b) { var k = st.s.dates.indexOf(b.d); if (k < 0) { for (k = 0; k < n && st.s.dates[k] < b.d; k++); if (k >= n) return ''; } var bx = k / Math.max(1, n - 1) * W;
+      return '<circle cx="' + bx.toFixed(1) + '" cy="' + y(v[k]).toFixed(1) + '" r="4.5" fill="var(--paper)" stroke="var(--ink)" stroke-width="2"><title>bought ' + dm(b.d) + '</title></circle>'; }).join('') +
     '<text x="12" y="' + (y(st.entry) - 8).toFixed(1) + '" class="t">entry ' + dm(st.s.dates[0]) + ' · ' + fmtP(st.entry) + '</text>' +
     '<text x="' + W + '" y="' + (y(st.last) - 8).toFixed(1) + '" text-anchor="end" class="t">' + fmtP(st.last) + ' · ' + pct(st.chg) + '</text>' +
     endLabels(lines, y, W, st) +
@@ -251,6 +255,8 @@ function stockSlice(list) {   // the smallest monthly single-share slice, for th
   return s;
 }
 function howHTML(i, amt) {
+  var recent = i.ticker ? buysOf(i.ticker).filter(function (b) { return b.d >= ymd(addDays(today(), -30)); }) : [];
+  if (recent.length) return '<small class="id-how"><i class="go">✓ bought</i> ' + recent.length + '× in the last 30 days</small>';
   var A = sliceAdvice(amt, isEtf(i)), bn = esc(A.b.n.replace('Interactive Brokers', 'IBKR'));
   if (A.how === 'plan') return '<small class="id-how"><i class="go">monthly</i> savings plan</small>';
   if (A.how === 'none') return '<small class="id-how"><i class="wait">not at ' + bn + '</i> no single shares there</small>';
@@ -275,6 +281,11 @@ function ideasHTML() {
   if ((UI.api || 1) < 5 && list.some(function (i) { return i.ticker; })) h += '<p class="soon" style="margin:-4px 0 16px">Prices need the latest Code.gs (API 5); until then ideas are listed without charts.</p>';
   else loadPrices().then(function (changed) { if (changed && UI.page === 'ideas') draw(); });
   syncInbox().then(function (n) { if (n && UI.page === 'ideas') { toast('Claude’s updates arrived'); loadPrices(true).then(function () { draw(); }); draw(); } });
+  var view = UI.idView || 'ideas';
+  h += '<span class="seg2 id-views" role="radiogroup" aria-label="View">' + [['ideas', 'Ideas'], ['holdings', 'Holdings'], ['tax', 'Tax year']].map(function (o) {
+    return '<button role="radio" aria-checked="' + (view === o[0]) + '" class="' + (view === o[0] ? 'on' : '') + '" data-act="idview" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</span>';
+  if (view === 'holdings') return h + holdingsHTML(list);
+  if (view === 'tax') return h + taxHTML();
   if (UI.idea) { var one = list.filter(function (i) { return i.id === UI.idea; })[0]; if (one) return h + ideaHTML(one); UI.idea = ''; }
   h += availHTML();
   h += '<section class="card id-list"><h3>Your ideas<span class="r">since mentioned · vs world (' + esc(bench()) + ')</span></h3>';

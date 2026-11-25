@@ -14,6 +14,7 @@ import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
 import { addFromCode, addManual, ideas, loadPrices, syncInbox } from './ideas.js';
+import { KNOWN, parsePaste, readForm as hdReadForm, taxTSV, trades } from './holdings.js';
 import { addAlways, jointRefundRow, setResolved, toggleJoint } from './joint.js';
 import { quickSave, readBhForm, saleRow, saveLabel, wantPark, wantDone } from './behaviour.js';
 import { startMic, voicePreview } from './voicetest.js';
@@ -148,6 +149,26 @@ document.addEventListener('click', function (e) {
     return saveRow('Transaction', jointRefundRow(ja)).then(function () { toast('Logged: joint account paid ' + fmtCHF.format(ja)); draw(); });
   }
   if (act === 'bhsplit') return saveSetting('etf_share', a.getAttribute('data-v')).then(function () { draw(); });
+  if (act === 'idview') { UI.idView = a.getAttribute('data-v'); UI.idea = ''; return draw(); }
+  if (act === 'hdform') { UI.hdForm = UI.hdForm ? null : { d:ymd(today()), k:'buy', ccy:'USD', broker:'Interactive Brokers' }; UI.hdErr = ''; return draw(); }
+  if (act === 'hdparse') {
+    var po = parsePaste(($('hd-paste') || {}).value || ''), cur = hdReadForm();
+    if (!po.t && !po.px) { UI.hdErr = 'Couldn’t read that line: fill in the fields instead.'; UI.hdForm = cur; return draw(); }
+    UI.hdErr = ''; UI.hdForm = Object.assign({}, cur, po); return draw();
+  }
+  if (act === 'hdsave') {
+    var fo = hdReadForm(); UI.hdForm = fo;
+    if (!fo.t || !fo.d || !(fo.px > 0) || (fo.k !== 'div' && !(fo.sh > 0))) { UI.hdErr = 'Needs a ticker, a date, ' + (fo.k === 'div' ? 'and the dividend.' : 'shares and a price.'); return draw(); }
+    if (KNOWN[fo.t] && !fo.isin) fo.isin = KNOWN[fo.t][0];
+    if (KNOWN[fo.t]) fo.n = KNOWN[fo.t][1];
+    var tid = Date.now().toString(36) + Math.random().toString(36).slice(2, 6), keep = {};
+    Object.keys(fo).forEach(function (k) { if (fo[k] !== null && fo[k] !== '' && fo[k] !== undefined) keep[k] = fo[k]; });
+    return saveSetting('trade_' + tid, JSON.stringify(keep)).then(function () { UI.hdForm = null; UI.hdErr = ''; toast((fo.k === 'buy' ? 'Buy' : fo.k === 'sell' ? 'Sale' : 'Dividend') + ' of ' + fo.t + ' saved'); return loadPrices(); }).then(function () { draw(); });
+  }
+  if (act === 'hddel') { var tr = trades().filter(function (x) { return x.id === a.getAttribute('data-id'); })[0]; if (!tr) return; return removeWithUndo((tr.k === 'div' ? 'Dividend ' : 'Trade ') + tr.t, [['Settings', tr._sid]]); }
+  if (act === 'taxyear') { UI.taxYear = a.getAttribute('data-v'); return draw(); }
+  if (act === 'taxcopy') { var tsv = taxTSV(UI.taxYear); try { navigator.clipboard.writeText(tsv).then(function () { toast('Copied: paste into a spreadsheet or your tax notes'); }, function () { toast('Couldn’t copy here'); }); } catch (e) { toast('Couldn’t copy here'); } return; }
+  if (act === 'taxprint') { document.body.classList.add('print-tax'); setTimeout(function () { window.print(); document.body.classList.remove('print-tax'); }, 50); return; }
   if (act === 'bhshare') return saveSetting('invest_share_' + ymd(periodAt(0).start), a.getAttribute('data-v')).then(function () { draw(); });
   if (act === 'bhinvest') {
     var iv = +a.getAttribute('data-v'), ik = 'bh_invest_' + ymd(periodAt(0).start);

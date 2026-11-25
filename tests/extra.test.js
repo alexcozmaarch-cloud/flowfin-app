@@ -583,14 +583,21 @@ module.exports = async function () {
     var t = await pg.innerText('#view');
     h.assert(/Investing this period/.test(t) && /saved so far/.test(t), 'investing card');
     h.eq(await pg.locator('.bh-pot i').count() >= 28, true, 'one bar per day of the period');
-    await pg.click('[data-act=bhsplit][data-v="100"]'); await h.settled(app);
-    h.assert(Object.values(app.store.Settings).some(function (r) { return r.key === 'etf_share' && String(r.value) === '100'; }), 'split saved');
-    h.assert(/Stays as cash\s*0\.00|Stays as cash\s*0$/m.test(await pg.innerText('#view')) || /Stays as cash\n0/.test(await pg.innerText('#view')), 'all to ETFs');
+    t = await pg.innerText('.bh-inv');
+    h.assert(/Available to invest now/i.test(t) && /advised/.test(t) && /Advised this period/.test(t) && /Starting point/.test(t), 'available now with the advised share and its reasons');
+    await pg.click('[data-act=bhshare][data-v="100"]'); await h.settled(app);
+    h.assert(Object.values(app.store.Settings).some(function (r) { return /^invest_share_/.test(r.key) && String(r.value) === '100'; }), 'your own share saved');
+    t = await pg.innerText('.bh-inv');
+    h.assert(/You picked 100%/.test(t) && /Stays as cash\s*0/.test(t), 'your share overrides the advice; nothing stays as cash');
+    await pg.click('.bh-share button.adv'); await h.settled(app);
+    h.assert(!/You picked/.test(await pg.innerText('.bh-inv')), 'back to the advice');
     if (await pg.locator('[data-act=bhinvest]').count()) {
       await pg.click('[data-act=bhinvest]'); await h.settled(app);
-      h.assert(Object.values(app.store.Transaction).some(function (x) { return x.description === 'IBKR ETF transfer' && x.subcategory === 'ETF Investing'; }), 'ETF transfer logged');
-      h.assert(/Moved .* to ETFs ✓/.test(await pg.innerText('#view')), 'marked as done');
+      h.assert(Object.values(app.store.Transaction).some(function (x) { return x.description === 'Investing transfer' && x.subcategory === 'ETF Investing'; }), 'transfer logged');
+      h.assert(/Moved .* to investing ✓/.test(await pg.innerText('#view')), 'marked as done');
     }
+    await pg.evaluate(function () { location.hash = 'ideas'; }); await pg.waitForTimeout(800);
+    h.assert(/available to invest now/i.test(await pg.innerText('.id-avail')), 'same figure at the top of Ideas');
     h.noErrors(app); await app.ctx.close();
   });
   console.log('\nIdeas');

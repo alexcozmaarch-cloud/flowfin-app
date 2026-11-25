@@ -343,7 +343,42 @@ function flowDetail(f, lab) {
 // Each day of the period: your room (take-home minus household, per day) minus what you spent yourself (personal and
 // collectibles). The sum so far is the pot; the pace of the days so far projects it to the end of the period.
 // The pot is split: your ETF share (50/75/90/100%) to ETFs, the rest stays as cash. ETF buys don't count as spending.
-function etfShare() { var v = parseFloat(setting('etf_share', '')); return ETF_SPLIT.indexOf(v) > -1 ? v : 75; }
+function etfShare() { var v = parseFloat(setting('etf_share', '')); return ETF_SPLIT.indexOf(v) > -1 ? v : 75; }   // your usual share (the advice starts here)
+function ownShare(p) { var v = parseFloat(setting('invest_share_' + ymd(p.start), '')); return v >= 50 && v <= 100 ? v : 0; }        // a share you picked for this period, overriding the advice (next period starts from the advice again)
+// The advised share of what you save that goes to investing, with its reasons. Approved 25.11.2026 (mockup "FlowFin Available to Invest").
+function adviseShare(P, ov, r) {
+  var base = etfShare(), why = [{ t:'Starting point', s:'your usual share', v:base, base:true }], adj = 0, t = today();
+  // 1 · this period's pace against the last 6 periods
+  var lefts = P.hist.map(function (x) { return x.left; }), avgL = lefts.length ? lefts.reduce(function (a, b) { return a + b; }, 0) / lefts.length : 0;
+  if (lefts.length >= 2 && avgL > 0 && P.el >= 5) {
+    var ratio = P.projected / avgL;
+    if (ratio >= 1.15) { adj += 10; why.push({ t:'You’re saving faster than usual', s:'this period’s pace is ' + Math.round((ratio - 1) * 100) + '% above your ' + lefts.length + '-period average', v:10 }); }
+    else if (ratio <= 0.85) { adj -= 10; why.push({ t:'You’re saving slower than usual', s:'this period’s pace is ' + Math.round((1 - ratio) * 100) + '% below your ' + lefts.length + '-period average', v:-10 }); }
+  }
+  // 2 · a large payment due in the next 30 days (scheduled entries and expected recurring ones; household doesn't count, it's already in your room)
+  var end = addDays(t, 30), big = [];
+  txs().forEach(function (tx) { var d = pd(tx.date); if (d > t && d <= end && tx.type !== 'income' && tx.type !== 'refund' && +tx.amount >= 500 && flowLabel(tx, ov, r) !== 'household') big.push({ n:tx.description || tx.category, a:+tx.amount, d:d }); });
+  try { recurringItems().forEach(function (it) {
+    if ((it.status && it.status !== 'active') || it.type === 'income' || it.type === 'refund' || !it.next || it.next <= t || it.next > end || +it.amount < 500) return;
+    if (flowLabel({ category:it.category, subcategory:it.subcategory, tags:'' }, ov, r) === 'household') return;
+    if (big.some(function (b) { return normDesc(b.n) === normDesc(it.name); })) return;
+    big.push({ n:it.name, a:+it.amount, d:it.next });
+  }); } catch (e) {}
+  if (big.length) {
+    var sum = big.reduce(function (a, b) { return a + b.a; }, 0), hard = sum >= Math.max(1, P.projected) * 0.5, b0 = big.sort(function (x, y) { return y.a - x.a; })[0];
+    adj += hard ? -20 : -10;
+    why.push({ t:big.length > 1 ? big.length + ' big payments are coming' : 'A big payment is coming', s:esc(b0.n) + ', ' + chf0(b0.a) + ' on ' + b0.d.getDate() + '.' + (b0.d.getMonth() + 1) + '.' + (big.length > 1 ? ' · ' + chf0(sum) + ' in all' : ''), v:hard ? -20 : -10 });
+  }
+  // 3 · personal spending against your room so far
+  if (P.el >= 5 && P.perDay > 0) {
+    var pace = P.el ? (P.el * P.perDay - P.pot) / P.el : 0;
+    if (pace <= P.perDay) { adj += 5; why.push({ t:'Personal spending within your room', s:'about ' + chf0(pace) + ' a day against ' + chf0(P.perDay), v:5 }); }
+    else if (pace > P.perDay * 1.1) { adj -= 10; why.push({ t:'Personal spending over your room', s:'about ' + chf0(pace) + ' a day against ' + chf0(P.perDay), v:-10 }); }
+  }
+  var adv = Math.max(50, Math.min(100, Math.round((base + adj) / 5) * 5));
+  return { adv:adv, why:why, base:base };
+}
+
 function potModel(now, room, past, ov, r) {
   var p = now.p, t = today(), len = daysBetween(p.start, p.end) + 1, el = Math.min(len, daysBetween(p.start, t) + 1);
   var perDay = room * 30 / len, spent = 0, days = [];
@@ -356,13 +391,14 @@ function potModel(now, room, past, ov, r) {
   });
   days.forEach(function (x) { x.net = x.future ? 0 : perDay - x.spent; });
   var pot = el * perDay - spent, pace = el ? spent / el : 0, projected = pot + (len - el) * (perDay - pace);
-  var share = etfShare(), base = Math.max(0, projected);
+  var P0 = { el:el, perDay:perDay, pot:pot, projected:projected, hist:past.slice(0, 6).map(function (f) { return { left:f.left }; }) }, A = adviseShare(P0, ov, r);
+  var share = ownShare(p) || A.adv, base = Math.max(0, projected);
   // ETFs logged (Financial Investing › ETF…) this period and this year
   var etfIn = function (from, to) { return txs().filter(function (tx) { var d = pd(tx.date); return d >= from && d <= to && d <= t && flowLabel(tx, ov, r) === 'growth' && tx.type !== 'income' && tx.type !== 'refund'; }).reduce(function (a, tx) { return a + (+tx.amount || 0); }, 0); };
   var yr = new Date(t.getFullYear(), 0, 1);
   // what earlier periods would have given (left over × your share), for the trend
   var hist = past.slice(0, 6).reverse().map(function (f) { return { p:f.p, left:f.left, etf:Math.max(0, f.left) * share / 100 }; });
-  return { perDay:perDay, days:days, el:el, len:len, pot:pot, projected:projected, share:share, etf:base * share / 100, cash:base * (100 - share) / 100,
+  return { perDay:perDay, days:days, el:el, len:len, pot:pot, projected:projected, share:share, adv:A.adv, why:A.why, own:!!ownShare(p), avail:Math.max(0, pot) * share / 100, etf:base * share / 100, cash:base * (100 - share) / 100,
     etfPeriod:etfIn(p.start, p.end), etfYear:etfIn(yr, t), hist:hist, takeHome:now.f.takeHome };
 }
 function investHTML(m) {
@@ -373,20 +409,30 @@ function investHTML(m) {
   }).join('');
   var doneKey = 'bh_invest_' + ymd(m.now.p.start), doneV = setting(doneKey, ''), pctTake = P.takeHome ? P.etf / P.takeHome * 100 : 0;
   var hmax = Math.max.apply(null, P.hist.map(function (x) { return Math.abs(x.left); }).concat([1]));
-  return '<section class="card bh-card"><h3>Investing this period <span class="r">follows what you save</span></h3>' +
-    '<div class="bh-big"><b class="num' + (P.pot < 0 ? ' neg' : ' pos') + '">' + (P.pot < 0 ? '−' : '') + chf0(Math.abs(P.pot)) + '</b><span>saved so far · on pace for <strong class="num">' + (P.projected < 0 ? '−' : '') + chf0(Math.abs(P.projected)) + '</strong> by the ' + m.now.p.end.getDate() + 'th</span></div>' +
+  var saved = Math.max(0, P.pot), avail = Math.round(P.avail), endD = m.now.p.end;
+  var chips = ETF_SPLIT.concat(ETF_SPLIT.indexOf(P.adv) < 0 ? [P.adv] : []).concat(P.own && ETF_SPLIT.indexOf(P.share) < 0 && P.share !== P.adv ? [P.share] : []).sort(function (x, y) { return x - y; });
+  var adj = P.why.filter(function (w) { return !w.base; });
+  return '<section class="card bh-card bh-inv"><h3>Investing this period <span class="r">follows what you save</span></h3>' +
+    '<div class="bh-hero"><div><span class="lbl">Available to invest now</span><b class="num">' + chf0(avail) + '<small> CHF</small></b><p>' +
+      (P.pot > 0 ? P.share + '% of the ' + chf0(saved) + ' you’ve saved so far this period. Safe to move today.' : 'Nothing saved yet this period: every day under your room adds to it.') + '</p></div>' +
+    '<div><span class="lbl">By the end of the period, ' + endD.getDate() + '.' + (endD.getMonth() + 1) + '.</span><b class="num mid">≈ ' + chf0(Math.max(0, P.etf)) + '</b><p>' +
+      (P.projected > 0 ? 'If you keep today’s pace: ' + P.share + '% of about ' + chf0(P.projected) + ' saved.' : 'On this pace nothing is left for investing this period.') + '</p></div></div>' +
+    '<p class="bh-sum">saved so far <b>' + chf0(saved) + '</b> × ' + (P.own ? 'your' : 'advised') + ' <b>' + P.share + '%</b> = <b>' + chf0(avail) + '</b> · the other <b>' + chf0(saved - avail) + '</b> stays as cash</p>' +
     '<div class="bh-pot" role="img" aria-label="Each day: your room minus what you spent">' + bars + '</div>' +
-    '<p class="soon">Each day your room (' + chf0(P.perDay) + ') minus what you spent yourself: green adds, red takes away. Household and ETF buys don’t count.</p>' +
-    '<div class="lbl">Your split of what you save</div>' +
-    '<span class="seg2" role="radiogroup" aria-label="Share to ETFs">' + ETF_SPLIT.map(function (v) { return '<button role="radio" aria-checked="' + (P.share === v) + '" class="' + (P.share === v ? 'on' : '') + '" data-act="bhsplit" data-v="' + v + '">' + v + '% ETFs</button>'; }).join('') + '</span>' +
-    '<dl class="bh-money"><dt>To ETFs (IBKR)</dt><dd class="num"><b>' + chf0(P.etf) + '</b></dd><dt>Stays as cash</dt><dd class="num">' + chf0(P.cash) + '</dd>' +
-      '<dt>That’s of your take-home</dt><dd class="num">' + pctTake.toFixed(1) + '%</dd>' +
-      '<dt>ETFs logged this period · ' + today().getFullYear() + '</dt><dd class="num">' + chf0(P.etfPeriod) + ' · ' + chf0(P.etfYear) + '</dd></dl>' +
-    (P.projected <= 0 ? '<p class="soon">On this pace nothing is left for ETFs this period. Every day under your room changes that.</p>' :
-      (doneV ? '<p class="pos">Moved ' + chf0(+doneV) + ' to ETFs ✓</p>' : P.pot * P.share / 100 >= 1 ? '<div class="bh-btns"><button class="btn primary" data-act="bhinvest" data-v="' + Math.round(P.pot * P.share / 100) + '">I moved ' + chf0(Math.round(P.pot * P.share / 100)) + ' to ETFs</button></div>' +
-        '<p class="soon">The button uses what you’ve saved so far (' + P.share + '% of ' + chf0(P.pot) + '); the full ' + chf0(P.etf) + ' is the end-of-period estimate.</p>' : '')) +
+    '<p class="soon">Each day your room (' + chf0(P.perDay) + ') minus what you spent yourself: green adds, red takes away. Household and investing don’t count.</p>' +
+    '<div class="lbl">Share of what you save that goes to investing</div>' +
+    '<span class="seg2 bh-share" role="radiogroup" aria-label="Share to investing">' + chips.map(function (v) {
+      return '<button role="radio" aria-checked="' + (P.share === v) + '" class="' + (P.share === v ? 'on' : '') + (v === P.adv ? ' adv' : '') + '" data-act="bhshare" data-v="' + (v === P.adv ? '' : v) + '">' + v + '%' + (v === P.adv ? ' · advised' : '') + '</button>'; }).join('') + '</span>' +
+    '<div class="bh-why">' + P.why.map(function (w) { return '<div><span>' + w.t + '<small>' + w.s + '</small></span><span class="num' + (w.base ? '' : w.v > 0 ? ' pos' : ' neg') + '">' + (w.base ? w.v + '%' : (w.v > 0 ? '+' : '−') + Math.abs(w.v)) + '</span></div>'; }).join('') +
+      (adj.length ? '' : '<div><span>Nothing changes it this period<small>pace, payments and spending are all as usual</small></span><span class="num">±0</span></div>') +
+      '<div class="tot"><span>Advised this period</span><span class="num">' + P.adv + '%</span></div></div>' +
+    '<p class="soon">' + (P.own ? 'You picked ' + P.share + '% for this period; tap “' + P.adv + '% · advised” to follow the advice again. ' : '') + 'The advice starts from your usual share, stays between 50% and 100% and is worked out again every day. Collectibles don’t change it: the cap handles those.</p>' +
+    '<dl class="bh-money"><dt>To invest now</dt><dd class="num"><b>' + chf0(avail) + '</b></dd><dt>Stays as cash</dt><dd class="num">' + chf0(saved - avail) + '</dd>' +
+      '<dt>End-of-period estimate, of take-home</dt><dd class="num">' + pctTake.toFixed(1) + '%</dd>' +
+      '<dt>Invested this period · ' + today().getFullYear() + '</dt><dd class="num">' + chf0(P.etfPeriod) + ' · ' + chf0(P.etfYear) + '</dd></dl>' +
+    (doneV ? '<p class="pos">Moved ' + chf0(+doneV) + ' to investing ✓</p>' : avail >= 1 ? '<div class="bh-btns"><button class="btn primary" data-act="bhinvest" data-v="' + avail + '">I moved ' + chf0(avail) + ' to investing</button></div>' : '') +
     (P.hist.length ? '<div class="lbl">Earlier periods · what ' + P.share + '% of what was left would have been</div><div class="bh-hbars">' + P.hist.map(function (x) {
-      return '<div><i class="' + (x.left < 0 ? 'neg' : '') + '" style="height:' + Math.max(1, Math.round(40 * Math.abs(x.left) / hmax)) + 'px"></i><b class="num">' + (x.left < 0 ? '0' : chf0(x.etf)) + '</b><span>' + x.p.start.toLocaleDateString('en-GB', { month:'short' }) + '</span></div>';
+      return '<div><i class="' + (x.left < 0 ? 'neg' : '') + '" style="height:' + Math.max(1, Math.round(40 * Math.abs(x.left) / hmax)) + 'px"></i><b class="num">' + (x.left < 0 ? '0' : chf0(x.left * P.share / 100)) + '</b><span>' + x.p.start.toLocaleDateString('en-GB', { month:'short' }) + '</span></div>';
     }).join('') + '</div>' : '') + '</section>';
 }
 

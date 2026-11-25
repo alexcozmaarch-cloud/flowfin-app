@@ -4,7 +4,7 @@
 // Prices come from your Apps Script (API 5), which asks Yahoo Finance; they're kept on this phone for 12 hours.
 // Claude's views arrive as a paste code "FFIDEA:<base64 JSON>" written in the chat.
 import { post } from './api.js';
-import { $, addDays, daysBetween, esc, fmtCHF, lsGet, lsSet, pd, toast, today, ymd } from './core.js';
+import { $, addDays, chf0, daysBetween, esc, fmtCHF, lsGet, lsSet, pd, toast, today, ymd } from './core.js';
 import { draw, topbar } from './nav.js';
 import { saveSetting } from './settings.js';
 import { behaviourModel } from './behaviour.js';
@@ -236,7 +236,13 @@ function latest(i) {
   if (c && (!v || c.date >= v.date)) return { verdict:c.verdict, pct:c.pct, date:c.date };
   return v ? { verdict:v.verdict, pct:v.pct === undefined ? null : v.pct, date:v.date } : null;
 }
-function investable() { try { var p = behaviourModel().pot; return Math.max(0, p.etf || 0); } catch (e) { return 0; } }
+function investable() { try { var p = behaviourModel().pot; return Math.max(0, p.avail || 0); } catch (e) { return 0; } }   // available to invest now (advised or your share of what you've saved this period)
+function availHTML() {
+  var p; try { p = behaviourModel().pot; } catch (e) { return ''; }
+  if (!p) return '';
+  return '<section class="id-avail"><b class="num">' + chf0((p.avail || 0)) + '</b><div><b>CHF available to invest now</b><p>' + p.share + '% ' + (p.own ? 'your share' : 'advised') + ' of the ' + chf0((Math.max(0, p.pot))) +
+    ' you’ve saved this period · about ' + chf0((Math.max(0, p.etf))) + ' by the period’s end · split below</p></div><a href="#behaviour">Why ' + p.share + '%?</a></section>';
+}
 // ETFs go in a savings plan; single shares are bought when the fee is small enough at your broker
 function isEtf(i) { return /\b(ETF|UCITS|QQQ|Nasdaq-100|S&P 500|MSCI|FTSE|index)\b/i.test((i.name || '') + ' ' + (i.ticker || '')) || /^(QQQ|VWRL|VWRA|VT|VOO|SPY|CSPX|EQQQ|CHSPI|SPICHA)$/i.test(i.ticker || ''); }
 function stockSlice(list) {   // the smallest monthly single-share slice, for the broker card
@@ -270,6 +276,7 @@ function ideasHTML() {
   else loadPrices().then(function (changed) { if (changed && UI.page === 'ideas') draw(); });
   syncInbox().then(function (n) { if (n && UI.page === 'ideas') { toast('Claude’s updates arrived'); loadPrices(true).then(function () { draw(); }); draw(); } });
   if (UI.idea) { var one = list.filter(function (i) { return i.id === UI.idea; })[0]; if (one) return h + ideaHTML(one); UI.idea = ''; }
+  h += availHTML();
   h += '<section class="card id-list"><h3>Your ideas<span class="r">since mentioned · vs world (' + esc(bench()) + ')</span></h3>';
   h += list.length ? list.map(function (i) {
     var st = i.ticker ? stats(i) : null, v = latest(i);

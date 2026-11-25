@@ -1,5 +1,6 @@
 // FlowFin · Dashboard: day-to-day model, forecast, weeks, card invoice, free cash, projections.
 // Shared settings and state (DATA, UI, _cache, CATEGORIES …) are globals from js/config.js.
+import { paydayHTML } from './payday.js';
 import { owedLineHTML } from './owed.js';
 import { jointLineHTML } from './joint.js';
 import { budgetMapFor, budgetRows, catSpend, holidaysBudgeted } from './budgets.js';
@@ -68,6 +69,7 @@ function dashboardHTML() {
   if (!txs().length && UI.sync !== 'ok') return topbar('Dashboard', true) + '<div class="empty">Loading your data from the Sheet…</div>';
   var m = periodModel(UI.periodOffset), D = d2dModel(UI.periodOffset), P = d2dModel(UI.periodOffset - 1);
   var h = topbar('Dashboard', true, '<button class="btn primary" data-act="addtx">+ Add</button>');
+  if (!UI.periodOffset) h += paydayHTML();
   if (!D.budget) {
     h += '<section class="notice"><span>Set your day-to-day budgets (Personal Cash, Collectibles) to see what’s left to spend.</span><button class="btn primary" data-nav="budgets">Plan budgets</button></section>';
   }

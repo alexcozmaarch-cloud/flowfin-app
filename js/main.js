@@ -14,9 +14,10 @@ import { importFiles } from './import.js';
 import { draw, go } from './nav.js';
 import { saveSetting } from './settings.js';
 import { addFromCode, addManual, ideas, loadPrices, syncInbox } from './ideas.js';
+import { lastSalary } from './payday.js';
 import { KNOWN, parsePaste, readForm as hdReadForm, taxTSV, trades } from './holdings.js';
 import { addAlways, jointRefundRow, setResolved, toggleJoint } from './joint.js';
-import { quickSave, readBhForm, saleRow, saveLabel, wantPark, wantDone } from './behaviour.js';
+import { behaviourModel, quickSave, readBhForm, saleRow, saveLabel, wantPark, wantDone } from './behaviour.js';
 import { startMic, voicePreview } from './voicetest.js';
 import { FORM, addCustomSub, autofill, fxInfo, paintTagChips, searchWithout, toggleTag, closeModal, drawModal, filteredTx, hideSugg, openTx, paintSugg, pickSugg, readForm, recalcFx, ruleFromForm, saveForm, saveMany, splitRest, subsOf, suggestedRules, tagsOf } from './transactions.js';
 import { WFORM, accounts, closeWForm, deleteAcct, drawAcct, isArchived, openAcct, openUpdate, readAcct, saveAcct, saveUpdate } from './wealth.js';
@@ -149,6 +150,23 @@ document.addEventListener('click', function (e) {
     return saveRow('Transaction', jointRefundRow(ja)).then(function () { toast('Logged: joint account paid ' + fmtCHF.format(ja)); draw(); });
   }
   if (act === 'bhsplit') return saveSetting('etf_share', a.getAttribute('data-v')).then(function () { draw(); });
+  if (act === 'pdtick' || act === 'pdhide' || act === 'pdclose') {
+    var Sx = lastSalary(); if (!Sx) return;
+    var tkKey = 'payday_' + Sx.d, tk = {}; try { tk = JSON.parse((DATA.Settings || []).filter(function (r) { return r.key === tkKey; }).map(function (r) { return r.value; })[0] || '{}'); } catch (e) {}
+    if (act === 'pdclose') { tk._closed = true; return saveSetting(tkKey, JSON.stringify(tk)).then(function () { toast('Payday list closed'); draw(); }); }
+    var sk = a.getAttribute('data-k');
+    if (act === 'pdhide') { var hid = []; try { hid = JSON.parse((DATA.Settings || []).filter(function (r) { return r.key === 'payday_hide'; }).map(function (r) { return r.value; })[0] || '[]'); } catch (e) {}
+      if (hid.indexOf(sk) < 0) hid.push(sk); return saveSetting('payday_hide', JSON.stringify(hid)).then(function () { toast('Step hidden on future paydays too'); draw(); }); }
+    tk[sk] = !tk[sk];
+    var chain = saveSetting(tkKey, JSON.stringify(tk));
+    if (sk === 'invest' && tk[sk]) {   // log it like "I moved … to investing", once per period
+      var pv = behaviourModel().pot, ivA = Math.round(pv && pv.avail || 0), ivK = 'bh_invest_' + ymd(periodAt(0).start);
+      if (ivA >= 1 && !(DATA.Settings || []).some(function (r) { return r.key === ivK && r.value; }))
+        chain = chain.then(function () { return saveRow('Transaction', { date:ymd(today()), description:'Investing transfer', category:'Financial Investing', subcategory:'ETF Investing', amount:ivA, type:'investment', account:'debit_card', tags:'etf' }); })
+          .then(function () { return saveSetting(ivK, String(ivA)); }).then(function () { toast('Logged: ' + fmtCHF.format(ivA) + ' to investing'); });
+    }
+    return chain.then(function () { draw(); });
+  }
   if (act === 'idview') { UI.idView = a.getAttribute('data-v'); UI.idea = ''; return draw(); }
   if (act === 'hdform') { UI.hdForm = UI.hdForm ? null : { d:ymd(today()), k:'buy', ccy:'USD', broker:'Interactive Brokers' }; UI.hdErr = ''; return draw(); }
   if (act === 'hdparse') {

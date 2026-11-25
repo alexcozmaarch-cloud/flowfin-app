@@ -732,6 +732,24 @@ module.exports = async function () {
     h.assert(!Object.values(app.store.Settings).some(function (r) { return /^trade_/.test(r.key); }), 'deleted');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Payday checklist: appears after the salary, ticks are saved, invest tick logs the transfer, hide and close', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data)), sal = data.Transaction.filter(function (x) { return x.type === 'income'; })[0];
+    var ts = require('./demo-data').ymd(new Date());
+    data.Transaction.push(Object.assign({}, sal, { id:'payday-test', date:ts, amount:8420 }));
+    var app = await h.openApp({ data: data, hash: 'dashboard' }), pg = app.page; await h.settled(app, 10000);
+    var t = await pg.innerText('.pd-card');
+    h.assert(/Payday/.test(t) && /salary [0-9'’]+ in/.test(t) && /Pillar 3a/.test(t), 'card shown: ' + t.slice(0, 200));
+    var first = await pg.locator('.pd-step:not(.skip) [data-act="pdtick"]').first().getAttribute('data-k');
+    await pg.click('.pd-step:not(.skip) [data-act="pdtick"]'); await h.settled(app);
+    var row = Object.values(app.store.Settings).filter(function (r) { return r.key === 'payday_' + ts; })[0];
+    h.assert(row && new RegExp('"' + first + '":true').test(row.value), 'tick saved');
+    if (await pg.locator('[data-act="pdtick"][data-k="invest"]').count()) { await pg.click('[data-act="pdtick"][data-k="invest"]'); await h.settled(app); }
+    await pg.click('[data-act="pdhide"][data-k="spec"]'); await h.settled(app);
+    h.assert(!/Collectibles this period/.test(await pg.innerText('.pd-card')), 'hidden step gone');
+    await pg.click('[data-act="pdclose"]'); await h.settled(app);
+    h.eq(await pg.locator('.pd-card').count(), 0, 'closed for this payday');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

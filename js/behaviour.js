@@ -756,4 +756,4 @@ function saveLabel(key, value) {
 function behaviourLine() {
   try { var h = capHistory(), n = h[h.length - 1]; return 'collectibles ' + chf0(n.f.specNet) + ' of ' + chf0(n.cap) + ' · ' + n.pct + '%'; } catch (e) { return 'where your money goes'; }
 }
-export { etfShare, quickSave, readForm as readBhForm, saleRow, wantPark, wantDone, wantList, behaviourLine, CAP, WEALTH_CAP, THREEA_MAX, flowLabel, defaultFlow, riskLabel, flowsFor, riskNow, capHistory, threeA, behaviourModel, behaviourHTML, saveLabel };
+export { dailyModel, etfShare, quickSave, readForm as readBhForm, saleRow, wantPark, wantDone, wantList, behaviourLine, CAP, WEALTH_CAP, THREEA_MAX, flowLabel, defaultFlow, riskLabel, flowsFor, riskNow, capHistory, threeA, behaviourModel, behaviourHTML, saveLabel };

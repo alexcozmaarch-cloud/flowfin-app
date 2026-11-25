@@ -821,17 +821,25 @@ details.fold>summary:hover h3{color:var(--muted)}
 .br-pick.main{border-width:2px}
 .br-pick b{font-size:15px}.br-pick p{font-size:13px;color:var(--muted);margin:0}
 .br-cost{font-size:21px}.br-cost small{font-size:12px;color:var(--muted)}
-.br-tab{width:100%;min-width:600px}
-.br-tab th:first-child,.br-tab td:first-child,.br-tab th:nth-child(4),.br-tab td:nth-child(4),.br-tab th:nth-child(5),.br-tab td:nth-child(5){text-align:left}
+.br-tab{width:100%;min-width:640px}
+.br-tab th:first-child,.br-tab td:first-child,.br-tab th:nth-child(5),.br-tab td:nth-child(5),.br-tab th:nth-child(6),.br-tab td:nth-child(6),.br-tab th:nth-child(7),.br-tab td:nth-child(7){text-align:left}
 .br-tab td small{color:var(--muted);font-size:12px}
 .br-tab tr.dim td{color:var(--muted)}
 .br-have{font-style:normal;white-space:nowrap;font-family:var(--f-mono);font-size:10px;padding:0 4px;border:1px solid currentColor;color:var(--good)}
 .br-bar{display:block;height:5px;background:var(--s3);margin:5px 0 0 auto}.br-bar.best{background:var(--ink)}.br-bar.bad{background:var(--signal)}
 .br-fit{font-family:var(--f-mono);font-size:11px;white-space:nowrap}.br-fit.yes{color:var(--good)}.br-fit.no{color:var(--signal)}
 .br-note{font-size:13.5px;margin:0;border-left:3px solid var(--ink);padding-left:10px}
-.br-tab td small.br-subm{display:none}
-@media (max-width:640px){.br-tab{min-width:0;font-size:12.5px}.br-tab th:nth-child(4),.br-tab td:nth-child(4),.br-tab th:nth-child(5),.br-tab td:nth-child(5){display:none}
+.br-tab td small.br-subm{display:block;color:var(--muted);font-size:11.5px;margin-top:2px;max-width:46ch}
+.br-tab th:nth-child(5),.br-tab td:nth-child(5){display:none}
+@media (max-width:640px){.br-tab{min-width:0;font-size:12.5px}.br-tab th:nth-child(5),.br-tab td:nth-child(5),.br-tab th:nth-child(6),.br-tab td:nth-child(6){display:none}
   .br-tab td small.br-subm{display:block;color:var(--muted);font-size:11.5px;margin-top:2px}}
 .br-tab tr.br-warn td{padding-top:0;font-size:12px;color:var(--muted)}.br-tab tr.br-warn td span{color:var(--signal);font-family:var(--f-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em}
 .br-tab tr:has(+ tr.br-warn) td{border-bottom:0}
 @media (max-width:640px){.br-tab tr.br-warn td{display:table-cell!important}}
+
+.id-how{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.id-how i{font-style:normal;font-family:var(--f-mono);font-size:10.5px;padding:0 5px;border:1px solid currentColor;margin-right:6px}
+.id-how i.go{color:var(--good)}.id-how i.wait{color:var(--muted)}
+.br-tab td small{display:block}
+.br-use{font:500 11.5px var(--f-sans);border:1px solid var(--ink);background:transparent;color:var(--ink);padding:3px 8px;cursor:pointer;white-space:nowrap}
+.br-use.on{background:var(--ink);color:var(--paper)}

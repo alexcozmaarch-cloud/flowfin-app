@@ -9,7 +9,7 @@ import { draw, topbar } from './nav.js';
 import { saveSetting } from './settings.js';
 import { behaviourModel } from './behaviour.js';
 import { capHTML, VIX, SPX, GAUGE_FROM } from './capitulation.js';
-import { brokersHTML } from './brokers.js';
+import { brokersHTML, sliceAdvice } from './brokers.js';
 
 var BENCH_DEFAULT = 'VWRL.SW';   // Vanguard FTSE All-World, traded in CHF on SIX
 // the yardsticks every idea is drawn and compared against (Yahoo symbols)
@@ -237,13 +237,31 @@ function latest(i) {
   return v ? { verdict:v.verdict, pct:v.pct === undefined ? null : v.pct, date:v.date } : null;
 }
 function investable() { try { var p = behaviourModel().pot; return Math.max(0, p.etf || 0); } catch (e) { return 0; } }
+// ETFs go in a savings plan; single shares are bought when the fee is small enough at your broker
+function isEtf(i) { return /\b(ETF|UCITS|QQQ|Nasdaq-100|S&P 500|MSCI|FTSE|index)\b/i.test((i.name || '') + ' ' + (i.ticker || '')) || /^(QQQ|VWRL|VWRA|VT|VOO|SPY|CSPX|EQQQ|CHSPI|SPICHA)$/i.test(i.ticker || ''); }
+function stockSlice(list) {   // the smallest monthly single-share slice, for the broker card
+  var inv = investable(), s = 0;
+  list.forEach(function (i) { var l = latest(i); if (l && l.pct > 0 && !isEtf(i)) { var v = inv * l.pct / 100; if (v > 0 && (!s || v < s)) s = v; } });
+  return s;
+}
+function howHTML(i, amt) {
+  var A = sliceAdvice(amt, isEtf(i)), bn = esc(A.b.n.replace('Interactive Brokers', 'IBKR'));
+  if (A.how === 'plan') return '<small class="id-how"><i class="go">monthly</i> savings plan</small>';
+  if (A.how === 'none') return '<small class="id-how"><i class="wait">not at ' + bn + '</i> no single shares there</small>';
+  if (!amt) return '';
+  if (A.how === 'whole') return '<small class="id-how"><i class="wait">builds up</i> whole shares only at ' + bn + '</small>';
+  if (A.how === 'monthly') return '<small class="id-how"><i class="go">monthly</i> fee ' + A.pct.toFixed(1) + '% at ' + bn + '</small>';
+  var months = A.from === Infinity ? 0 : Math.ceil(A.from / amt);
+  return '<small class="id-how"><i class="wait">builds up</i> ' + (A.from === Infinity ? 'fee over 1% at ' + bn + ' at any size: single shares are cheaper at IBKR or Revolut' : 'buy every ' + months + ' months (from CHF ' + fmtCHF.format(A.from) + ', fee under 1%) at ' + bn) + '</small>';
+}
 function allocHTML(list) {
   var inv = investable(), rows = list.map(function (i) { return { i:i, l:latest(i) }; }).filter(function (x) { return x.l && x.l.pct > 0; });
   var tot = rows.reduce(function (a, x) { return a + x.l.pct; }, 0);
   if (!rows.length) return '<p class="soon">No idea has a recommended share right now: everything you invest goes to the world ETF.</p>';
-  return '<div class="id-alloc"><div class="lbl">Of what you invest this period' + (inv ? ' (' + fmtCHF.format(Math.round(inv)) + ')' : '') + '</div>' +
-    rows.map(function (x) { return '<div><span>' + esc(x.i.name) + '</span><span class="num">' + x.l.pct + '%</span><span class="num">' + (inv ? fmtCHF.format(Math.round(inv * x.l.pct / 100)) : '—') + '</span></div>'; }).join('') +
-    '<div class="rest"><span>World ETF (the rest)</span><span class="num">' + Math.max(0, 100 - tot) + '%</span><span class="num">' + (inv ? fmtCHF.format(Math.round(inv * Math.max(0, 100 - tot) / 100)) : '—') + '</span></div></div>';
+  return '<div class="id-alloc"><div class="lbl">Of what you save this period' + (inv ? ' (' + fmtCHF.format(Math.round(inv)) + ' to invest)' : '') + '</div>' +
+    rows.map(function (x) { var v = inv * x.l.pct / 100; return '<div><span>' + esc(x.i.name) + howHTML(x.i, v) + '</span><span class="num">' + x.l.pct + '%</span><span class="num">' + (inv ? fmtCHF.format(Math.round(v)) : '—') + '</span></div>'; }).join('') +
+    '<div class="rest"><span>World ETF (the rest)<small class="id-how"><i class="go">monthly</i> savings plan</small></span><span class="num">' + Math.max(0, 100 - tot) + '%</span><span class="num">' + (inv ? fmtCHF.format(Math.round(inv * Math.max(0, 100 - tot) / 100)) : '—') + '</span></div>' +
+    '<p class="soon">The amount follows what you actually save, so it moves month to month. ETFs go in a savings plan, which buys fractions for free. Single shares can be bought in any size where the broker offers fractions; they only wait when the minimum fee would cost more than 1%.</p></div>';
 }
 
 function ideasHTML() {
@@ -264,7 +282,7 @@ function ideasHTML() {
     ((UI.api || 1) >= 6 ? '<button class="btn" data-act="idsync">Check for Claude’s updates</button>' : '') + '</div>' + (UI.idAdd ? addHTML() : '') + '</section>';
   if (list.length) h += '<section class="card"><h3>Claude’s split<span class="r">checked every Friday</span></h3>' + allocHTML(list) + '</section>';
   h += capHTML(list, latest);
-  h += brokersHTML(investable());
+  h += brokersHTML(investable(), stockSlice(list));
   if (UI.ideasErr) h += '<p class="neg">Prices: ' + esc(UI.ideasErr) + '</p>';
   return h;
 }

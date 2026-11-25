@@ -684,7 +684,13 @@ module.exports = async function () {
     var t = await pg.innerText('.br-card');
     h.assert(/Where to buy/i.test(t) && /Interactive Brokers/.test(t) && /UBS e-banking/.test(t), 'shortlist shown');
     h.eq(await pg.locator('.br-tab tbody tr:not(.br-warn)').count(), 9, 'nine brokers');
-    h.assert(/EUR 22,000/.test(t) && /your plan/.test(t), 'Revolut caveats shown, CHF 500 plan selected');
+    h.assert(/EUR 22,000/.test(t), 'Revolut caveats shown');
+    h.assert(/share buy/i.test(t) && /any amount/.test(t) && /no single shares/.test(t), 'single-share cost column');
+    await pg.click('[data-act="brmain"][data-v="Yuh"]'); await pg.waitForTimeout(600);
+    h.assert(/✓ I use this/.test(await pg.locator('.br-tab tbody tr', { hasText:'Yuh' }).first().innerText()), 'broker choice saved');
+    var pick = Object.values(app.store.Settings).filter(function (r) { return r.key === 'broker_main'; })[0];
+    h.eq(pick && pick.value, 'Yuh', 'broker_main in the Sheet');
+    t = await pg.innerText('.br-card');
     await pg.click('[data-act="bramt"][data-v="3000"]'); await pg.waitForTimeout(200);
     var ib = await pg.locator('.br-tab tbody tr').first().locator('td').nth(2).innerText();
     h.assert(/^18\b/.test(ib.trim()), 'IBKR at CHF 3,000 a month: 12 × CHF 1.50 = 18, got ' + ib);

@@ -904,3 +904,9 @@ details.fold>summary:hover h3{color:var(--muted)}
 .pd-sum>div+div{padding-left:12px;border-left:1px solid var(--rule)}
 .pd-sum b{font-size:20px;font-weight:500}.pd-sum span{font-size:12.5px;color:var(--muted)}
 @media (max-width:560px){.pd-sum{grid-template-columns:minmax(0,1fr)}.pd-sum>div+div{padding-left:0;border-left:0;border-top:1px solid var(--rule)}}
+
+.id-alloc .core{font-weight:400;border-bottom:1px solid var(--ink)}
+.id-alloc .core b{font-weight:800}
+.id-alloc .num small{display:block;font-size:11px;color:var(--muted)}
+.id-core-set{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;padding:10px 0}
+.id-note{font-size:13.5px;border-left:3px solid var(--ink);padding-left:10px;margin:4px 0}

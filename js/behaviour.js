@@ -421,7 +421,7 @@ function investHTML(m) {
       (P.pot > 0 ? P.share + '% of the ' + chf0(saved) + ' you’ve saved so far this period. Safe to move today.' : 'Nothing saved yet this period: every day under your room adds to it.') + '</p></div>' +
     '<div><span class="lbl">By the end of the period, ' + endD.getDate() + '.' + (endD.getMonth() + 1) + '.</span><b class="num mid">≈ ' + chf0(Math.max(0, P.etf)) + '</b><p>' +
       (P.projected > 0 ? 'If you keep today’s pace: ' + P.share + '% of about ' + chf0(P.projected) + ' saved.' : 'On this pace nothing is left for investing this period.') + '</p></div></div>' +
-    '<p class="bh-sum">saved so far <b>' + chf0(saved) + '</b> × ' + (P.own ? 'your' : 'advised') + ' <b>' + P.share + '%</b> = <b>' + chf0(avail) + '</b> · the other <b>' + chf0(saved - avail) + '</b> stays as cash</p>' +
+    '<p class="bh-sum">saved so far <b>' + chf0(saved) + '</b> × ' + (P.own ? 'your' : 'advised') + ' <b>' + P.share + '%</b> = <b>' + chf0(avail) + '</b> · the other <b>' + chf0(Math.max(0, Math.round(saved) - avail)) + '</b> stays as cash</p>' +
     '<div class="bh-pot" role="img" aria-label="Each day: your room minus what you spent">' + bars + '</div>' +
     '<p class="soon">Each day your room (' + chf0(P.perDay) + ') minus what you spent yourself: green adds, red takes away. Household and investing don’t count.</p>' +
     '<div class="lbl">Share of what you save that goes to investing</div>' +
@@ -431,7 +431,7 @@ function investHTML(m) {
       (adj.length ? '' : '<div><span>Nothing changes it this period<small>pace, payments and spending are all as usual</small></span><span class="num">±0</span></div>') +
       '<div class="tot"><span>Advised this period</span><span class="num">' + P.adv + '%</span></div></div>' +
     '<p class="soon">' + (P.own ? 'You picked ' + P.share + '% for this period; tap “' + P.adv + '% · advised” to follow the advice again. ' : '') + 'The advice starts from your usual share, stays between 50% and 100% and is worked out again every day. Collectibles don’t change it: the cap handles those.</p>' +
-    '<dl class="bh-money"><dt>To invest now</dt><dd class="num"><b>' + chf0(avail) + '</b></dd><dt>Stays as cash</dt><dd class="num">' + chf0(saved - avail) + '</dd>' +
+    '<dl class="bh-money"><dt>To invest now</dt><dd class="num"><b>' + chf0(avail) + '</b></dd><dt>Stays as cash</dt><dd class="num">' + chf0(Math.max(0, Math.round(saved) - avail)) + '</dd>' +
       '<dt>End-of-period estimate, of take-home</dt><dd class="num">' + pctTake.toFixed(1) + '%</dd>' +
       '<dt>Invested this period · ' + today().getFullYear() + '</dt><dd class="num">' + chf0(P.etfPeriod) + ' · ' + chf0(P.etfYear) + '</dd></dl>' +
     (doneV ? '<p class="pos">Moved ' + chf0(+doneV) + ' to investing ✓</p>' : avail >= 1 ? '<div class="bh-btns"><button class="btn primary" data-act="bhinvest" data-v="' + avail + '">I moved ' + chf0(avail) + ' to investing</button></div>' : '') +

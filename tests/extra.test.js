@@ -585,10 +585,11 @@ module.exports = async function () {
     h.eq(await pg.locator('.bh-pot i').count() >= 28, true, 'one bar per day of the period');
     t = await pg.innerText('.bh-inv');
     h.assert(/Available to invest now/i.test(t) && /advised/.test(t) && /Advised this period/.test(t) && /Starting point/.test(t), 'available now with the advised share and its reasons');
-    await pg.click('[data-act=bhshare][data-v="100"]'); await h.settled(app);
-    h.assert(Object.values(app.store.Settings).some(function (r) { return /^invest_share_/.test(r.key) && String(r.value) === '100'; }), 'your own share saved');
+    var pick = await pg.locator('.bh-share button:not(.adv)').last().getAttribute('data-v');
+    await pg.click('.bh-share button:not(.adv) >> nth=-1'); await h.settled(app);
+    h.assert(Object.values(app.store.Settings).some(function (r) { return /^invest_share_/.test(r.key) && String(r.value) === pick; }), 'your own share saved');
     t = await pg.innerText('.bh-inv');
-    h.assert(/You picked 100%/.test(t) && /Stays as cash\s*0/.test(t), 'your share overrides the advice; nothing stays as cash');
+    h.assert(new RegExp('You picked ' + pick + '%').test(t) && (pick !== '100' || /Stays as cash\s*0/.test(t)), 'your share overrides the advice: picked ' + pick + ' · ' + (t.match(/You picked[^.]*/) || ['no-pick'])[0] + ' · ' + (t.match(/Stays as cash[\s\S]{0,12}/) || ['no-cash'])[0]);
     await pg.click('.bh-share button.adv'); await h.settled(app);
     h.assert(!/You picked/.test(await pg.innerText('.bh-inv')), 'back to the advice');
     if (await pg.locator('[data-act=bhinvest]').count()) {
@@ -646,7 +647,7 @@ module.exports = async function () {
     await pg.evaluate(function () { location.hash = 'ideas'; }); await pg.waitForTimeout(1500); await h.settled(app, 10000);
     var t = await pg.innerText('#view');
     h.assert(/Invesco QQQ/.test(t) && /Meta Platforms/.test(t), 'ideas from the inbox: ' + t.slice(0, 300));
-    h.assert(/Claude’s split/.test(t) && /World ETF \(the rest\)/.test(t) && /85%/.test(t), 'split: 10% QQQ + 5% META, rest 85%');
+    h.assert(/Your split: core and ideas/.test(t) && /Core · VWRA/.test(t) && /85%/.test(t), 'split: 10% QQQ + 5% META, rest 85%');
     await pg.click('.id-li:has-text("Meta Platforms") .id-row'); await pg.waitForTimeout(400);
     var d = await pg.innerText('#view');
     h.assert(/worth a small position/.test(d) && /changed/.test(d) && /Capex guidance trimmed/.test(d) && /590\.10/.test(d), 'verdict track with the change: ' + d.slice(0, 600));
@@ -748,6 +749,17 @@ module.exports = async function () {
     h.assert(!/Collectibles this period/.test(await pg.innerText('.pd-card')), 'hidden step gone');
     await pg.click('[data-act="pdclose"]'); await h.settled(app);
     h.eq(await pg.locator('.pd-card').count(), 0, 'closed for this payday');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('Core and ideas: the core takes at least 70%, ideas are scaled down past it, and a short core gets new money first', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data)), td = new Date().toISOString().slice(0, 10);
+    var v = function (p) { return JSON.stringify({ id:'x' + p, name:'Idea ' + p, ticker:'T' + p, date:td, views:[{ date:td, verdict:'small', pct:p, text:'x' }], checks:[] }); };
+    data.Settings = (data.Settings || []).concat([{ id:'i1', key:'idea_a', value:v(20) }, { id:'i2', key:'idea_b', value:v(20) }]);
+    var app = await h.openApp({ data: data, hash: 'ideas' }), pg = app.page; await h.settled(app, 10000); await pg.waitForTimeout(400);
+    var t = await pg.innerText('.id-alloc');
+    h.assert(/Core · VWRA/.test(t) && /70%/.test(t) && /of 20%/.test(t) && /scaled down/.test(t), 'core 70%, ideas 40% scaled to 30%: ' + t.slice(0, 300));
+    await pg.click('[data-act="coremin"][data-v="80"]'); await h.settled(app);
+    h.assert(/80%/.test(await pg.innerText('.id-alloc .core')), 'core minimum changed to 80%');
     h.noErrors(app); await app.ctx.close();
   });
   console.log('\nFor the household');

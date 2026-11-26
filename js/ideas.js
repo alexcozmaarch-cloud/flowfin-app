@@ -7,10 +7,11 @@ import { post } from './api.js';
 import { $, addDays, chf0, daysBetween, esc, fmtCHF, lsGet, lsSet, pd, toast, today, ymd } from './core.js';
 import { draw, topbar } from './nav.js';
 import { saveSetting } from './settings.js';
+import { setting } from './transactions.js';
 import { behaviourModel } from './behaviour.js';
 import { capHTML, VIX, SPX, GAUGE_FROM } from './capitulation.js';
 import { brokersHTML, sliceAdvice } from './brokers.js';
-import { holdingsHTML, taxHTML, holdingSymbols, buysOf } from './holdings.js';
+import { holdingsHTML, taxHTML, holdingSymbols, buysOf, positions } from './holdings.js';
 
 var BENCH_DEFAULT = 'VWRL.SW';   // Vanguard FTSE All-World, traded in CHF on SIX
 // the yardsticks every idea is drawn and compared against (Yahoo symbols)
@@ -266,14 +267,34 @@ function howHTML(i, amt) {
   var months = A.from === Infinity ? 0 : Math.ceil(A.from / amt);
   return '<small class="id-how"><i class="wait">builds up</i> ' + (A.from === Infinity ? 'fee over 1% at ' + bn + ' at any size: single shares are cheaper at IBKR or Revolut' : 'buy every ' + months + ' months (from CHF ' + fmtCHF.format(A.from) + ', fee under 1%) at ' + bn) + '</small>';
 }
+// The core: one world ETF that takes at least CORE_MIN% of what you invest; ideas share the rest. Agreed 26.11.2026.
+var CORE = { sym:'VWRA.L', base:['VWRA', 'VWRL', 'VWCE'], name:'Vanguard FTSE All-World (Acc)', isin:'IE00BK5BQT80', min:70 };
+function coreMin() { var v = parseFloat(setting('core_min', '')); return v >= 50 && v <= 90 ? v : CORE.min; }
+function isCore(sym) { return CORE.base.indexOf(String(sym || '').toUpperCase().replace(/\.[A-Z]+$/, '')) > -1; }
+// what share of your holdings sits in the core now (null before the first buy)
+function coreNow() {
+  var P = positions().filter(function (p) { return p.sh > 1e-9; }); if (!P.length) return null;
+  var tot = 0, core = 0; P.forEach(function (p) { var v = p.cost; tot += v; if (isCore(p.t)) core += v; });
+  return tot ? core / tot * 100 : null;
+}
 function allocHTML(list) {
-  var inv = investable(), rows = list.map(function (i) { return { i:i, l:latest(i) }; }).filter(function (x) { return x.l && x.l.pct > 0; });
-  var tot = rows.reduce(function (a, x) { return a + x.l.pct; }, 0);
-  if (!rows.length) return '<p class="soon">No idea has a recommended share right now: everything you invest goes to the world ETF.</p>';
-  return '<div class="id-alloc"><div class="lbl">Of what you save this period' + (inv ? ' (' + fmtCHF.format(Math.round(inv)) + ' to invest)' : '') + '</div>' +
-    rows.map(function (x) { var v = inv * x.l.pct / 100; return '<div><span>' + esc(x.i.name) + howHTML(x.i, v) + '</span><span class="num">' + x.l.pct + '%</span><span class="num">' + (inv ? fmtCHF.format(Math.round(v)) : '—') + '</span></div>'; }).join('') +
-    '<div class="rest"><span>World ETF (the rest)<small class="id-how"><i class="go">monthly</i> savings plan</small></span><span class="num">' + Math.max(0, 100 - tot) + '%</span><span class="num">' + (inv ? fmtCHF.format(Math.round(inv * Math.max(0, 100 - tot) / 100)) : '—') + '</span></div>' +
-    '<p class="soon">The amount follows what you actually save, so it moves month to month. ETFs go in a savings plan, which buys fractions for free. Single shares can be bought in any size where the broker offers fractions; they only wait when the minimum fee would cost more than 1%.</p></div>';
+  var inv = investable(), min = coreMin(), rows = list.map(function (i) { return { i:i, l:latest(i) }; }).filter(function (x) { return x.l && x.l.pct > 0; });
+  var asked = rows.reduce(function (a, x) { return a + x.l.pct; }, 0), room = 100 - min, scale = asked > room ? room / asked : 1;
+  var cn = coreNow(), refill = cn !== null && cn < min;   // core under its minimum: this period's money goes to the core first
+  if (refill) scale = 0;
+  rows.forEach(function (x) { x.p = Math.round(x.l.pct * scale * 10) / 10; });
+  var tot = rows.reduce(function (a, x) { return a + x.p; }, 0), coreP = 100 - tot, coreV = inv * coreP / 100;
+  var coreHow = coreV >= 200 || !inv ? '<i class="go">monthly</i> at IBKR, or a Yuh savings plan' : '<i class="wait">every 2nd month</i> at IBKR (London fee about USD 1–2 a buy), or monthly in a Yuh savings plan';
+  var h = '<div class="id-alloc"><div class="lbl">Of what you save this period' + (inv ? ' (' + chf0(inv) + ' to invest)' : '') + '</div>' +
+    '<div class="core"><span><b>Core · ' + esc(CORE.sym.replace('.L', '')) + '</b> ' + esc(CORE.name) + '<small class="id-how">' + coreHow + '</small></span><span class="num">' + (Math.round(coreP * 10) / 10) + '%</span><span class="num">' + (inv ? chf0(coreV) : '—') + '</span></div>' +
+    rows.map(function (x) { var v = inv * x.p / 100; return '<div><span>' + esc(x.i.name) + (x.p ? howHTML(x.i, v) : '<small class="id-how"><i class="wait">paused</i> core first this period</small>') + '</span><span class="num">' + x.p + '%' + (x.p !== x.l.pct && !refill ? '<small>of ' + x.l.pct + '%</small>' : '') + '</span><span class="num">' + (inv ? chf0(v) : '—') + '</span></div>'; }).join('');
+  h += '<div class="id-core-set"><span class="lbl">Core at least</span><span class="seg2" role="radiogroup" aria-label="Core minimum">' + [60, 70, 80].map(function (v) {
+    return '<button role="radio" aria-checked="' + (v === min) + '" class="' + (v === min ? 'on' : '') + '" data-act="coremin" data-v="' + v + '">' + v + '%</button>'; }).join('') + '</span>' +
+    (cn !== null ? '<span class="soon">core is ' + cn.toFixed(0) + '% of your holdings now</span>' : '') + '</div>';
+  if (refill) h += '<p class="id-note">Your core is ' + cn.toFixed(0) + '% of what you hold, under your ' + min + '%. This period everything goes to the core; ideas resume once it’s back above ' + min + '%. Nothing is sold.</p>';
+  else if (scale < 1) h += '<p class="id-note">Ideas asked for ' + asked + '% together, more than the ' + room + '% next to your core, so each is scaled down.</p>';
+  h += '<p class="soon">The core is one world ETF (' + esc(CORE.isin) + ', accumulating, Irish): about 3,700 companies in some 50 countries. Your ideas are judged against it. The amount follows what you actually save, so it moves month to month. Single shares can be bought in any size where the broker offers fractions; they only wait when the minimum fee would cost more than 1%.</p></div>';
+  return h;
 }
 
 function ideasHTML() {
@@ -298,7 +319,7 @@ function ideasHTML() {
   }).join('') : '<p class="soon">No ideas yet. Tell me about one in the chat, or add it here.</p>';
   h += '<div class="bh-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn primary" data-act="idadd">+ Add an idea</button>' +
     ((UI.api || 1) >= 6 ? '<button class="btn" data-act="idsync">Check for Claude’s updates</button>' : '') + '</div>' + (UI.idAdd ? addHTML() : '') + '</section>';
-  if (list.length) h += '<section class="card"><h3>Claude’s split<span class="r">checked every Friday</span></h3>' + allocHTML(list) + '</section>';
+  h += '<section class="card"><h3>Your split: core and ideas<span class="r">checked every Friday</span></h3>' + allocHTML(list) + '</section>';
   h += capHTML(list, latest);
   h += brokersHTML(investable(), stockSlice(list));
   if (UI.ideasErr) h += '<p class="neg">Prices: ' + esc(UI.ideasErr) + '</p>';

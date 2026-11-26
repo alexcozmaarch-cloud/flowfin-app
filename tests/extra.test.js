@@ -762,6 +762,22 @@ module.exports = async function () {
     h.assert(/80%/.test(await pg.innerText('.id-alloc .core')), 'core minimum changed to 80%');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Ideas: a second mention of the same ticker joins the first: one chart with both marked, each mention reads on its own', async function () {
+    var app = await h.openApp({ data: demo.data }), pg = app.page; await h.settled(app, 10000);
+    var d1 = new Date(Date.now() - 40 * 864e5).toISOString().slice(0, 10), d2 = new Date(Date.now() - 5 * 864e5).toISOString().slice(0, 10);
+    app.gas.drive.push({ id:'m1', name:'FlowFin ideas inbox a.json', created:new Date(), text:JSON.stringify({ ideas:[{ n:'Alphabet (Google)', t:'GOOGL', d:d1, s:'your idea', v:{ d:d1, r:'small', p:3, x:'First view.' } }] }) });
+    await pg.evaluate(function () { location.hash = 'ideas'; }); await pg.waitForTimeout(1500); await h.settled(app, 10000);
+    app.gas.drive.push({ id:'m2', name:'FlowFin ideas inbox b.json', created:new Date(), text:JSON.stringify({ ideas:[{ n:'Alphabet (Google)', t:'GOOGL', d:d2, s:'colleague', v:{ d:d2, r:'watch', p:0, x:'Second view.' } }] }) });
+    await pg.click('[data-act="idsync"]'); await pg.waitForTimeout(1500); await h.settled(app, 10000); await pg.waitForTimeout(500);
+    h.eq(await pg.locator('.id-row', { hasText:'GOOGL' }).count(), 1, 'one idea, not two');
+    h.assert(/2 mentions/.test(await pg.locator('.id-row', { hasText:'GOOGL' }).innerText()), 'list says 2 mentions');
+    await pg.click('.id-row:has-text("GOOGL")'); await pg.waitForTimeout(800);
+    var t = await pg.innerText('#view');
+    h.eq(await pg.locator('.id-mention').count(), 2, 'two mentions');
+    h.assert(/First view\./.test(await pg.locator('.id-mention').nth(1).innerText()) && /Second view\./.test(await pg.locator('.id-mention').nth(0).innerText()), 'each mention has its own view');
+    h.assert(/colleague/.test(t), 'second source shown');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

@@ -910,3 +910,9 @@ details.fold>summary:hover h3{color:var(--muted)}
 .id-alloc .num small{display:block;font-size:11px;color:var(--muted)}
 .id-core-set{display:flex;gap:8px 12px;align-items:center;flex-wrap:wrap;padding:10px 0}
 .id-note{font-size:13.5px;border-left:3px solid var(--ink);padding-left:10px;margin:4px 0}
+
+.id-mention{border-top:2px solid var(--ink);padding-top:10px;margin-top:14px;display:grid;gap:8px}
+.id-mention:first-of-type{margin-top:0}
+.id-mh{display:flex;gap:6px 10px;align-items:baseline;flex-wrap:wrap}
+.id-mh .r{margin-left:auto;font-size:12.5px}
+.id-mn{display:inline-grid;place-items:center;width:20px;height:20px;background:var(--signal);color:var(--paper);font:600 11px var(--f-mono);border-radius:50%}

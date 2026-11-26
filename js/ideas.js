@@ -27,6 +27,19 @@ function ideas() {
   }).filter(Boolean).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
 }
 function bench() { var b = ((DATA.Settings || []).filter(function (r) { return r.key === 'idea_benchmark_sym'; })[0] || {}).value; return String(b || BENCH_DEFAULT).toUpperCase(); }
+// Several mentions of the same idea (same ticker) share one record and one chart; each reads on its own. Agreed 26.11.2026.
+function mentions(i) {
+  var m = (i.mentions && i.mentions.length ? i.mentions.slice() : [{ date:i.date, source:i.source || '' }]);
+  if (!m.some(function (x) { return x.date === i.date; })) m.push({ date:i.date, source:i.source || '' });
+  return m.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+}
+function addMention(i, date, source) {   // true if it's a new mention
+  if (!date) return false;
+  var m = mentions(i); if (m.some(function (x) { return x.date === date; })) return false;
+  m.push({ date:date, source:source || '' }); i.mentions = m.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+  if (date < i.date) { i.date = date; i.source = source || i.source; }
+  return true;
+}
 function saveIdea(o) { var c = Object.assign({}, o); delete c._sid; delete c._key; return saveSetting('idea_' + o.id, JSON.stringify(c)); }
 
 // ─── paste codes from the chat ─────────────────────────────────────────────
@@ -46,7 +59,7 @@ function addFromCode(text) {
   var c = decodeCode(text); if (!c || !c.name) return Promise.reject(new Error('That doesn’t look like a code from Claude'));
   var have = ideas().filter(function (x) { return (c.ticker && x.ticker === c.ticker) || (!c.ticker && x.name.toLowerCase() === c.name.toLowerCase()); })[0];
   if (have) {
-    have.views = have.views || [];
+    have.views = have.views || []; addMention(have, c.date, c.source);
     if (c.view && !have.views.some(function (v) { return v.date === c.view.date && v.text === c.view.text; })) have.views.unshift(c.view);
     return saveIdea(have).then(function () { return { idea:have, added:false }; });
   }
@@ -54,6 +67,8 @@ function addFromCode(text) {
   return saveIdea(o).then(function () { return { idea:o, added:true }; });
 }
 function addManual(f) {
+  var tk = String(f.ticker || '').trim().toUpperCase(), have = tk && ideas().filter(function (x) { return x.ticker === tk; })[0];
+  if (have) { addMention(have, f.date || ymd(today()), f.source || ''); return saveIdea(have).then(function () { return have; }); }
   var o = { id:Date.now().toString(36), name:f.name, ticker:String(f.ticker || '').trim().toUpperCase(), date:f.date || ymd(today()), source:f.source || '', views:[] };
   return saveIdea(o).then(function () { return o; });
 }
@@ -146,9 +161,12 @@ function bigChart(st, idea) {
     lines.map(function (x) { return '<path d="' + linePath(x.v, W, H, lo, hi) + '" fill="none" stroke="var(--s3)" stroke-width="1.5"' + (x.b.dash ? ' stroke-dasharray="' + x.b.dash + '"' : '') + '/>'; }).join('') +
     '<path d="' + linePath(v, W, H, lo, hi) + '" fill="none" stroke="var(--ink)" stroke-width="2"/>' +
     '<circle cx="4" cy="' + y(st.entry).toFixed(1) + '" r="5" fill="var(--signal)"/>' +
+    mentions(idea).slice(1).map(function (mm, k) { var j; for (j = 0; j < n && st.s.dates[j] < mm.date; j++); if (j >= n) return ''; var mx = j / Math.max(1, n - 1) * W;
+      return '<line x1="' + mx.toFixed(1) + '" x2="' + mx.toFixed(1) + '" y1="0" y2="' + H + '" stroke="var(--signal)" stroke-dasharray="2 3"/><circle cx="' + mx.toFixed(1) + '" cy="' + y(v[j]).toFixed(1) + '" r="5" fill="var(--signal)"/>' +
+        '<text x="' + (mx > W - 70 ? mx - 6 : mx + 6).toFixed(1) + '" y="-3"' + (mx > W - 70 ? ' text-anchor="end"' : '') + ' class="t" style="fill:var(--signal)">' + (k + 2) + ' · ' + dm(mm.date) + '</text>'; }).join('') +
     buysOf(idea.ticker).map(function (b) { var k = st.s.dates.indexOf(b.d); if (k < 0) { for (k = 0; k < n && st.s.dates[k] < b.d; k++); if (k >= n) return ''; } var bx = k / Math.max(1, n - 1) * W;
       return '<circle cx="' + bx.toFixed(1) + '" cy="' + y(v[k]).toFixed(1) + '" r="4.5" fill="var(--paper)" stroke="var(--ink)" stroke-width="2"><title>bought ' + dm(b.d) + '</title></circle>'; }).join('') +
-    '<text x="12" y="' + (y(st.entry) - 8).toFixed(1) + '" class="t">entry ' + dm(st.s.dates[0]) + ' · ' + fmtP(st.entry) + '</text>' +
+    '<text x="12" y="' + (y(st.entry) - 8).toFixed(1) + '" class="t">' + (mentions(idea).length > 1 ? '1 · ' : 'entry ') + dm(st.s.dates[0]) + ' · ' + fmtP(st.entry) + '</text>' +
     '<text x="' + W + '" y="' + (y(st.last) - 8).toFixed(1) + '" text-anchor="end" class="t">' + fmtP(st.last) + ' · ' + pct(st.chg) + '</text>' +
     endLabels(lines, y, W, st) +
     '<line x1="0" x2="' + W + '" y1="' + H + '" y2="' + H + '" stroke="var(--ink)"/>' +
@@ -188,6 +206,7 @@ function applyInbox(obj, list, changed) {
   (obj.ideas || []).forEach(function (o) {
     var t = String(o.t || '').toUpperCase(), have = findIdea(list, t, o.n), v = o.v ? { date:o.v.d || o.d, verdict:o.v.r || 'watch', text:o.v.x || '', pct:o.v.p === undefined ? null : +o.v.p } : null;
     if (!have) { have = { id:Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name:o.n, ticker:t, date:o.d, source:o.s || '', views:[], checks:[] }; list.push(have); }
+    else addMention(have, o.d, o.s);
     var same = v && (have.views || []).filter(function (x) { return x.date === v.date && x.text === v.text; })[0];
     if (same) { if ((same.pct === null || same.pct === undefined) && v.pct !== null) same.pct = v.pct; }   // pasted earlier as a code: just add the share
     else if (v) have.views = [v].concat(have.views || []);
@@ -313,7 +332,7 @@ function ideasHTML() {
   h += list.length ? list.map(function (i) {
     var st = i.ticker ? stats(i) : null, v = latest(i);
     return '<div class="id-li"><button class="id-row" data-act="idopen" data-id="' + esc(i.id) + '"><span class="id-n"><b>' + esc(i.name) + (i.ticker ? ' · ' + esc(i.ticker) : '') + '</b>' +
-      '<small>' + dm(i.date) + (i.source ? ' · ' + esc(i.source) : '') + '</small>' + (v ? verdictPill(v.verdict) + (v.pct > 0 ? ' <small class="num">' + v.pct + '% of investing</small>' : '') : '<span class="otag id-v">no view yet</span>') + '</span>' + spark(st) +
+      '<small>' + (mentions(i).length > 1 ? mentions(i).length + ' mentions · first ' + dm(i.date) : dm(i.date) + (i.source ? ' · ' + esc(i.source) : '')) + '</small>' + (v ? verdictPill(v.verdict) + (v.pct > 0 ? ' <small class="num">' + v.pct + '% of investing</small>' : '') : '<span class="otag id-v">no view yet</span>') + '</span>' + spark(st) +
       '<span class="id-c num">' + (st ? '<span class="' + (st.chg >= 0 ? 'pos' : 'neg') + '">' + pct(st.chg) + '</span>' + (st.bchg !== null ? '<small>world ' + pct(st.bchg) + '</small>' : '') : '<small>' + (i.ticker ? 'price…' : 'no ticker') + '</small>') + '</span></button>' +
       '<button class="iconbtn id-x" data-act="iddel" data-id="' + esc(i.id) + '" aria-label="Delete ' + esc(i.name) + '" title="Delete">×</button></div>';
   }).join('') : '<p class="soon">No ideas yet. Tell me about one in the chat, or add it here.</p>';
@@ -339,7 +358,7 @@ function addHTML() {
 function ideaHTML(i) {
   var st = i.ticker ? stats(i) : null;
   var h = '<p style="margin:-6px 0 14px"><button class="linkbtn" data-act="idopen" data-id="">‹ All ideas</button></p>';
-  h += '<section class="card"><h3>' + esc(i.name) + (i.ticker ? ' · ' + esc(i.ticker) : '') + '<span class="r">mentioned ' + pd(i.date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) + (i.source ? ' · ' + esc(i.source) : '') + '</span></h3>';
+  h += '<section class="card"><h3>' + esc(i.name) + (i.ticker ? ' · ' + esc(i.ticker) : '') + '<span class="r">' + (mentions(i).length > 1 ? mentions(i).length + ' mentions · first ' : 'mentioned ') + pd(i.date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) + (i.source && mentions(i).length < 2 ? ' · ' + esc(i.source) : '') + '</span></h3>';
   if (st) {
     h += '<div class="id-facts"><div><b class="num">' + fmtP(st.entry) + '</b><span>price when mentioned' + (st.cur ? ' · ' + esc(st.cur) : '') + '</span></div><div><b class="num">' + fmtP(st.last) + '</b><span>' + dm(st.lastDate) + '</span></div>' +
       '<div><b class="num ' + (st.chg >= 0 ? 'pos' : 'neg') + '">' + pct(st.chg) + '</b><span>since mentioned</span></div>' +
@@ -355,7 +374,21 @@ function ideaHTML(i) {
         return '<tr><td>' + dm(c.date) + '</td><td>' + (moved ? '<b>' + esc((VERDICTS[c.verdict] || VERDICTS.watch)[0]) + '</b> <small>changed</small>' : esc((VERDICTS[c.verdict] || VERDICTS.watch)[0])) + '</td><td class="num">' + (c.pct === null ? '—' : c.pct + '%') + '</td><td class="num">' + (c.price ? fmtP(c.price) : '—') + '</td></tr>' +
           (c.note ? '<tr class="note"><td colspan="4">' + esc(c.note) + '</td></tr>' : '');
       }).join('') + '</tbody></table>' : '') + '</section>';
-  var views = i.views || [];
+  var views = i.views || [], M = mentions(i);
+  if (M.length > 1) {
+    var full = i.ticker ? px(i.ticker) : null, wb = px(bench());
+    h += '<section class="card id-views"><h3>Mentions<span class="r">each on its own · latest first</span></h3>' + M.slice().reverse().map(function (mm, rk) {
+      var k = M.length - 1 - rk, next = M[k + 1] ? M[k + 1].date : '9999', mine = views.filter(function (v) { return (k === 0 || v.date >= mm.date) && v.date < next; });
+      var sx = sinceEntry(full, mm.date), bx = sinceEntry(wb, mm.date), ch = sx ? (sx.closes[sx.closes.length - 1] / sx.closes[0] - 1) * 100 : null, bc = bx ? (bx.closes[bx.closes.length - 1] / bx.closes[0] - 1) * 100 : null;
+      return '<article class="id-mention"><div class="id-mh"><span class="id-mn">' + (k + 1) + '</span><b>' + pd(mm.date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) + '</b>' + (mm.source ? '<span class="soon">' + esc(mm.source) + '</span>' : '') +
+        (sx ? '<span class="num r">' + fmtP(sx.closes[0]) + ' then · <span class="' + (ch >= 0 ? 'pos' : 'neg') + '">' + pct(ch) + '</span> since' + (bc !== null ? ' · world ' + pct(bc) : '') + '</span>' : '') + '</div>' +
+        (mine.length ? mine.map(function (v, j) { return '<div class="id-view' + (j ? ' old' : '') + '"><div class="id-vh"><span class="lbl">' + pd(v.date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) + '</span>' + verdictPill(v.verdict) + '</div>' + viewText(v.text) + '</div>'; }).join('') : '<p class="soon">No view written for this mention.</p>') + '</article>';
+    }).join('');
+    h += '<div class="id-add" style="margin-top:12px"><b>Paste a new view from Claude</b><textarea id="idCode" rows="2" placeholder="FFIDEA:…" aria-label="Code from Claude"></textarea>' +
+      '<div class="bh-btns" style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="idpaste">Add view</button><button class="btn" data-act="iddel" data-id="' + esc(i.id) + '">Delete idea</button></div>' +
+      (UI.idErr ? '<p class="neg">' + esc(UI.idErr) + '</p>' : '') + '</div></section>';
+    return h;
+  }
   h += '<section class="card id-views"><h3>Claude’s view' + (views.length > 1 ? 's' : '') + '<span class="r">' + (views.length ? 'latest first' : '') + '</span></h3>';
   h += views.length ? views.map(function (v, k) {
     return '<article class="id-view' + (k ? ' old' : '') + '"><div class="id-vh"><span class="lbl">' + pd(v.date).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) + '</span>' + verdictPill(v.verdict) + '</div>' + viewText(v.text) + '</article>';

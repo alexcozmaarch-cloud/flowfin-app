@@ -11,7 +11,7 @@ var FX = { USD:'USDCHF=X', EUR:'EURCHF=X', GBP:'GBPCHF=X' };
 // ISIN and name for symbols you're likely to buy; anything else you can type in
 var KNOWN = {
   NVDA:['US67066G1040', 'NVIDIA Corp.', 'USD'], META:['US30303M1027', 'Meta Platforms Inc.', 'USD'], QQQ:['US46090E1038', 'Invesco QQQ Trust', 'USD'],
-  MRVL:['US5738741041', 'Marvell Technology Inc.', 'USD'], VOO:['US9229083632', 'Vanguard S&P 500 ETF', 'USD'], VT:['US9220427424', 'Vanguard Total World Stock ETF', 'USD'],
+  MRVL:['US5738741041', 'Marvell Technology Inc.', 'USD'], GOOGL:['US02079K3059', 'Alphabet Inc. (A)', 'USD'], GOOG:['US02079K1079', 'Alphabet Inc. (C)', 'USD'], BSP:['IT0005717696', 'Bending Spoons S.p.A.', 'USD'], VOO:['US9229083632', 'Vanguard S&P 500 ETF', 'USD'], VT:['US9220427424', 'Vanguard Total World Stock ETF', 'USD'],
   'CSPX.L':['IE00B5BMR087', 'iShares Core S&P 500 UCITS ETF (Acc)', 'USD'], 'VWRA.L':['IE00BK5BQT80', 'Vanguard FTSE All-World UCITS ETF (Acc)', 'USD'],
   'VWRL.SW':['IE00B3RBWM25', 'Vanguard FTSE All-World UCITS ETF (Dist)', 'CHF'], 'CHSPI.SW':['CH0237935652', 'iShares Core SPI ETF (CH)', 'CHF'],
   'EQQQ.L':['IE0032077012', 'Invesco EQQQ Nasdaq-100 UCITS ETF', 'USD'], 'CNDX.L':['IE00B53SZB19', 'iShares Nasdaq 100 UCITS ETF (Acc)', 'USD']

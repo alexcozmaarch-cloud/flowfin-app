@@ -938,3 +938,5 @@ details.fold>summary:hover h3{color:var(--muted)}
 @media (max-width:640px){.wo-spark{display:none}}
 
 .bh-segs{display:inline-flex;gap:8px;flex-wrap:wrap}
+
+.bh-keys .sw.back{background:var(--paper);border:1.5px solid var(--ink)}

@@ -798,6 +798,15 @@ module.exports = async function () {
     h.assert(/household · \d+ days/.test(await pg.innerText('.bh-tiles')), 'tiles say how many days');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Day by day: a refund shows below the line on its day and is taken off the totals, with what came back named', async function () {
+    var data = JSON.parse(JSON.stringify(demo.data)), sp = data.Transaction.filter(function (x) { return x.type === 'expense' && /Personal/.test(x.category || ''); })[0] || data.Transaction.filter(function (x) { return x.type === 'expense'; })[0];
+    var d = new Date(Date.now() - 3 * 864e5), ds = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    data.Transaction.push(Object.assign({}, sp, { id:'refund-test', date:ds, amount:55, type:'refund', description:'Nespresso refund' }));
+    var app = await h.openApp({ data: data, hash: 'behaviour' }), pg = app.page; await h.settled(app, 10000);
+    h.assert(await pg.locator('.bh-chart .bh-back').count() >= 1, 'refund drawn below the line');
+    h.assert(/\d back/.test(await pg.innerText('.bh-tiles')), 'tiles name what came back: ' + (await pg.innerText('.bh-tiles')).replace(/\n/g, ' '));
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

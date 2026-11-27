@@ -448,11 +448,12 @@ function dailyModel(ov, r, room, n) {
   n = n || 30;
   var t = today(), from = addDays(t, -(n - 1)), to = addDays(t, 7), days = [], idx = {}, first = firstTxDay();
   if (n > 30 && from < first) from = first < addDays(t, -29) ? first : addDays(t, -29);   // longer windows start where your history starts
-  for (var d = from; d <= to; d = addDays(d, 1)) { var k = ymd(d); idx[k] = days.length; days.push({ d:d, key:k, future:d > t, personal:0, spec:0, invest:0, household:0, items:[] }); }
+  for (var d = from; d <= to; d = addDays(d, 1)) { var k = ymd(d); idx[k] = days.length; days.push({ d:d, key:k, future:d > t, personal:0, spec:0, invest:0, household:0, back:{ personal:0, spec:0, invest:0, household:0 }, items:[] }); }
   txs().forEach(function (tx) {
     var i = idx[String(tx.date).slice(0, 10)]; if (i === undefined || tx.type === 'income') return;
     var day = days[i], b = dayBucket(flowLabel(tx, ov, r)), a = +tx.amount || 0;
-    if (tx.type === 'refund') a = -a;
+    // refunds (and cards sold) are kept apart on the day the money came back, so none of it gets lost under zero
+    if (tx.type === 'refund') { day.back[b] += a; day.items.push({ name:tx.description || tx.category, amount:-a, b:b, sched:day.future }); return; }
     day[b] += a; day.items.push({ name:tx.description || tx.category, amount:a, b:b, sched:day.future });
   });
   // expected recurring payments in the next 7 days (subscriptions, the household transfer…)
@@ -467,7 +468,8 @@ function dailyModel(ov, r, room, n) {
   } catch (e) {}
   days.forEach(function (x) { DAY_KEYS.forEach(function (k) { if (x[k] < 0) x[k] = 0; }); x.total = DAY_KEYS.reduce(function (s, k) { return s + x[k]; }, 0); x.free = x.personal + x.spec + x.invest; });
   var past = days.filter(function (x) { return !x.future; });
-  var sum = {}; DAY_KEYS.forEach(function (k) { sum[k] = past.reduce(function (s, x) { return s + x[k]; }, 0); });
+  days.forEach(function (x) { x.backTotal = DAY_KEYS.reduce(function (s, k) { return s + x.back[k]; }, 0); });
+  var sum = { back:{} }; DAY_KEYS.forEach(function (k) { sum.back[k] = past.reduce(function (s, x) { return s + x.back[k]; }, 0); sum[k] = past.reduce(function (s, x) { return s + x[k]; }, 0) - sum.back[k]; });
   var first = firstTxDay(), mp = spendByDay(ov, r, addDays(from, -89), t);
   // an average needs some days behind it: the 30-day line starts after 14 days of history, the 90-day one after 30
   past.forEach(function (x) { var age = daysBetween(first, x.d) + 1; ['personal', 'spec'].forEach(function (k) { x[k + '30'] = age >= 14 ? movingAvg(mp, k, x.d, 30, first) : null; x[k + '90'] = age >= 30 ? movingAvg(mp, k, x.d, 90, first) : null; }); });
@@ -506,12 +508,14 @@ function daysHTML(M, m) {
       if (!(x[k] > 0)) return; var hh = x[k] * sc; cur -= hh;
       bars += '<rect x="' + xx.toFixed(1) + '" y="' + cur.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="' + (x.future ? 'url(#bhHatch)' : COL[k]) + '"/>';
     });
-    if (over && nd <= 91) bars += '<rect x="' + xx.toFixed(1) + '" y="' + (T1 + 22) + '" width="' + w.toFixed(1) + '" height="4" fill="var(--paper)"/><text x="' + (xx + w / 2).toFixed(1) + '" y="' + (cur - 4).toFixed(1) + '" text-anchor="middle" class="t">' + chf0(tot) + '</text>';
+    if (x.backTotal > 0) { var dn = B1 + 1;   // money back: hollow bars under the line, at most 22px deep
+      DAY_KEYS.forEach(function (k) { if (!(x.back[k] > 0)) return; var hb = Math.max(1.5, Math.min(22, x.back[k] * (B1 - T1) / max1)); bars += '<rect class="bh-back" x="' + (xx + 0.5).toFixed(1) + '" y="' + dn.toFixed(1) + '" width="' + Math.max(0.6, w - 1).toFixed(1) + '" height="' + hb.toFixed(1) + '" fill="var(--paper)" stroke="' + COL[k] + '" stroke-width="1"/>'; dn += hb; }); }
+    if (over && nd <= 31) bars += '<rect x="' + xx.toFixed(1) + '" y="' + (T1 + 22) + '" width="' + w.toFixed(1) + '" height="4" fill="var(--paper)"/><text x="' + (xx + w / 2).toFixed(1) + '" y="' + (cur - 4).toFixed(1) + '" text-anchor="middle" class="t">' + chf0(tot) + '</text>';
     if (UI.bhDay === x.key) selI = i;
     g += '<g class="bh-dayhit" data-act="bhday" data-d="' + x.key + '" role="button" tabindex="0" aria-label="' + x.d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' }) + ': ' + chf0(tot) + (x.future ? ' scheduled' : '') + '">' +
       '<rect x="' + (i * bw).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + H + '" fill="transparent"/>' + bars + '</g>';
     var tick = nd <= 31 ? x.d.getDay() === 1 : nd <= 91 ? x.d.getDay() === 1 && (Math.floor((x.d - M.days[0].d) / 864e5 / 7) % 2 === 0) : x.d.getDate() === 1;
-    if ((i === 0 && nd <= 91) || tick) g += '<line x1="' + X(i).toFixed(1) + '" x2="' + X(i).toFixed(1) + '" y1="' + B2 + '" y2="' + (B2 + 4) + '" stroke="var(--ink)"/><text x="' + (i === 0 ? 0 : X(i)).toFixed(1) + '" y="' + (B2 + 17) + '" text-anchor="' + (i === 0 ? 'start' : 'middle') + '" class="t">' + (nd > 91 ? x.d.toLocaleDateString('en-GB', { month:'short' }) + (x.d.getMonth() === 0 ? ' ' + String(x.d.getFullYear()).slice(2) : '') : x.d.getDate() + '.' + (x.d.getMonth() + 1) + '.') + '</text>';
+    if ((i === 0 && nd <= 31) || tick) g += '<line x1="' + X(i).toFixed(1) + '" x2="' + X(i).toFixed(1) + '" y1="' + B2 + '" y2="' + (B2 + 4) + '" stroke="var(--ink)"/><text x="' + (i === 0 ? 0 : X(i)).toFixed(1) + '" y="' + (B2 + 17) + '" text-anchor="' + (i === 0 ? 'start' : 'middle') + '" class="t">' + (nd > 91 ? x.d.toLocaleDateString('en-GB', { month:'short' }) + (x.d.getMonth() === 0 ? ' ' + String(x.d.getFullYear()).slice(2) : '') : x.d.getDate() + '.' + (x.d.getMonth() + 1) + '.') + '</text>';
   });
   // room, today, baselines
   var ry = y1(M.room);
@@ -547,13 +551,14 @@ function daysHTML(M, m) {
   var rseg = '<span class="seg2 bh-rseg" role="radiogroup" aria-label="How far back">' + BH_RANGES.map(function (o) { return '<button role="radio" aria-checked="' + (rangeN === o[0]) + '" class="' + (rangeN === o[0] ? 'on' : '') + '" data-act="bhrange" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</span>';
   var seg = '<span class="seg2 bh-maseg" role="radiogroup" aria-label="Average lines">' + [['both', 'Both'], ['personal', 'Personal'], ['spec', 'Collectibles']].map(function (o) {
     return '<button role="radio" aria-checked="' + (mode === o[0]) + '" class="' + (mode === o[0] ? 'on' : '') + '" data-act="bhma" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</span>';
-  var keys = '<div class="bh-keys"><span><i class="sw personal"></i>Personal</span><span><i class="sw spec"></i>Collectibles</span><span><i class="sw invest"></i>Invested · 3a</span><span><i class="sw household"></i>Household</span><span><i class="sw sched"></i>Scheduled</span>' +
+  var keys = '<div class="bh-keys"><span><i class="sw personal"></i>Personal</span><span><i class="sw spec"></i>Collectibles</span><span><i class="sw invest"></i>Invested · 3a</span><span><i class="sw household"></i>Household</span><span><i class="sw sched"></i>Scheduled</span><span><i class="sw back"></i>Money back</span>' +
     '<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="var(--ink)" stroke-width="2"/></svg>30-day avg</span>' +
     '<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="var(--ink)" stroke-width="1.6" stroke-dasharray="5 3"/></svg>90-day avg</span>' +
     '<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="var(--signal)" stroke-width="1.6" stroke-dasharray="1.5 3"/></svg>Cap a day</span></div>';
   var capNow = m.now.cap, sum = M.sum;
-  var tiles = '<div class="bh-tiles"><div><b class="num">' + chf0(sum.household) + '</b><span>household · ' + nd + ' days</span></div><div><b class="num">' + chf0(sum.personal) + '</b><span>personal</span></div>' +
-    '<div><b class="num' + (sum.spec > capNow * nd / 30 ? ' neg' : '') + '">' + chf0(sum.spec) + '</b><span>collectibles · cap ' + chf0(capNow * nd / 30) + (nd > 30 ? ' over ' + nd + ' days' : '') + '</span></div><div><b class="num">' + chf0(sum.invest) + '</b><span>invested · 3a</span></div>' +
+  function backNote(k) { return sum.back && sum.back[k] >= 1 ? ' · ' + chf0(sum.back[k]) + ' back' : ''; }
+  var tiles = '<div class="bh-tiles"><div><b class="num">' + chf0(sum.household) + '</b><span>household · ' + nd + ' days' + backNote('household') + '</span></div><div><b class="num">' + chf0(sum.personal) + '</b><span>personal' + backNote('personal') + '</span></div>' +
+    '<div><b class="num' + (sum.spec > capNow * nd / 30 ? ' neg' : '') + '">' + chf0(sum.spec) + '</b><span>collectibles · cap ' + chf0(capNow * nd / 30) + (nd > 30 ? ' over ' + nd + ' days' : '') + backNote('spec') + '</span></div><div><b class="num">' + chf0(sum.invest) + '</b><span>invested · 3a</span></div>' +
     '<div><b class="num">' + M.spendDays + '</b><span>days with spending · ' + (M.past.length - M.spendDays) + ' without</span></div></div>';
   function sig(name, k, red, extra) {
     if (!last || last[k + '30'] === null || last[k + '90'] === null) return '<div><span class="lbl">' + name + '</span><span class="soon">Not enough history yet.</span></div>';

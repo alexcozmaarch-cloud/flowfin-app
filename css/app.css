@@ -936,3 +936,5 @@ details.fold>summary:hover h3{color:var(--muted)}
 .wo-v{display:inline-flex;gap:10px;align-items:center;justify-content:flex-end}
 .wo-spark{flex:0 0 auto}
 @media (max-width:640px){.wo-spark{display:none}}
+
+.bh-segs{display:inline-flex;gap:8px;flex-wrap:wrap}

@@ -788,6 +788,16 @@ module.exports = async function () {
     h.assert(/projected/.test(await pg.innerText('#woRo')), 'readout follows the pointer into the projection');
     h.noErrors(app); await app.ctx.close();
   });
+  await h.test('Day by day: 30 days by default, longer windows (90d, 6m, 1y) back to where the history starts', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'behaviour' }), pg = app.page; await h.settled(app, 10000);
+    h.assert(/30d/.test(await pg.innerText('.bh-rseg button.on')), '30 days by default');
+    var n30 = await pg.locator('.bh-dayhit').count();
+    await pg.click('[data-act="bhrange"][data-v="365"]'); await pg.waitForTimeout(300);
+    var n1y = await pg.locator('.bh-dayhit').count();
+    h.assert(n1y > n30, 'more days in the 1-year view: ' + n30 + ' → ' + n1y);
+    h.assert(/household · \d+ days/.test(await pg.innerText('.bh-tiles')), 'tiles say how many days');
+    h.noErrors(app); await app.ctx.close();
+  });
   console.log('\nFor the household');
   await h.test('house button: a card purchase for the family goes to Household with #joint and waits for the joint account', async function () {
     var app = await h.openApp({ data: demo.data, phone: true }), pg = app.page; await h.settled(app, 10000);

@@ -199,6 +199,7 @@ document.addEventListener('click', function (e) {
   if (act === 'bhchart') { UI.bhChart = a.getAttribute('data-v'); UI.bhDay = ''; return draw(); }
   if (act === 'brmain') { var bn = a.getAttribute('data-v'); return saveSetting('broker_main', bn).then(function () { toast('Ideas now priced at ' + bn); draw(); }); }
   if (act === 'bramt') { UI.brAmt = +a.getAttribute('data-v'); return draw(); }
+  if (act === 'bhrange') { UI.bhRange = +a.getAttribute('data-v'); UI.bhDay = ''; return draw(); }
   if (act === 'bhma') { UI.bhMa = a.getAttribute('data-v'); return draw(); }
   if (act === 'bhday') { var dk = a.getAttribute('data-d'); UI.bhDay = UI.bhDay === dk ? '' : dk; return draw(); }
   if (act === 'bhsale' || act === 'bhwant') { var fk = act === 'bhsale' ? 'sale' : 'want'; UI.bhForm = UI.bhForm === fk ? '' : fk; UI.bhErr = ''; draw(); setTimeout(function () { var n = $('bhfName'); if (n) n.focus(); }, 30); return; }

@@ -45,7 +45,7 @@ var NAV = [
   { label:'Wealth',   items:[['wealth','Wealth & Assets']] },
   { label:'App',      items:[['settings','Settings']] }
 ];
-var APP_VERSION = '27.11.2026 · 1';   // shown in Settings so you can check the phone has the latest
+var APP_VERSION = '27.11.2026 · 2';   // shown in Settings so you can check the phone has the latest
 var MOBILE_NAV = [['dashboard','Home'],['transactions','Spend'],['budgets','Budgets'],['add','+'],['goals','Goals'],['monthly','Monthly'],['wealth','Wealth']];
 var BUILT = { ideas:1, behaviour:1, dashboard:1, transactions:1, budgets:1, goals:1, subscriptions:1, anomalies:1, monthly:1, wealth:1, settings:1 };
 

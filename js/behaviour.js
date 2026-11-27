@@ -215,7 +215,7 @@ function behaviourModel() {
   txs().forEach(function (tx) { if ((tx.type === 'refund' || tx.type === 'income') && flowLabel(tx, ov, r) === 'spec' && String(tx.date).slice(0, 4) === yr) { sold.n++; sold.sum += +tx.amount || 0; } });
   var room = Math.max(0, (mean.takeHome - mean.household) / 30);
   var pot = potModel(now, room, past, ov, r);
-  return { pot:pot, daily:dailyModel(ov, r, room), sold:sold, pattern:patternModel(ov, r), want:wantList(), money:moneyModel(ov, r, risk), lastUpdate:lastUpdateDays(),
+  return { pot:pot, daily:dailyModel(ov, r, room, UI.bhRange || 30), sold:sold, pattern:patternModel(ov, r), want:wantList(), money:moneyModel(ov, r, risk), lastUpdate:lastUpdateDays(),
     ov:ov, hist:hist, now:now, past:past, mean:mean, n:withIncome.length, risk:risk, outflow:outflow, months:months,
     threeA:ta, threeANext:threeA(year + 1), nextPct:nextPct, usual:usual, redirect:Math.max(0, Math.round(usual - now.cap)), redirectTo:redirectTo };
 }
@@ -443,8 +443,11 @@ function investHTML(m) {
 // ─── day by day: the last 30 days, and the next 7 days of scheduled payments ─────
 var DAY_KEYS = ['personal', 'spec', 'invest', 'household'];
 function dayBucket(lab) { return lab === 'growth' || lab === 'stable' ? 'invest' : lab; }
-function dailyModel(ov, r, room) {
-  var t = today(), from = addDays(t, -29), to = addDays(t, 7), days = [], idx = {};
+var BH_RANGES = [[30, '30d'], [90, '90d'], [182, '6m'], [365, '1y']];   // the window of the day-by-day chart; 30 days by default
+function dailyModel(ov, r, room, n) {
+  n = n || 30;
+  var t = today(), from = addDays(t, -(n - 1)), to = addDays(t, 7), days = [], idx = {}, first = firstTxDay();
+  if (n > 30 && from < first) from = first < addDays(t, -29) ? first : addDays(t, -29);   // longer windows start where your history starts
   for (var d = from; d <= to; d = addDays(d, 1)) { var k = ymd(d); idx[k] = days.length; days.push({ d:d, key:k, future:d > t, personal:0, spec:0, invest:0, household:0, items:[] }); }
   txs().forEach(function (tx) {
     var i = idx[String(tx.date).slice(0, 10)]; if (i === undefined || tx.type === 'income') return;
@@ -466,13 +469,15 @@ function dailyModel(ov, r, room) {
   var past = days.filter(function (x) { return !x.future; });
   var sum = {}; DAY_KEYS.forEach(function (k) { sum[k] = past.reduce(function (s, x) { return s + x[k]; }, 0); });
   var first = firstTxDay(), mp = spendByDay(ov, r, addDays(from, -89), t);
-  past.forEach(function (x) { ['personal', 'spec'].forEach(function (k) { x[k + '30'] = movingAvg(mp, k, x.d, 30, first); x[k + '90'] = movingAvg(mp, k, x.d, 90, first); }); });
+  // an average needs some days behind it: the 30-day line starts after 14 days of history, the 90-day one after 30
+  past.forEach(function (x) { var age = daysBetween(first, x.d) + 1; ['personal', 'spec'].forEach(function (k) { x[k + '30'] = age >= 14 ? movingAvg(mp, k, x.d, 30, first) : null; x[k + '90'] = age >= 30 ? movingAvg(mp, k, x.d, 90, first) : null; }); });
   return { days:days, past:past, sum:sum, room:room, first:first, full90:daysBetween(first, t) >= 89, spendDays:past.filter(function (x) { return x.free > 0.5; }).length };
 }
 // Two panes, like a price chart: top = what went out each day (stacked), bottom = 30- and 90-day averages per day
 // for personal (all cards and cash) and collectibles, with the collectibles cap spread per day. Approved 24.11.2026 (mockup "FlowFin Trend Lines").
 function niceStep(v, steps) { for (var i = 0; i < steps.length; i++) if (steps[i] * 4 >= v) return steps[i]; return Math.ceil(v / 4 / 100) * 100; }
 function daysHTML(M, m) {
+  var nd = M.days.filter(function (x) { return !x.future; }).length, rangeN = UI.bhRange || 30;
   var W = 760, R = 58, PW = W - R, n = M.days.length, bw = PW / n;
   var T1 = 26, B1 = 190, T2 = 226, B2 = 352, H = B2 + 24;
   var X = function (i) { return i * bw + bw / 2; };
@@ -496,16 +501,17 @@ function daysHTML(M, m) {
   g += '<text x="0" y="' + (T1 - 8) + '" class="t">CHF a day</text><text x="0" y="' + (T2 - 8) + '" class="t">average a day · 30 d solid · 90 d dashed</text>';
   // bars
   M.days.forEach(function (x, i) {
-    var xx = i * bw + 1.5, w = Math.max(2, bw - 3), cur = B1, tot = x.total, over = tot > max1, sc = over ? (B1 - T1 - 12) / tot : (B1 - T1) / max1, bars = '';
+    var gap = bw > 8 ? 3 : bw > 3 ? 1 : 0, xx = i * bw + gap / 2, w = Math.max(0.8, bw - gap), cur = B1, tot = x.total, over = tot > max1, sc = over ? (B1 - T1 - 12) / tot : (B1 - T1) / max1, bars = '';
     DAY_KEYS.forEach(function (k) {
       if (!(x[k] > 0)) return; var hh = x[k] * sc; cur -= hh;
       bars += '<rect x="' + xx.toFixed(1) + '" y="' + cur.toFixed(1) + '" width="' + w.toFixed(1) + '" height="' + hh.toFixed(1) + '" fill="' + (x.future ? 'url(#bhHatch)' : COL[k]) + '"/>';
     });
-    if (over) bars += '<rect x="' + xx.toFixed(1) + '" y="' + (T1 + 22) + '" width="' + w.toFixed(1) + '" height="4" fill="var(--paper)"/><text x="' + (xx + w / 2).toFixed(1) + '" y="' + (cur - 4).toFixed(1) + '" text-anchor="middle" class="t">' + chf0(tot) + '</text>';
+    if (over && nd <= 91) bars += '<rect x="' + xx.toFixed(1) + '" y="' + (T1 + 22) + '" width="' + w.toFixed(1) + '" height="4" fill="var(--paper)"/><text x="' + (xx + w / 2).toFixed(1) + '" y="' + (cur - 4).toFixed(1) + '" text-anchor="middle" class="t">' + chf0(tot) + '</text>';
     if (UI.bhDay === x.key) selI = i;
     g += '<g class="bh-dayhit" data-act="bhday" data-d="' + x.key + '" role="button" tabindex="0" aria-label="' + x.d.toLocaleDateString('en-GB', { weekday:'long', day:'numeric', month:'long' }) + ': ' + chf0(tot) + (x.future ? ' scheduled' : '') + '">' +
       '<rect x="' + (i * bw).toFixed(1) + '" y="0" width="' + bw.toFixed(1) + '" height="' + H + '" fill="transparent"/>' + bars + '</g>';
-    if (i === 0 || x.d.getDay() === 1) g += '<line x1="' + X(i).toFixed(1) + '" x2="' + X(i).toFixed(1) + '" y1="' + B2 + '" y2="' + (B2 + 4) + '" stroke="var(--ink)"/><text x="' + (i === 0 ? 0 : X(i)).toFixed(1) + '" y="' + (B2 + 17) + '" text-anchor="' + (i === 0 ? 'start' : 'middle') + '" class="t">' + x.d.getDate() + '.' + (x.d.getMonth() + 1) + '.</text>';
+    var tick = nd <= 31 ? x.d.getDay() === 1 : nd <= 91 ? x.d.getDay() === 1 && (Math.floor((x.d - M.days[0].d) / 864e5 / 7) % 2 === 0) : x.d.getDate() === 1;
+    if ((i === 0 && nd <= 91) || tick) g += '<line x1="' + X(i).toFixed(1) + '" x2="' + X(i).toFixed(1) + '" y1="' + B2 + '" y2="' + (B2 + 4) + '" stroke="var(--ink)"/><text x="' + (i === 0 ? 0 : X(i)).toFixed(1) + '" y="' + (B2 + 17) + '" text-anchor="' + (i === 0 ? 'start' : 'middle') + '" class="t">' + (nd > 91 ? x.d.toLocaleDateString('en-GB', { month:'short' }) + (x.d.getMonth() === 0 ? ' ' + String(x.d.getFullYear()).slice(2) : '') : x.d.getDate() + '.' + (x.d.getMonth() + 1) + '.') + '</text>';
   });
   // room, today, baselines
   var ry = y1(M.room);
@@ -536,8 +542,9 @@ function daysHTML(M, m) {
   });
   // crosshair on the day you tapped
   if (selI > -1) { var sx = X(selI).toFixed(1); g += '<line x1="' + sx + '" x2="' + sx + '" y1="' + (T1 - 18) + '" y2="' + B2 + '" stroke="var(--muted)" stroke-dasharray="2 2" pointer-events="none"/>'; }
-  var svg = '<div class="bh-chart"><svg viewBox="0 -4 ' + W + ' ' + H + '" role="img" aria-label="Spending per day for the last 30 days and the next 7 scheduled, with 30- and 90-day averages">' +
+  var svg = '<div class="bh-chart"><svg viewBox="0 -4 ' + W + ' ' + H + '" role="img" aria-label="Spending per day for the last ' + nd + ' days and the next 7 scheduled, with 30- and 90-day averages">' +
     '<defs><pattern id="bhHatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--paper)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--s3)" stroke-width="3"/></pattern></defs>' + g + '</svg></div>';
+  var rseg = '<span class="seg2 bh-rseg" role="radiogroup" aria-label="How far back">' + BH_RANGES.map(function (o) { return '<button role="radio" aria-checked="' + (rangeN === o[0]) + '" class="' + (rangeN === o[0] ? 'on' : '') + '" data-act="bhrange" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</span>';
   var seg = '<span class="seg2 bh-maseg" role="radiogroup" aria-label="Average lines">' + [['both', 'Both'], ['personal', 'Personal'], ['spec', 'Collectibles']].map(function (o) {
     return '<button role="radio" aria-checked="' + (mode === o[0]) + '" class="' + (mode === o[0] ? 'on' : '') + '" data-act="bhma" data-v="' + o[0] + '">' + o[1] + '</button>'; }).join('') + '</span>';
   var keys = '<div class="bh-keys"><span><i class="sw personal"></i>Personal</span><span><i class="sw spec"></i>Collectibles</span><span><i class="sw invest"></i>Invested · 3a</span><span><i class="sw household"></i>Household</span><span><i class="sw sched"></i>Scheduled</span>' +
@@ -545,8 +552,8 @@ function daysHTML(M, m) {
     '<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="var(--ink)" stroke-width="1.6" stroke-dasharray="5 3"/></svg>90-day avg</span>' +
     '<span><svg width="22" height="10" aria-hidden="true"><line x1="0" x2="22" y1="5" y2="5" stroke="var(--signal)" stroke-width="1.6" stroke-dasharray="1.5 3"/></svg>Cap a day</span></div>';
   var capNow = m.now.cap, sum = M.sum;
-  var tiles = '<div class="bh-tiles"><div><b class="num">' + chf0(sum.household) + '</b><span>household · 30 days</span></div><div><b class="num">' + chf0(sum.personal) + '</b><span>personal</span></div>' +
-    '<div><b class="num' + (sum.spec > capNow ? ' neg' : '') + '">' + chf0(sum.spec) + '</b><span>collectibles · cap ' + chf0(capNow) + '</span></div><div><b class="num">' + chf0(sum.invest) + '</b><span>invested · 3a</span></div>' +
+  var tiles = '<div class="bh-tiles"><div><b class="num">' + chf0(sum.household) + '</b><span>household · ' + nd + ' days</span></div><div><b class="num">' + chf0(sum.personal) + '</b><span>personal</span></div>' +
+    '<div><b class="num' + (sum.spec > capNow * nd / 30 ? ' neg' : '') + '">' + chf0(sum.spec) + '</b><span>collectibles · cap ' + chf0(capNow * nd / 30) + (nd > 30 ? ' over ' + nd + ' days' : '') + '</span></div><div><b class="num">' + chf0(sum.invest) + '</b><span>invested · 3a</span></div>' +
     '<div><b class="num">' + M.spendDays + '</b><span>days with spending · ' + (M.past.length - M.spendDays) + ' without</span></div></div>';
   function sig(name, k, red, extra) {
     if (!last || last[k + '30'] === null || last[k + '90'] === null) return '<div><span class="lbl">' + name + '</span><span class="soon">Not enough history yet.</span></div>';
@@ -565,7 +572,7 @@ function daysHTML(M, m) {
       (!sel.future && sel.personal30 !== null ? '<div class="soon"><span>Personal average · 30 / 90 days</span><span class="num">' + sel.personal30.toFixed(1) + ' / ' + sel.personal90.toFixed(1) + '</span></div>' +
         '<div class="soon"><span>Collectibles average · 30 / 90 days</span><span class="num">' + sel.spec30.toFixed(1) + ' / ' + sel.spec90.toFixed(1) + '</span></div>' : '') + '</div>';
   }
-  return '<div class="bh-mahead">' + keys + seg + '</div>' + svg + sigs + tiles + box +
+  return '<div class="bh-mahead">' + keys + '<span class="bh-segs">' + rseg + seg + '</span></div>' + svg + sigs + tiles + box +
     '<p class="soon">Bottom pane: what you spend on an average day, over the last 30 days (solid) and 90 days (dashed); days without spending count as 0. When the solid line runs above the dashed one you are spending faster than usual. The dotted red line is your collectibles cap spread over 30 days.' +
     (M.full90 ? '' : ' Your history starts ' + M.first.toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' }) + ', so early averages use fewer days.') +
     ' Tap a day to see what it was; very tall days are cut, with their amount on top.</p>';

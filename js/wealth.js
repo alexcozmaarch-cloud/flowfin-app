@@ -8,6 +8,7 @@ import { $, calcTotals, daysBetween, esc, fmt0, pd, toast, today, txs, ymd } fro
 import { fold, periodDay, sumBy, sw0 } from './dashboard.js';
 import { acctCHF } from './goals.js';
 import { topbar } from './nav.js';
+import { acctSpark, overHTML, wireOver } from './wealthover.js';
 import { CURRENCIES, fxRate, ico, opt, saveMany, setting } from './transactions.js';
 
 // ─── Wealth & Assets ──────────────────────────────────────────────────────
@@ -133,8 +134,7 @@ function wealthHTML() {
   if (prev && prev.nUpd === 0) h += '<section class="notice"><span>Nothing was recorded in ' + esc(mName(prev.key)) + ', so its month-end repeats the month before. You can still enter it: pick ' + esc(mName(prev.key)) + ' in the update form.</span><button class="btn primary" data-act="wupdate" data-month="' + prev.key + '">Record ' + esc(mName(prev.key)) + '</button></section>';
   else if (stale && left <= 7) h += '<section class="notice"><span>' + esc(mName(cur.key)) + ' closes in ' + (left + 1) + ' day' + (left ? 's' : '') + '. ' + stale + ' account' + (stale === 1 ? '' : 's') + ' still show last month’s value.</span><button class="btn primary" data-act="wupdate">Update values</button></section>';
 
-  h += '<section class="card"><h3>Net worth at month end<span class="r legend"><span><i style="border-top:8px solid var(--ink)"></i>Final</span><span><i style="border-top:8px solid var(--faint)"></i>So far</span><span><i style="border-top:2px dotted var(--muted)"></i>Invested (cost)</span></span></h3>' +
-    '<div class="chartbox"><canvas id="chWealth" role="img" aria-label="Net worth at the end of each month"></canvas></div></section>';
+  h += overHTML(ms, accounts(), txSavedInMonth);
 
   // month-end table, newest first
   var rows = ms.slice().reverse().slice(0, 12);
@@ -166,7 +166,7 @@ function wealthHTML() {
         return '<div class="drill" data-act="weditacct" data-id="' + esc(e.id) + '" tabindex="0" role="button"><span><b>' + ico(ACCT_ICON[e.account_type] || 'tag', e.color || '') + ' ' + esc(e.name) + '</b><small>' + esc(acctType(e.account_type)[0]) + (e.institution ? ' · ' + esc(e.institution) : '') +
           (foreign ? ' · ' + fmt0.format(Math.round(+e.current_value || 0)) + ' ' + esc(e.currency) : '') +
           ' · ' + (upd ? 'updated ' + periodDay(pd(e.last_updated)) : '<span class="stale">' + (e.last_updated ? 'last ' + periodDay(pd(e.last_updated)) : 'not updated') + '</span>') + '</small></span>' +
-          '<span class="num">' + sw0(v) + '</span>' +
+          '<span class="num wo-v">' + acctSpark(ms, e.id) + sw0(v) + '</span>' +
           (isInv(e) && inv ? '<span class="num soon">' + sw0(inv) + '</span><span class="num ' + (gn < 0 ? 'neg' : '') + '">' + sgn0(gn) + ' <small>' + (gn / inv * 100).toFixed(0) + '%</small></span>' : '<span></span><span></span>') +
           '<span class="num ' + (ch !== null && ch < 0 ? 'neg' : 'soon') + '">' + (ch === null ? '—' : sgn0(ch)) + '</span></div>';
       }).join('') + '</div></section>';
@@ -189,6 +189,7 @@ function wealthHTML() {
   return h;
 }
 function wealthChart() {
+  wireOver();
   var el = $('chWealth'); if (!el || !window.Chart || CHARTS.wealth) return;
   var ms = monthEnds().slice(-13), C = chartColors();
   if (!ms.length) return;

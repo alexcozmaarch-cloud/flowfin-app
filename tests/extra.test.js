@@ -380,7 +380,7 @@ module.exports = async function () {
     h.assert(await pg.locator('.uplist .ur:not(.more)').count() <= 5, 'too many upcoming rows');
     h.assert(/Demo car/.test(await pg.innerText('.goalrow')), 'nearest goal missing');
     await pg.click('.linkrow[data-nav=wealth]'); await pg.waitForTimeout(300);
-    h.assert(/Net worth/.test(await pg.innerText('#view')), 'net worth link did not open Wealth');
+    h.assert(/net worth/i.test(await pg.innerText('#view')), 'net worth link did not open Wealth');
     h.noErrors(app); await app.ctx.close();
   });
   await h.test('settings show the app version', async function () {
@@ -776,6 +776,16 @@ module.exports = async function () {
     h.eq(await pg.locator('.id-mention').count(), 2, 'two mentions');
     h.assert(/First view\./.test(await pg.locator('.id-mention').nth(1).innerText()) && /Second view\./.test(await pg.locator('.id-mention').nth(0).innerText()), 'each mention has its own view');
     h.assert(/colleague/.test(t), 'second source shown');
+    h.noErrors(app); await app.ctx.close();
+  });
+  await h.test('Wealth over time: months stacked by kind, put in and profit, projection that changes with the horizon, readout on tap', async function () {
+    var app = await h.openApp({ data: demo.data, hash: 'wealth' }), pg = app.page; await h.settled(app, 10000); await pg.waitForTimeout(300);
+    var t = await pg.innerText('.wo-card');
+    h.assert(/Wealth over time/.test(t) && /total profit/.test(t) && /in 5 years/.test(t) && /the projection assumes/i.test(t), 'card: ' + t.slice(0, 300));
+    await pg.click('[data-act="woyears"][data-v="10"]'); await pg.waitForTimeout(200);
+    h.assert(/in 10 years/.test(await pg.innerText('.wo-card')), 'horizon switch');
+    var box = await pg.locator('#woSvg').boundingBox(); await pg.mouse.move(box.x + box.width * 0.85, box.y + box.height / 2); await pg.waitForTimeout(100);
+    h.assert(/projected/.test(await pg.innerText('#woRo')), 'readout follows the pointer into the projection');
     h.noErrors(app); await app.ctx.close();
   });
   console.log('\nFor the household');

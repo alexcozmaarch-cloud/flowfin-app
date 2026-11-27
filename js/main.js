@@ -168,6 +168,7 @@ document.addEventListener('click', function (e) {
     return chain.then(function () { draw(); });
   }
   if (act === 'coremin') return saveSetting('core_min', a.getAttribute('data-v')).then(function () { draw(); });
+  if (act === 'woyears') { UI.woYears = +a.getAttribute('data-v'); return draw(); }
   if (act === 'idview') { UI.idView = a.getAttribute('data-v'); UI.idea = ''; return draw(); }
   if (act === 'hdform') { UI.hdForm = UI.hdForm ? null : { d:ymd(today()), k:'buy', ccy:'USD', broker:'Interactive Brokers' }; UI.hdErr = ''; return draw(); }
   if (act === 'hdparse') {
